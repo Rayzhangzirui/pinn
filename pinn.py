@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
-
+from config import *
 import tensorflow as tf
 import numpy as np
 from time import time
 import tensorflow_probability as tfp
+import scipy.optimize
 import os
-
-
-# Set data type
-DTYPE='float32'
-tf.keras.backend.set_floatx(DTYPE)
+from datetime import datetime
+from util import *
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
@@ -23,19 +21,31 @@ bound = 0.7 #bound in xy plane
 
 test_case = False
 
+
+# paths
+model_name = "1d_dataloss"
+timetag = datetime.now().isoformat(timespec='minutes')
+dirname = f"{timetag}{model_name}"
+MD_SAVE_DIR = os.path.join(os.environ['DATADIR'],dirname)
+os.makedirs(MD_SAVE_DIR,exist_ok=False)
+
 if test_case:
     num_init_train = 100 # initial traning iteration
-    n_points = 100 # number of training point
+    n_res_pts = 100 # number of residual point
+    n_dat_pts = 100 # number of data points
     n_test_points = 100 # number of testing point
     num_hidden_unit = 4 # hidden unit in one layer
     num_add_pt = 10 # number of anchor point
     max_adpt_step = 1 # number of adaptive sampling
     num_adp_train = 1000 #adaptive adam training step
     num_print_every = 10
-    num_residual_every = 10
+    num_residual_every = 50
+    w_dat = 0.5 # weight of data, weight of res is 1-w_dat
+    
 else:
     num_init_train = 20000
-    n_points = 10000
+    n_res_pts = 10000
+    n_dat_pts = 10000
     n_test_points=10**(DIM+1)
     num_hidden_unit = 100
     num_add_pt = 1000
@@ -43,22 +53,25 @@ else:
     num_adp_train = 1000
     num_print_every = 1000
     num_residual_every = 100
+    w_dat = 0.5
 
-
-# Set boundary
-tmin = 0.
-tmax = 1.
-xmin = -1.
-xmax = 1.
-
-# Draw uniformly sampled collocation points
-t_r = tf.random.uniform((n_points,1), 0, 1, dtype=DTYPE)
-x_r = tf.random.uniform((n_points,1), -bound, bound, dtype=DTYPE)
-X_r = tf.concat([t_r, x_r], axis=1)
 
 def ic(x):
     r = tf.reduce_sum(tf.square(x[:, 1:DIM+1]),1,keepdims=True)
     return 0.1*tf.exp(-1000*r)
+
+# Draw uniformly sampled collocation points
+x_r = sample(n_res_pts, DIM, bound, False)
+
+x_dat = None
+u_dat = None
+if w_dat > 0:
+    # x_dat = sample(n_dat_pts, DIM, bound, False)
+    x_dat = x_r
+    u_dat = interpsol('sol1d.txt', 100, 100, x_dat)
+
+
+
 
 
 # Define model architecture
@@ -86,6 +99,7 @@ class PINN_NeuralNet(tf.keras.Model):
         self.out = tf.keras.layers.Dense(output_dim)
         # self.output_transform = tf.keras.layers.Lambda(lambda x, u: u* x[:, 0:1]+ ic(x))
         self.output_transform = lambda x, u: u* x[:, 0:1]+ ic(x)
+        
     
     
     def call(self, X):
@@ -99,17 +113,18 @@ class PINN_NeuralNet(tf.keras.Model):
 
 
 
-import scipy.optimize
 
 class PINNSolver():
-    def __init__(self, model, X_r):
+    def __init__(self, model, x_r, w_dat):
         self.model = model
         
         # Store collocation points
-        self.t = X_r[:,0:1]
-        self.x = X_r[:,1:DIM+1]
+        self.t = x_r[:,0:1]
+        self.x = x_r[:,1:DIM+1]
+        
         
         # Initialize history of losses and global iteration counter
+        self.w_dat = w_dat
         self.hist = []
         self.iter = 0
     
@@ -134,19 +149,18 @@ class PINNSolver():
         del tape
         return u_t - T*(D*(u_xx) + rho*phi*u*(1-u))
     
-    def loss_fn(self, X_data, u_data):
+    def loss_fn(self, x_dat, u_dat):
         
         # Compute phi_r
         r = self.get_r()
-        phi_r = tf.reduce_mean(tf.square(r))
+        phi_r = tf.reduce_mean(tf.square(r)) * (1 - self.w_dat)
         
         # Initialize loss
-        loss = phi_r
-        if X_data is not None:
+        loss = phi_r * (1-self.w_dat)
+        if x_dat is not None:
             # Add phi_0 and phi_b to the loss
-            for i in range(len(X_data)):
-                u_pred = self.model(X_data[i])
-                loss += tf.reduce_mean(tf.square(u_data[i] - u_pred))
+            u_pred = self.model(x_dat)
+            loss += tf.reduce_mean(tf.square(u_dat - u_pred)) * self.w_dat
 
         return loss,r
     
@@ -177,7 +191,6 @@ class PINNSolver():
         for i in range(N):
             
             loss,res = train_step()
-            
             self.current_loss = loss.numpy()
             self.current_res = res.numpy()
             self.callback()
@@ -274,10 +287,10 @@ class PINNSolver():
             print('It {:05d}: loss = {:10.8e}, maxres = {:10.8e}'.format(self.iter,self.current_loss,np.amax(self.current_res)))
         
         if num_residual_every is not None and self.iter % num_residual_every == 0:
-            fname = f"./data{self.iter}.dat"
+            fname = f"data{self.iter}.dat"
             u = self.model(tf.concat([self.t,self.x],1))
             data = tf.concat([self.t, self.x, u, self.current_res],1)
-            np.savetxt(fname, data.numpy())
+            np.savetxt( os.path.join(MD_SAVE_DIR,fname) , data.numpy())
 
         self.hist.append(self.current_loss)
         self.iter+=1
@@ -291,7 +304,7 @@ model = PINN_NeuralNet()
 model.build(input_shape=(None,2))
 
 # Initilize PINN solver
-solver = PINNSolver(model, X_r)
+solver = PINNSolver(model, x_r, w_dat)
 
 # Decide which optimizer should be used
 #mode = 'TFoptimizer'
@@ -303,10 +316,10 @@ t0 = time()
 # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay([1000,3000],[1e-2,1e-3,5e-4])
 lr = tf.keras.optimizers.schedules.PolynomialDecay(1e-2,decay_steps=num_init_train,end_learning_rate=1e-4)
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
-solver.solve_with_TFoptimizer(optim, None,None, N=num_init_train)
+solver.solve_with_TFoptimizer(optim, x_dat,u_dat, N=num_init_train)
     
 
-solver.solve_with_ScipyOptimizer(None,None,
+solver.solve_with_ScipyOptimizer(x_dat,u_dat,
                             method='L-BFGS-B',
                             options={'maxiter': num_init_train,
                                      'maxfun': num_init_train,
@@ -318,4 +331,4 @@ solver.solve_with_ScipyOptimizer(None,None,
 print('\nComputation time: {} seconds'.format(time()-t0))
 
 
-model.save('savemodel')
+model.save(os.path.join(MD_SAVE_DIR,'model_name'))
