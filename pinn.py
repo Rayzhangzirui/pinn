@@ -4,32 +4,34 @@ from config import *
 import tensorflow as tf
 import numpy as np
 from time import time
-import tensorflow_probability as tfp
+# import tensorflow_probability as tfp
 import scipy.optimize
 import os
 from datetime import datetime
 from util import *
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
-DIM=1
-epsilon =  0.01 # width of diffused domain
+DIM=1 # dimension of the problem
+epsilon = 0.01 # width of diffused domain
 T = 300
 D = 0.13e-4
 rho = 0.025
 bound = 0.7 #bound in xy plane
 
-test_case = False
+test_case = True
 
 
 # paths
-model_name = "1d_dataloss"
+model_name = "test"
 timetag = datetime.now().isoformat(timespec='minutes')
 dirname = f"{timetag}{model_name}"
-MD_SAVE_DIR = os.path.join(os.environ['DATADIR'],dirname)
-os.makedirs(MD_SAVE_DIR,exist_ok=False)
+MD_SAVE_DIR = os.path.join(DATADIR,dirname)
+if not test_case:
+    os.makedirs(MD_SAVE_DIR,exist_ok=False)
 
 if test_case:
+    tf.random.set_seed(1234)
     num_init_train = 100 # initial traning iteration
     n_res_pts = 100 # number of residual point
     n_dat_pts = 100 # number of data points
@@ -38,9 +40,10 @@ if test_case:
     num_add_pt = 10 # number of anchor point
     max_adpt_step = 1 # number of adaptive sampling
     num_adp_train = 1000 #adaptive adam training step
-    num_print_every = 10
-    num_residual_every = 50
-    w_dat = 0.5 # weight of data, weight of res is 1-w_dat
+    num_print_every = 10 
+    num_residual_every = None 
+    w_dat = 0 # weight of data, weight of res is 1-w_dat
+    model_name = "test"
     
 else:
     num_init_train = 20000
@@ -56,12 +59,54 @@ else:
     w_dat = 0.5
 
 
-def ic(x):
-    r = tf.reduce_sum(tf.square(x[:, 1:DIM+1]),1,keepdims=True)
-    return 0.1*tf.exp(-1000*r)
+
+
+# def ic(x):
+#     r = tf.reduce_sum(tf.square(x[:, 1:DIM+1]),1,keepdims=True)
+#     return 0.1*tf.exp(-1000*r)
+
+# def pde(x_r,f):
+#     t = x_r[:,0:1]
+#     x = x_r[:,1:DIM+1]
+#     xr = tf.concat([t, x], axis=1)
+#     u =  f(xr)
+#     phi = 0.5 + 0.5*tf.tanh((0.5 - tf.sqrt(tf.reduce_sum(tf.square(x),1,keepdims=True)))/epsilon)
+    
+#     u_x = tf.gradients(u, x)[0]
+#     phiux = phi*u_x
+    
+#     u_t = tf.gradients(u, t)[0]
+#     u_xx = tf.gradients(phiux, x)[0]
+    
+#     return u_t - T*(D*(u_xx) + rho*phi*u*(1-u))
+
+# def output_transform(x,u):
+#     return u* x[:, 0:1]+ ic(x)
+
+
+
+domain = [[0., 1.]]
+
+def output_transform(x,u):
+    return x * (1-x) * u
+
+
+def pde(x_r, f):
+    x = x_r[:,0:1]
+    u =  f(x)
+    
+    u_x = tf.gradients(u, x)[0]
+    u_xx = tf.gradients(u_x, x)[0]
+    
+    return u_xx-2
+
+def u_exact(x):
+    return (x-1)*x
+
+
 
 # Draw uniformly sampled collocation points
-x_r = sample(n_res_pts, DIM, bound, False)
+x_r = sample(n_res_pts, domain)
 
 x_dat = None
 u_dat = None
@@ -69,8 +114,6 @@ if w_dat > 0:
     # x_dat = sample(n_dat_pts, DIM, bound, False)
     x_dat = x_r
     u_dat = interpsol('sol1d.txt', 100, 100, x_dat)
-
-
 
 
 
@@ -84,6 +127,7 @@ class PINN_NeuralNet(tf.keras.Model):
             num_neurons_per_layer=100,
             activation='tanh',
             kernel_initializer='glorot_normal',
+            output_transform = output_transform,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -98,7 +142,7 @@ class PINN_NeuralNet(tf.keras.Model):
                            for _ in range(self.num_hidden_layers)]
         self.out = tf.keras.layers.Dense(output_dim)
         # self.output_transform = tf.keras.layers.Lambda(lambda x, u: u* x[:, 0:1]+ ic(x))
-        self.output_transform = lambda x, u: u* x[:, 0:1]+ ic(x)
+        self.output_transform = output_transform
         
     
     
@@ -113,46 +157,28 @@ class PINN_NeuralNet(tf.keras.Model):
 
 
 
+    
 
 class PINNSolver():
-    def __init__(self, model, x_r, w_dat):
+    def __init__(self, model, x_r, w_dat, u_exact = None):
         self.model = model
         
         # Store collocation points
-        self.t = x_r[:,0:1]
-        self.x = x_r[:,1:DIM+1]
+        self.x_r = x_r
+
+        # if exact sol is provided
+        self.u_exact = u_exact
         
         
         # Initialize history of losses and global iteration counter
         self.w_dat = w_dat
         self.hist = []
         self.iter = 0
-    
-    def get_r(self):
-        
-        with tf.GradientTape(persistent=True) as tape:
-            # Watch variables representing t and x during this GradientTape
-            tape.watch(self.t)
-            tape.watch(self.x)
-            
-            phi = 0.5 + 0.5*tf.tanh((0.5 - tf.sqrt(tf.reduce_sum(tf.square(self.x[:,0:DIM]),1,keepdims=True)))/epsilon)
-            
-            # Compute current values u(t,x)
-            u = self.model(tf.stack([self.t[:,0], self.x[:,0]], axis=1))
-            
-            u_x = tape.gradient(u, self.x)
-            phiux = phi*u_x
-            
-        u_t = tape.gradient(u, self.t)
-        u_xx = tape.gradient(phiux, self.x)
-        
-        del tape
-        return u_t - T*(D*(u_xx) + rho*phi*u*(1-u))
-    
+
     def loss_fn(self, x_dat, u_dat):
         
         # Compute phi_r
-        r = self.get_r()
+        r = pde(self.x_r, self.model)
         phi_r = tf.reduce_mean(tf.square(r)) * (1 - self.w_dat)
         
         # Initialize loss
@@ -161,9 +187,9 @@ class PINNSolver():
             # Add phi_0 and phi_b to the loss
             u_pred = self.model(x_dat)
             loss += tf.reduce_mean(tf.square(u_dat - u_pred)) * self.w_dat
-
-        return loss,r
+        return loss, r, 
     
+    @tf.function
     def get_grad(self, X, u):
         with tf.GradientTape(persistent=True) as tape:
             # This tape is for derivatives with
@@ -176,6 +202,15 @@ class PINNSolver():
         
         return loss, res, g
     
+
+    def check_exact(self):
+        # check with exact solution if provided
+        assert(self.u_exact is not None)
+        up = self.model(self.x_r)
+        ue = self.u_exact(self.x_r)
+        mse = tf.math.reduce_mean((up-ue)**2)
+        maxe = tf.math.reduce_max(tf.math.abs(up-ue))
+        return mse, maxe
     
     def solve_with_TFoptimizer(self, optimizer, X, u, N=1001):
         """This method performs a gradient descent type optimization."""
@@ -284,13 +319,21 @@ class PINNSolver():
     def callback(self, xr=None):
         
         if self.iter % num_print_every == 0:
-            print('It {:05d}: loss = {:10.8e}, maxres = {:10.8e}'.format(self.iter,self.current_loss,np.amax(self.current_res)))
+            print('It {:05d}: loss = {:10.4e}, maxres = {:10.4e}'.format(self.iter,self.current_loss,np.amax(self.current_res)))
+            # if exact solution is provided, 
+            if self.u_exact:
+                mse,maxe = self.check_exact()
+                print('mse = {:10.4e}, maxe = {:10.4e}'.format(mse.numpy(),maxe.numpy()))
+
+
         
         if num_residual_every is not None and self.iter % num_residual_every == 0:
             fname = f"data{self.iter}.dat"
             u = self.model(tf.concat([self.t,self.x],1))
             data = tf.concat([self.t, self.x, u, self.current_res],1)
             np.savetxt( os.path.join(MD_SAVE_DIR,fname) , data.numpy())
+
+        
 
         self.hist.append(self.current_loss)
         self.iter+=1
@@ -301,14 +344,10 @@ class PINNSolver():
 
 # Initialize model
 model = PINN_NeuralNet()
-model.build(input_shape=(None,2))
+model.build(input_shape=(None,DIM))
 
 # Initilize PINN solver
-solver = PINNSolver(model, x_r, w_dat)
-
-# Decide which optimizer should be used
-#mode = 'TFoptimizer'
-mode = 'ScipyOptimizer'
+solver = PINNSolver(model, x_r, w_dat, u_exact)
 
 # Start timer
 t0 = time()
@@ -331,4 +370,6 @@ solver.solve_with_ScipyOptimizer(x_dat,u_dat,
 print('\nComputation time: {} seconds'.format(time()-t0))
 
 
-model.save(os.path.join(MD_SAVE_DIR,'model_name'))
+
+if not test_case:
+    model.save(os.path.join(MD_SAVE_DIR,'model_name'))
