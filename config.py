@@ -9,9 +9,9 @@ tf.keras.backend.set_floatx(DTYPE)
 hostname = os.uname()[1].lower()
 
 if 'gru' in hostname:
-    DATADIR='~/pinndata'
+    DATADIR='/mnt/data/rzhang/pinndata'
 elif 'hpc3' in hostname:
-    DATADIR='/mnt/data/rzhang'
+    DATADIR='~/pinndata'
 else:
     DATADIR='./'
 
