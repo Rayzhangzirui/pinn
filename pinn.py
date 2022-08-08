@@ -6,7 +6,7 @@ from config import *
 import tensorflow as tf
 import numpy as np
 from time import time
-# import tensorflow_probability as tfp
+import tensorflow_probability as tfp
 import scipy.optimize
 import os
 from datetime import datetime
@@ -36,7 +36,7 @@ if not test_case:
 
 if test_case:
     tf.random.set_seed(1234)
-    num_init_train = 1000 # initial traning iteration
+    num_init_train = 100 # initial traning iteration
     n_res_pts = 100 # number of residual point
     n_dat_pts = 1000 # number of data points
     n_test_points = 100 # number of testing point
@@ -44,7 +44,7 @@ if test_case:
     num_add_pt = 10 # number of anchor point
     max_adpt_step = 1 # number of adaptive sampling
     num_adp_train = 1000 #adaptive adam training step
-    print_res_every = 10 # print residual
+    print_res_every = 100 # print residual
     save_res_every = None # save residual
     w_dat = 0.5 # weight of data, weight of res is 1-w_dat
     model_name = "test"
@@ -61,6 +61,8 @@ else:
     print_res_every = 1000
     save_res_every = 100
     w_dat = 0
+
+lbfgs_opt = {"maxcor": 100, "ftol": 0, "gtol": 1e-8, "maxiter": 10000, "maxls": 50}
 
 
 # domain = [[0., 1.],[-0.7,0.7]]
@@ -169,6 +171,71 @@ class PINN_NeuralNet(tf.keras.Model):
         Z = self.output_transform(X,Z)
         return Z
 
+# copy from 
+# https://github.com/lululxvi/deepxde/blob/9f0d86dea2230478d8735615e2ad518c62efe6e2/deepxde/optimizers/tensorflow/tfp_optimizer.py#L103
+class LossAndFlatGradient(object):
+    """A helper class to create a function required by tfp.optimizer.lbfgs_minimize.
+    Args:
+        trainable_variables: Trainable variables.
+        build_loss: A function to build the loss function expression.
+    """
+
+    def __init__(self, trainable_variables, build_loss):
+        self.trainable_variables = trainable_variables
+        self.build_loss = build_loss
+
+        # Shapes of all trainable parameters
+        self.shapes = tf.shape_n(trainable_variables)
+        self.n_tensors = len(self.shapes)
+
+        # Information for tf.dynamic_stitch and tf.dynamic_partition later
+        count = 0
+        self.indices = []  # stitch indices
+        self.partitions = []  # partition indices
+        for i, shape in enumerate(self.shapes):
+            n = np.product(shape)
+            self.indices.append(
+                tf.reshape(tf.range(count, count + n, dtype=tf.int32), shape)
+            )
+            self.partitions.extend([i] * n)
+            count += n
+        self.partitions = tf.constant(self.partitions)
+
+    @tf.function
+    def __call__(self, weights_1d):
+        """A function that can be used by tfp.optimizer.lbfgs_minimize.
+        Args:
+           weights_1d: a 1D tf.Tensor.
+        Returns:
+            A scalar loss and the gradients w.r.t. the `weights_1d`.
+        """
+        # Set the weights
+        self.set_flat_weights(weights_1d)
+        with tf.GradientTape() as tape:
+            # Calculate the loss
+            loss = self.build_loss()
+        # Calculate gradients and convert to 1D tf.Tensor
+        grads = tape.gradient(loss, self.trainable_variables)
+        grads = tf.dynamic_stitch(self.indices, grads)
+        return loss, grads
+
+    def set_flat_weights(self, weights_1d):
+        """Sets the weights with a 1D tf.Tensor.
+        Args:
+            weights_1d: a 1D tf.Tensor representing the trainable variables.
+        """
+        weights = tf.dynamic_partition(weights_1d, self.partitions, self.n_tensors)
+        for i, (shape, param) in enumerate(zip(self.shapes, weights)):
+            self.trainable_variables[i].assign(tf.reshape(param, shape))
+
+    def to_flat_weights(self, weights):
+        """Returns a 1D tf.Tensor representing the `weights`.
+        Args:
+            weights: A list of tf.Tensor representing the weights.
+        Returns:
+            A 1D tf.Tensor representing the `weights`.
+        """
+        return tf.dynamic_stitch(self.indices, weights)
 
 
     
@@ -189,6 +256,7 @@ class PINNSolver():
         self.hist = []
         self.iter = 0
 
+    @tf.function
     def loss_fn(self, x_dat, u_dat):
         
         # Compute phi_r
@@ -206,16 +274,20 @@ class PINNSolver():
         loss_tot = loss_res * (1-self.w_dat) + loss_dat*self.w_dat
 
         loss = {'res':loss_res, 'data':loss_dat, 'total':loss_tot}
-        return loss, r, 
+        return loss, r
     
-    # called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
+    
     @tf.function
-    def get_grad(self, X, u):
+    def get_grad(self, x_dat, u_dat):
+        """ get loss, residual, gradient
+        called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
+        args: x_dat: x data pts, u_dat: value at x.
+        """
         with tf.GradientTape(persistent=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
             tape.watch(self.model.trainable_variables)
-            loss,res = self.loss_fn(X, u)
+            loss,res = self.loss_fn(x_dat, u_dat)
             
         g = tape.gradient(loss['total'], self.model.trainable_variables)
         del tape
@@ -224,7 +296,8 @@ class PINNSolver():
     
 
     def check_exact(self):
-        # check with exact solution if provided
+        """ check with exact solution if provided
+        """
         assert(self.u_exact is not None)
         up = self.model(self.x_r)
         ue = self.u_exact(self.x_r)
@@ -328,15 +401,57 @@ class PINNSolver():
             return loss, grad_flat
         
         
-        return scipy.optimize.minimize(fun=get_loss_and_grad,
+        results = scipy.optimize.minimize(fun=get_loss_and_grad,
                                        x0=x0,
                                        jac=True,
                                        method=method,
                                        callback=self.callback,
                                        **kwargs)
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html#scipy.optimize.OptimizeResult
+        it=results.nit
+        loss_final = results.fun
+        print('bfgs(scipy) It:{:05d}, loss {:10.4e}'.format(it, loss_final))
+        return results
+
+    
+    
+    def solve_with_tfbfgs(self, X, u_dat, **kwargs):
+        
+        @tf.function
+        def bfgs_loss():
+            dloss,_=self.loss_fn(X, u_dat)
+            return dloss['total']
+
+
+        func = LossAndFlatGradient(self.model.trainable_variables, bfgs_loss)
+        initial_position = func.to_flat_weights(self.model.trainable_variables)
+        
+        results = tfp.optimizer.lbfgs_minimize(
+            func,
+            initial_position,
+            previous_optimizer_results=None,
+            num_correction_pairs=lbfgs_opt['maxcor'],
+            tolerance=lbfgs_opt['gtol'],
+            x_tolerance=0,
+            f_relative_tolerance=lbfgs_opt['ftol'],
+            initial_inverse_hessian_estimate=None,
+            max_iterations=lbfgs_opt['maxiter'],
+            parallel_iterations=1,
+            max_line_search_iterations=lbfgs_opt['maxls']
+        )
+        
+        loss_final = results.objective_value.numpy()
+        it = results.num_iterations.numpy()
+        print('bfgs(tfp) It:{:05d}, loss {:10.4e} '.format(it, loss_final))
+
+        return results
+
         
         
-    def callback(self, xr=None):
+    def callback(self,x=None):
+        """ called after bfgs and adam, 
+        scipy.optimize.minimize require first arg to be parameters 
+        """
         
         if self.iter % print_res_every == 0:
             str_loss = '[{:10.4e}, {:10.4e}, {:10.4e}] '.format(self.current_loss['res'],self.current_loss['data'],self.current_loss['total'])
@@ -375,19 +490,18 @@ solver = PINNSolver(model, x_r, w_dat, u_exact = u_exact)
 # Start timer
 t0 = time()
 
+# different learning rate schedules
 # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay([1000,3000],[1e-2,1e-3,5e-4])
 lr = tf.keras.optimizers.schedules.PolynomialDecay(1e-2,decay_steps=num_init_train,end_learning_rate=1e-4)
+
+
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
 solver.solve_with_TFoptimizer(optim, x_dat,u_dat, N=num_init_train)
     
 
-solver.solve_with_ScipyOptimizer(x_dat,u_dat,
-                            method='L-BFGS-B',
-                            options={'maxiter': num_init_train,
-                                     'maxfun': num_init_train,
-                                     'maxcor': 50,
-                                     'maxls': 50,
-                                     'ftol': 1.0*np.finfo(float).eps})
+# results = solver.solve_with_ScipyOptimizer(x_dat,u_dat,method='L-BFGS-B',options=lbfgs_opt)
+
+results = solver.solve_with_tfbfgs(x_dat,u_dat)
 
 # Print computation time
 print('\nComputation time: {} seconds'.format(time()-t0))
