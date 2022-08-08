@@ -37,7 +37,7 @@ if not test_case:
 if test_case:
     tf.random.set_seed(1234)
     num_init_train = 1000 # initial traning iteration
-    n_res_pts = 1000 # number of residual point
+    n_res_pts = 100 # number of residual point
     n_dat_pts = 1000 # number of data points
     n_test_points = 100 # number of testing point
     num_hidden_unit = 4 # hidden unit in one layer
@@ -89,27 +89,29 @@ else:
 
 # u_exact = None
 
-a = tf.Variable(1.0)
-a_true = tf.constant(2.0)
+param = tf.Variable([0., 0.])
+param_true = tf.constant([2., 1.0])
 DIM=1 
 
 domain = [[0., 1.]]
 
-def output_transform(x,u):
-    return tf.math.sin(math.pi * x) * u
+# def output_transform(x,u):
+#     return tf.math.sin(math.pi * x) * u
 
+def output_transform(x,u):
+    return u
 
 def pde(x_r, f):
     x = x_r
     u =  f(x)
     
     u_x = tf.gradients(u, x)[0]
-    u_xx = tf.gradients(u_x, x)[0]
+    # u_xx = tf.gradients(u_x, x)[0]
 
-    return u_xx - 2*a
+    return u_x-(f.param[0]*x+f.param[1])
 
 def u_exact(x):
-    return a_true*(x-1)*x
+    return param_true[0]*x**2/2 + param_true[1]*x
 
 
 
@@ -145,6 +147,7 @@ class PINN_NeuralNet(tf.keras.Model):
         self.num_hidden_layers = num_hidden_layers
         self.output_dim = output_dim
         
+        self.param = param
 
         # Define NN architecture
         self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
@@ -336,7 +339,7 @@ class PINNSolver():
     def callback(self, xr=None):
         
         if self.iter % print_res_every == 0:
-            str_loss = '[{:10.4e}, {:10.4e},  {:10.4e}] '.format(self.current_loss['res'],self.current_loss['data'],self.current_loss['total'])
+            str_loss = '[{:10.4e}, {:10.4e}, {:10.4e}] '.format(self.current_loss['res'],self.current_loss['data'],self.current_loss['total'])
             # if exact solution is provided, 
             if self.u_exact:
                 mse,maxe = self.check_exact()
