@@ -6,6 +6,7 @@ import numpy as np
 from time import time
 import tensorflow_probability as tfp
 import scipy.optimize
+import sys
 
 from datetime import datetime
 from config import *
@@ -42,7 +43,7 @@ from util import *
 
 
 # Define model architecture
-class PINN_NeuralNet(tf.keras.Model):
+class PINN(tf.keras.Model):
     """ Set basic architecture of the PINN model."""
 
     def __init__(self,
@@ -52,14 +53,15 @@ class PINN_NeuralNet(tf.keras.Model):
             activation='tanh',
             kernel_initializer='glorot_normal',
             output_transform = lambda x,u:u,
-            train_param = None,
+            param = None,
             **kwargs):
         super().__init__(**kwargs)
 
         self.num_hidden_layers = num_hidden_layers
         self.output_dim = output_dim
         
-        self.train_param = train_param
+        # phyiscal parameters in the model
+        self.param = param
 
         # Define NN architecture
         self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
@@ -169,6 +171,7 @@ class PINNSolver():
         self.w_dat = options["w_dat"]
         self.hist = []
         self.iter = 0
+        self.paramhist = [] # history of trainable model params
 
     @tf.function
     def loss_fn(self, x_dat, u_dat):
@@ -190,7 +193,6 @@ class PINNSolver():
         loss = {'res':loss_res, 'data':loss_dat, 'total':loss_tot}
         return loss, r
     
-    
     @tf.function
     def get_grad(self, x_dat, u_dat):
         """ get loss, residual, gradient
@@ -208,7 +210,6 @@ class PINNSolver():
 
         return loss, res, g
     
-
     def check_exact(self):
         """ check with exact solution if provided
         """
@@ -218,6 +219,7 @@ class PINNSolver():
         mse = tf.math.reduce_mean((up-ue)**2)
         maxe = tf.math.reduce_max(tf.math.abs(up-ue))
         return mse, maxe
+    
     
     def solve_with_TFoptimizer(self, optimizer, X, u, N=1001):
         """This method performs a gradient descent type optimization."""
@@ -234,7 +236,7 @@ class PINNSolver():
             
             loss,res = train_step()
             self.current_loss = loss
-            self.current_res = res.numpy()
+            self.current_res = res
             self.callback()
 
     def solve_with_ScipyOptimizer(self, X, u, method='L-BFGS-B', **kwargs):
@@ -253,7 +255,7 @@ class PINNSolver():
             shape_list = []
             
             # Loop over all variables, i.e. weight matrices, bias vectors and unknown parameters
-            for v in self.model.variables:
+            for v in self.model.trainable_variables:
                 shape_list.append(v.shape)
                 weight_list.extend(v.numpy().flatten())
                 
@@ -266,7 +268,7 @@ class PINNSolver():
             """Function which sets list of weights
             to variables in the model."""
             idx = 0
-            for v in self.model.variables:
+            for v in self.model.trainable_variables:
                 vs = v.shape
                 
                 # Weight matrices
@@ -314,7 +316,6 @@ class PINNSolver():
             # Return value and gradient of \phi as tuple
             return loss, grad_flat
         
-        
         results = scipy.optimize.minimize(fun=get_loss_and_grad,
                                        x0=x0,
                                        jac=True,
@@ -327,8 +328,6 @@ class PINNSolver():
         print('bfgs(scipy) It:{:05d}, loss {:10.4e}'.format(it, loss_final))
         return results
 
-    
-    
     def solve_with_tfbfgs(self, X, u_dat, **kwargs):
         
         @tf.function
@@ -353,36 +352,57 @@ class PINNSolver():
 
         return results
 
-        
-        
+    
     def callback(self,x=None):
         """ called after bfgs and adam, 
         scipy.optimize.minimize require first arg to be parameters 
         """
-        
-        if self.iter % self.options["print_res_every"] == 0:
-            str_loss = '[{:10.4e}, {:10.4e}, {:10.4e}] '.format(self.current_loss['res'],self.current_loss['data'],self.current_loss['total'])
+
+        # create header
+        header = '{:<5}, {:<10}, {:<10}, {:<10}, {:<10}, '.format('it','res','data','total','maxres')
+        if self.model.param.trainable:
+            for i in range(tf.size(self.model.param)):
+                    header+= "{:<10}, ".format(f'p{i}') 
+        if self.u_exact:
+            header+= "{:<10}, {:<10} ".format('mse','maxe') 
+        if self.iter == 0:
+            print(header)
+
+        # record data        
+        info = [self.iter, self.current_loss['res'].numpy(), self.current_loss['data'].numpy(), self.current_loss['total'].numpy()]
+        maxres = tf.math.reduce_max(tf.math.abs(self.current_res)).numpy()
+        info.append(maxres)  # max abs residual
+
+        if self.model.param.trainable:
+            info.extend(self.model.param.numpy())
+                    
+        if self.iter % self.options['print_res_every'] == 0:
+            info_str = ', '.join('{:10.4e}'.format(k) for k in info[1:])
+
             # if exact solution is provided, 
             if self.u_exact:
                 mse,maxe = self.check_exact()
-                str_metric = '[{:10.4e}, {:10.4e}]'.format(mse.numpy(),maxe.numpy())
-                str_loss += str_metric
+                info_str += ', {:10.4e}, {:10.4e}'.format(mse.numpy(),maxe.numpy())
 
-            
-            print('It {:05d}: {} {:10.4e}'.format(self.iter, str_loss ,np.amax(np.abs(self.current_res))))
+            print('{:05d}, {}'.format(info[0], info_str))  
+        
+        
 
-
-        # save residual to file with interval save_res_every
-        if self.options["save_res_every"] is not None and self.iter % self.options["save_res_every"] == 0:
-            fname = f"data{self.iter}.dat"
-            u = self.model(self.x_r)
-            data = tf.concat([self.x_r, u, self.current_res],1)
-            np.savetxt( os.path.join( self.options["model_dir"], fname) , data.numpy())
-
-        # loss history
-        self.hist.append(self.current_loss)
+        self.hist.append(info)
         self.iter+=1
 
-            
-        
+        # save residual to file with interval save_res_every
+        if self.options['save_res_every'] is not None and self.iter % self.options['save_res_every'] == 0:
+            fname = f'data{self.iter}.dat'
+            u = self.model(self.x_r)
+            data = tf.concat([self.x_r, u, self.current_res],1)
+            np.savetxt( os.path.join( self.options['model_dir'], fname) , data.numpy())
+
+    def save_history(self, fpath):
+        print(f'save training hist to {fpath}')
+        hist = np.asarray(self.hist)
+        col = hist.shape[1]
+        fmt = '%d'+' %.6e'*(col-1) #int for iter, else float
+        np.savetxt(fpath, hist, fmt)
+        return hist
 
