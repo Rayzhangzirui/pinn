@@ -3,44 +3,14 @@
 import math
 import tensorflow as tf
 import numpy as np
-from time import time
-import tensorflow_probability as tfp
+# import tensorflow_probability as tfp
 import scipy.optimize
 import sys
-
 from datetime import datetime
+from time import time
+
 from config import *
 from util import *
-
-
-
-
-# domain = [[0., 1.],[-0.7,0.7]]
-
-# def ic(x):
-#     r = tf.reduce_sum(tf.square(x[:, 1:DIM]),1,keepdims=True)
-#     return 0.1*tf.exp(-1000*r)
-
-# def pde(x_r,f):
-#     t = x_r[:,0:1]
-#     x = x_r[:,1:DIM]
-#     xr = tf.concat([t, x], axis=1)
-#     u =  f(xr)
-#     phi = 0.5 + 0.5*tf.tanh((0.5 - tf.sqrt(tf.reduce_sum(tf.square(x),1,keepdims=True)))/epsilon)
-    
-#     u_x = tf.gradients(u, x)[0]
-#     phiux = phi*u_x
-    
-#     u_t = tf.gradients(u, t)[0]
-#     u_xx = tf.gradients(phiux, x)[0]
-    
-#     return u_t - T*(D*(u_xx) + rho*phi*u*(1-u))
-
-# def output_transform(x,u):
-#     return u* x[:, 0:1]+ ic(x)
-
-# u_exact = None
-
 
 # Define model architecture
 class PINN(tf.keras.Model):
@@ -69,11 +39,8 @@ class PINN(tf.keras.Model):
                              kernel_initializer=kernel_initializer)
                            for _ in range(self.num_hidden_layers)]
         self.out = tf.keras.layers.Dense(output_dim)
-        # self.output_transform = tf.keras.layers.Lambda(lambda x, u: u* x[:, 0:1]+ ic(x))
         self.output_transform = output_transform
         
-    
-    
     def call(self, X):
         """Forward-pass through neural network."""
         Z = X
@@ -150,8 +117,6 @@ class LossAndFlatGradient(object):
         return tf.dynamic_stitch(self.indices, weights)
 
 
-    
-
 class PINNSolver():
     def __init__(self, model, pde, x_r, x_dat=None, u_dat=None, u_exact = None, options=None, lbfgs_opt = None):
         self.model = model
@@ -166,14 +131,13 @@ class PINNSolver():
         
         self.options = options
 
-        
         # Initialize history of losses and global iteration counter
         self.w_dat = options["w_dat"]
+        assert((u_dat is not None) == (self.w_dat>0))  #if data weight >0, must provide data
         self.hist = []
         self.iter = 0
         self.paramhist = [] # history of trainable model params
 
-    @tf.function
     def loss_fn(self, x_dat, u_dat):
         
         # Compute phi_r
@@ -181,19 +145,18 @@ class PINNSolver():
         loss_res = tf.reduce_mean(tf.square(r))
         
         # Initialize loss
+        loss_dat = 0.
         if x_dat is not None:
             # Add phi_0 and phi_b to the loss
             u_pred = self.model(x_dat)
             loss_dat = tf.reduce_mean(tf.square(u_dat - u_pred)) * self.w_dat
-        else:
-            loss_dat = 0.
 
         loss_tot = loss_res * (1-self.w_dat) + loss_dat*self.w_dat
 
         loss = {'res':loss_res, 'data':loss_dat, 'total':loss_tot}
         return loss, r
     
-    @tf.function
+    @tf.function(experimental_compile=True)
     def get_grad(self, x_dat, u_dat):
         """ get loss, residual, gradient
         called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
@@ -232,12 +195,15 @@ class PINNSolver():
             optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
             return loss, res
         
+        t0 = time()
         for i in range(N):
-            
             loss,res = train_step()
             self.current_loss = loss
             self.current_res = res
             self.callback()
+
+        print('\ntf optimizer time: {} seconds'.format(time()-t0))
+
 
     def solve_with_ScipyOptimizer(self, X, u, method='L-BFGS-B', **kwargs):
         """This method provides an interface to solve the learning problem
@@ -257,13 +223,10 @@ class PINNSolver():
             # Loop over all variables, i.e. weight matrices, bias vectors and unknown parameters
             for v in self.model.trainable_variables:
                 shape_list.append(v.shape)
-                weight_list.extend(v.numpy().flatten())
+                weight_list.extend(tf.reshape(v,[-1]))
                 
-            weight_list = tf.convert_to_tensor(weight_list)
             return weight_list, shape_list
 
-        x0, shape_list = get_weight_tensor()
-        
         def set_weight_tensor(weight_list):
             """Function which sets list of weights
             to variables in the model."""
@@ -316,12 +279,15 @@ class PINNSolver():
             # Return value and gradient of \phi as tuple
             return loss, grad_flat
         
+        t0 = time()
+        x0, shape_list = get_weight_tensor()
         results = scipy.optimize.minimize(fun=get_loss_and_grad,
                                        x0=x0,
                                        jac=True,
                                        method=method,
                                        callback=self.callback,
                                        **kwargs)
+        print('\nscipy bfgs time: {} seconds'.format(time()-t0))
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html#scipy.optimize.OptimizeResult
         it=results.nit
         loss_final = results.fun
@@ -330,7 +296,6 @@ class PINNSolver():
 
     def solve_with_tfbfgs(self, X, u_dat, **kwargs):
         
-        @tf.function
         def bfgs_loss():
             dloss,_=self.loss_fn(X, u_dat)
             return dloss['total']
@@ -359,12 +324,12 @@ class PINNSolver():
         """
 
         # create header
-        header = '{:<5}, {:<10}, {:<10}, {:<10}, {:<10}, '.format('it','res','data','total','maxres')
+        header = '{:<5}, {:<10}, {:<10}, {:<10}, {:<10}'.format('it','res','data','total','maxres')
         if self.model.param.trainable:
             for i in range(tf.size(self.model.param)):
-                    header+= "{:<10}, ".format(f'p{i}') 
+                    header+= ", {:<10}".format(f'p{i}') 
         if self.u_exact:
-            header+= "{:<10}, {:<10} ".format('mse','maxe') 
+            header+= ", {:<10}, {:<10}".format('mse','maxe') 
         if self.iter == 0:
             print(header)
 

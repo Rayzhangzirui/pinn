@@ -23,16 +23,16 @@ def sample_spherical(npoints, ndim):
     vec /= np.linalg.norm(vec, axis=0)
     return vec.T
 
-def sample_time_space(n, xndim, bd, spherical=False):
+def sample_time_space(n, spacedim, bd, spherical=False):
    
     t = np.random.uniform(0,1,(n,1))
     
     if spherical:
         # not uniform in space, denser at center
-        space = sample_spherical(n,xndim) * np.random.uniform(0.0, bd, n).reshape((n,1))
+        space = sample_spherical(n,spacedim) * np.random.uniform(0.0, bd, n).reshape((n,1))
 
     else:
-        space = bd*(2*np.random.uniform(0.0, 1, (n,xndim))-1)
+        space = bd*(2*np.random.uniform(0.0, 1, (n,spacedim))-1)
     x = np.hstack((t,space))
     return tf.convert_to_tensor(x,dtype=DTYPE)
 
