@@ -13,7 +13,7 @@ rho = 0.025; % growth rate
 
 ddm = true;
 
-scalemethod = 1;
+scalemethod = 3;
 
 N = 20000;
 
@@ -31,6 +31,13 @@ if scalemethod ==2
     L = sqrt(d/rho);
     D = 1;
     RHO = 1;
+end 
+%%
+if scalemethod == 3
+    L = bound;
+    T = L/sqrt(d*rho);
+    D = sqrt(d/rho)/L;
+    RHO = 1/D;
 end 
 
 
@@ -113,4 +120,4 @@ scatter(x,y,6,uinterp,'filled')
 
 datatable = array2table([t x y uinterp]);
 fname = sprintf('exactu_dim%d_n%d_unscale_tfinal.txt',xdim,N);
-writetable(datatable,fname,'WriteVariableNames',false)
+% writetable(datatable,fname,'WriteVariableNames',false)
