@@ -97,12 +97,22 @@ classdef MriDataSet<handle
                 % scaled
 %                 f = minmd/cmd;
 %                 u(cmd>obj.WADC) = 1;
-
+                % solve u(1-u) = b adc_min/adc
+                % 
                 cmd(cmd<minmd) = minmd;
                 b = 0.25;
-                u = (1 + sqrt(1-4*(minmd*b/cmd).*double(msk)))/2;
-%                 u = u/max(u(:));
+                msk_t = (seg>3);
+                msk_e = (seg==2);
+                u_t = (1 + sqrt(1-4*(minmd*b/cmd).*double(msk_t)))/2;
                 
+                u_e = minmd/cmd.*double(msk_e);
+                
+%                 u = u_e.*double(msk_e) + u_t.*double(msk_t);
+
+                  u = u_e.*imgaussfilt(double(msk_e),2) + u_t.*imgaussfilt(double(msk_t),2);
+                  u = u/max(u(:));
+                   smsk = imgaussfilt(double(msk_e),2) + imgaussfilt(double(msk_t),2);
+                   obj.append('smask',smsk,'smask');
 %                 u*(1-u) is  b 1/adc
                 
 %                 utmp = minmd/cmd;
