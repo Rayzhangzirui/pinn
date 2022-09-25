@@ -10,7 +10,7 @@ gm = MRIread( [DIR_MRI 'GM.nii']);
 wm = MRIread( [DIR_MRI 'WM.nii']);
 csf = MRIread( [DIR_MRI 'CSF.nii']);
 %%
-DIM = 3;
+DIM = 2;
 zslice = 99; % slice for visualization
 Pwm = wm.vol;
 Pgm = gm.vol;
@@ -37,7 +37,6 @@ h = 1; % spacial resolution, mm (caption figure 1)
 epsilon = 3; % width of diffused domain
 
 D = Pwm*Dw + Pgm*Dg; % diffusion coefficients
-
 
 sz = [1 1 1];
 sz(1:numel(size(Pwm))) = size(Pwm); % even when Pwm is 2d, 3rd dim is 1

@@ -6,21 +6,28 @@ classdef MriDataSet<handle
         infos
         savefig
         visdir
-        WADC = 0.003
+        maxadc
+        minadc
     end
    
     methods
         function obj = MriDataSet(varargin)
             p = inputParser;
             addParameter(p,'modeldir','',@ischar);
+            addParameter(p,'visdir','visualization',@ischar); % visualization dir
             addParameter(p,'mods',{},@iscell);
             addParameter(p,'dats',{},@iscell);
+            
             parse(p,varargin{:});
 
             obj.modeldir = p.Results.modeldir;
             assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
             fs = dir(fullfile(obj.modeldir,'*.nii.gz')); % file paths
 
+            obj.visdir = p.Results.visdir;
+            obj.visdir = fullfile(obj.modeldir,obj.visdir);
+            
+            
 
             for i = 1:length(fs)
                 parts = split(fs(i).name,{'.','_'});
@@ -28,6 +35,7 @@ classdef MriDataSet<handle
                 path = fullfile(fs(i).folder,fs(i).name);
                 dat = MRIread(path);
                 obj.dats{i}  = dat.vol;
+%                 obj.dats{i}  = imgaussfilt3(dat.vol);
                 obj.infos{i}  = obj.mods{i};
                 
                 % originally, seg, 1 = necrosis, 2 = edema, 4 = tumor
@@ -39,7 +47,7 @@ classdef MriDataSet<handle
             end 
             
         obj.savefig = true;
-        obj.visdir = fullfile(obj.modeldir,'visualization');
+        
 
         end %end of constructor
         
@@ -70,64 +78,66 @@ classdef MriDataSet<handle
             end
         end
         
-        function [cmd, u, maxmd, minmd] = restrictadc(obj)
-            % restrict md to segmentation
-            % valid = mask of tumor region
-            %           valid = (obj.map('seg') == 1 | obj.map('seg') == 4);
+        function restrictadc(obj,minadc,maxadc)
             seg = obj.get('seg');
-            obj.WADC = 0.003;
+            adc = obj.get('md');
             
-            for th = [1 3]
-                % confine and threshold md
-                msk  = seg>th;
-                cmd = double(msk).* obj.get('md'); %confined md in msk region
-                cmd(cmd>obj.WADC) = obj.WADC; % upper bound by free water adc
-                cmd(~msk)=nan;
-                % max and min adc restricted in seg
-                maxmd = max(cmd(msk));
-%                 minmd = min(cmd(msk));
-                
-                 minmd = 3e-4;
-
-                info = sprintf('confined/capped md\n max %0.1e\n min %0.1e\n',maxmd,minmd);
-                cmdname = ['adc' num2str(th)];
-                obj.append(cmdname,cmd,info);
-                
-
-                % scaled
-%                 f = minmd/cmd;
-%                 u(cmd>obj.WADC) = 1;
-                % solve u(1-u) = b adc_min/adc
-                % 
-                cmd(cmd<minmd) = minmd;
-                b = 0.25;
-                msk_t = (seg>3);
-                msk_e = (seg==2);
-                u_t = (1 + sqrt(1-4*(minmd*b/cmd).*double(msk_t)))/2;
-                
-                u_e = minmd/cmd.*double(msk_e);
-                
-%                 u = u_e.*double(msk_e) + u_t.*double(msk_t);
-
-                  u = u_e.*imgaussfilt(double(msk_e),2) + u_t.*imgaussfilt(double(msk_t),2);
-                  u = u/max(u(:));
-                   smsk = imgaussfilt(double(msk_e),2) + imgaussfilt(double(msk_t),2);
-                   obj.append('smask',smsk,'smask');
-%                 u*(1-u) is  b 1/adc
-                
-%                 utmp = minmd/cmd;
-%                 u = utmp - min(utmp(:));
-                
-%                 u = 1 - minmd/cmd;
-                
-                u = u.*double(msk);
-                
-%                 u = (obj.WADC - cmd)/(obj.WADC-minmd).*double(msk);
-                uname = ['u' num2str(th)];
-                obj.append(uname,u,uname);
-            end
+            obj.minadc =  minadc;
+            obj.maxadc = maxadc;
+            
+            adc(adc>maxadc) = maxadc;
+            adc(adc<minadc) = minadc;
+            
+            adc(seg==0)=nan;
+            
+            obj.append('adc',adc,'adc in seg, thresholded');
+            
         end
         
+        function getu(obj)
+            seg = obj.get('seg');
+            adc = obj.get('adc');
+            
+            
+            % linear transform in all region
+            msk = seg>1;
+            u = zeros(size(adc));
+            u(msk) = (obj.maxadc - adc(msk))/(obj.maxadc-obj.minadc);
+            obj.append('u1inv',u,'u linear, all region');
+            
+            % quadratic in all region
+            msk = seg>1;
+            b = 0.25;
+            u = zeros(size(adc));
+            f = obj.minadc*b./adc(msk);
+            u(msk) = (1 + sqrt(1-4*f))/2;
+            obj.append('u1quad',u,'u quad, all region');
+            
+            % linear transform in necrosis and tumor region
+            msk = seg>3;
+            u = zeros(size(adc));
+            u(msk) = (obj.maxadc - adc(msk))/(obj.maxadc-obj.minadc);
+            obj.append('u3inv',u,'u linear, tumor and necrosis region');
+            
+            % quadratic transform
+            msk = seg>3;
+            u = zeros(size(adc));
+            f = obj.minadc*b./adc(msk);
+            u(msk) = (1 + sqrt(1-4*f))/2;
+            obj.append('u3quad',u,'u quad, tumor and necrosis region');
+            
+            % separate transform
+            u = zeros(size(adc));
+            mske = seg==2; % indicator edema region
+            mskt = seg>3; % indicator tumor region
+            u(mskt) = (1 + sqrt(1-4*(obj.minadc*b./adc(mskt))))/2;    
+            u(mske) = obj.minadc./adc(mske);
+            
+            u = imgaussfilt3(u,2,'FilterDomain','spatial');
+            obj.append('ulinqua',u,'u linear in edema, quadratic else, smooth');
+            
+        end
+
         function [bx,by,bz] = box(obj)
             % find bounding box of tumor segmentation
             msk = obj.get('seg')>1;
@@ -188,9 +198,13 @@ classdef MriDataSet<handle
                 caxis([0 6]);
             end
             
-            if contains(mod,'cmd')
-                caxis([0 obj.WADC]);
+            if startsWith(mod,'adc')
+                caxis([0 obj.maxadc]);
             end
+            
+%             if startsWith(mod,'u')
+%                 caxis([0 1]);
+%             end
             
             
             colorbar
@@ -199,7 +213,7 @@ classdef MriDataSet<handle
             v = axis;
             posX = v(1) + 0.01 * (v(2) - v(1));
             posY = v(3) + 0.99* (v(4) - v(3));
-            text( posX, posY, obj.infos{i},'Color', [1,1,1],...
+            text( posX, posY, obj.infos{i},'Color','r',...
             'HorizontalAlignment', 'left', ...
             'VerticalAlignment', 'top');
 
@@ -207,10 +221,9 @@ classdef MriDataSet<handle
             set( hax, 'Visible', 'off' ) ;
         end
       
-        
-            
         function [fig,ha]= visualmods(obj,mods,nrow,slice,prefix)
             % visualize all 
+            % prefix = plot prefig
             close all;            
             n = length(mods);
             if n == 0
@@ -230,7 +243,7 @@ classdef MriDataSet<handle
                 j = obj.getidx(mods{i});
                 obj.visual(ha(i),obj.mods{j},slice);
             end
-            obj.saveplot(sprintf('%s_slice%d',prefix,slice));
+            obj.saveplot(sprintf('fig_%s_slice%d',prefix,slice));
         end
              
         function saveplot(obj,fname)

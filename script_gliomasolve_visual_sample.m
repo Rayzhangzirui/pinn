@@ -1,6 +1,7 @@
 run script_gliomasolve_setup.m
-datafname = sprintf('data/sol%dd_D%g_rho%g.mat',DIM,Dw,rho);
-load(datafname);
+% datafname = sprintf('data/sol%dd_D%g_rho%g.mat',DIM,Dw,rho);
+% load(datafname);
+load('data/sol2d_D0.13_rho0.025_x164_y116_z1_tf150.mat')
 %% visualization
 tk = length(tall);
 
@@ -62,7 +63,7 @@ else
     ts = rand(N,1)*tfinal; % sample t, unit
 end
 
-method = 'linear'
+method = 'spline'
 
 
 if DIM==3
@@ -106,6 +107,11 @@ scatter3(xs(:,1),xs(:,2),xs(:,3),6,uq,'filled')
 
 %%
 xscenter = xs - ix(1:DIM);
-datatable = array2table([ts xscenter phiq Pwmq Pgmq uq]);
-fname = sprintf('datmri_dim%d_n%d_st%d_%s.txt',DIM,N,tfinalonly,method);
+
+xdat = [ts xscenter];
+fname = sprintf('data/datmri_dim%d_n%d_st%d_%s.mat',DIM,N,tfinalonly,method);
+save(fname,'xdat','phiq','Pwmq','Pgmq','uq');
+
+% datatable = array2table([ts xscenter phiq Pwmq Pgmq uq]);
+% fname = sprintf('datmri_dim%d_n%d_st%d_%s.txt',DIM,N,tfinalonly,method);
 % writetable(datatable,fname,'WriteVariableNames',false)

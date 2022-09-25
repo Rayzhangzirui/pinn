@@ -1,6 +1,6 @@
 run script_gliomasolve_setup.m
 
-datafname = sprintf('data/sol%dd_D%g_rho%g.mat',DIM,Dw,rho);
+datafname = sprintf('data/sol%dd_D%g_rho%g_x%d_y%d_z%d_tf%d.mat',DIM,Dw,rho,ix(1),ix(2),ix(3),tfinal);
 yessave = 'y';
 if isfile(datafname)
     fprintf('%s already exist\n',datafname);
