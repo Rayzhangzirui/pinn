@@ -81,14 +81,14 @@ classdef MriDataSet<handle
         function restrictadc(obj,minadc,maxadc)
             seg = obj.get('seg');
             adc = obj.get('md');
+            adc(seg==0)=nan;
             
             obj.minadc =  minadc;
             obj.maxadc = maxadc;
             
             adc(adc>maxadc) = maxadc;
+            obj.append('adccap',adc,'adc in seg, capped');
             adc(adc<minadc) = minadc;
-            
-            adc(seg==0)=nan;
             
             obj.append('adc',adc,'adc in seg, thresholded');
             
@@ -202,9 +202,9 @@ classdef MriDataSet<handle
                 caxis([0 obj.maxadc]);
             end
             
-%             if startsWith(mod,'u')
-%                 caxis([0 1]);
-%             end
+            if startsWith(mod,'u')
+                caxis([0 1]);
+            end
             
             
             colorbar
