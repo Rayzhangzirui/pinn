@@ -1,4 +1,5 @@
 classdef Model
+   % class to handel postprocessing data
    properties
       modeldir
       tag
@@ -80,8 +81,6 @@ classdef Model
           sc(2) = plot(obj.log.it, log10(obj.log.res),'DisplayName', [obj.tag ' res'],varargin{:});
           sc(3) = plot(obj.log.it, log10(obj.log.data),'DisplayName', [obj.tag ' data'],varargin{:} );
         end
-       end
-
-      
+       end      
    end
 end

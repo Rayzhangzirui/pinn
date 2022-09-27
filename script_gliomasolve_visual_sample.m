@@ -1,7 +1,7 @@
-run script_gliomasolve_setup.m
+% run script_gliomasolve_setup.m
 % datafname = sprintf('data/sol%dd_D%g_rho%g.mat',DIM,Dw,rho);
 % load(datafname);
-load('data/sol2d_D0.13_rho0.025_x164_y116_z1_tf150.mat')
+% load('data/sol2d_D0.13_rho0.025_x164_y116_z1_tf150.mat')
 %% visualization
 tk = length(tall);
 
