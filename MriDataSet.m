@@ -8,6 +8,7 @@ classdef MriDataSet<handle
         visdir
         maxadc
         minadc
+        
     end
    
     methods
@@ -17,6 +18,7 @@ classdef MriDataSet<handle
             addParameter(p,'visdir','visualization',@ischar); % visualization dir
             addParameter(p,'mods',{},@iscell);
             addParameter(p,'dats',{},@iscell);
+            addParameter(p,'savefig',true,@islogical);
             
             parse(p,varargin{:});
 
@@ -26,6 +28,7 @@ classdef MriDataSet<handle
 
             obj.visdir = p.Results.visdir;
             obj.visdir = fullfile(obj.modeldir,obj.visdir);
+            obj.savefig = p.Results.savefig;
             
             
 
@@ -45,19 +48,21 @@ classdef MriDataSet<handle
                     obj.dats{i} = dat.vol;
                 end
             end 
-            
-        obj.savefig = true;
-        
-
         end %end of constructor
         
+
         function i = getidx(obj,mod)
             i = find(ismember(obj.mods,mod));
         end
         
+
         function [dat,i] = get(obj,mod)
             i = obj.getidx(mod);
-            assert(~isempty(i));
+            dat = {};
+            if isempty(i)
+                fprintf('%s not found\n',mod);
+                return;
+            end
             dat = obj.dats{i};
         end
         
@@ -241,9 +246,14 @@ classdef MriDataSet<handle
             
             for i = 1:length(mods)
                 j = obj.getidx(mods{i});
+                if isempty(j)
+                    fprintf('%s not exist, skip\n',mods{i});
+                    continue
+                end
                 obj.visual(ha(i),obj.mods{j},slice);
             end
-            obj.saveplot(sprintf('fig_%s_slice%d',prefix,slice));
+            fname = sprintf('fig_%s_slice%d',prefix,slice);
+            obj.saveplot(fname);
         end
              
         function saveplot(obj,fname)
@@ -257,21 +267,26 @@ classdef MriDataSet<handle
                 mkdir(obj.visdir)
             end
 
-            export_fig(gcf,fullfile(obj.visdir,fname),'-png','-m2')
+            export_fig(gcf,fullfile(obj.visdir,fname),'-jpg','-m3')
         end
         
         function histo(obj,mod)
             % histogram of adc
-            adc = obj.get(mod);
+            dat = obj.get(mod);
+            if isempty(dat)
+                fprintf('skip histo');
+                return;
+            end
             seg = obj.get('seg');
             figure;
             hold on;
-            histogram(adc(seg==2),'DisplayName','edema');
-            histogram(adc(seg==4),'DisplayName','tumor');
-            histogram(adc(seg==6),'DisplayName','necrosis');
+            histogram(dat(seg==2),'DisplayName','edema');
+            histogram(dat(seg==4),'DisplayName','tumor');
+            histogram(dat(seg==6),'DisplayName','necrosis');
             legend('Location','best');
+            
             fname = 'fig_adc_hist_seg';
-            export_fig(gcf,fullfile(obj.visdir,fname),'-png','-m2')
+            obj.saveplot(fname);
         end
         
         function corrplot(obj,mods)
@@ -286,7 +301,9 @@ classdef MriDataSet<handle
             end
             t = array2table(X,'VariableNames',mods);
             corrplot(t);
-            export_fig(gcf,fullfile(obj.visdir,'fig_corrplot'),'-png','-m2')
+            
+            fname = 'fig_corrplot';
+            obj.saveplot(fname);
         end
         
         function corrplot2(obj,smod,tmods)

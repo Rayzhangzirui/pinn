@@ -1,4 +1,4 @@
-function [phi,uall,tall] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, DIM)
+function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, DIM)
     
     h = 1; % spacial resolution, mm (caption figure 1)
     epsilon = 3; % width of diffused domain
@@ -84,6 +84,7 @@ function [phi,uall,tall] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, D
         tall(end+1) = t;
         uall{end+1} = u;
     end
-
+    
+    uend = u;
     uall = cat(DIM+1,uall{:});
 end

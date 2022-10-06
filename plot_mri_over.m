@@ -10,7 +10,7 @@ axis(ax1,'equal')
 xlim(ax1,[0 size(Dslice,2)])
 
 ax2 = axes;
-hsc = scatter(ax2,x,y,3,u,'filled');
+hsc = scatter(ax2,x,y,6,u,'filled');
 hsc.MarkerFaceAlpha = 0.2;
 cmp = colormap(ax2,'parula');
 set(ax2,'YDir','reverse')

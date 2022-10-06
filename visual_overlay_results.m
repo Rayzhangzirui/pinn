@@ -1,7 +1,8 @@
 run script_gliomasolve_setup.m
 load ./data/datmri_dim2_n40000_st1_linear.mat
 load ./data/sol2d_D0.13_rho0.025.mat
-modeldir = '../pinn/models/mri2dscale2/mri2d_stnpos/'
+% modeldir = '../pinn/models/mri2dscale2/mri2d_stnpos/'
+modeldir = '../pinn/models/mri2dscale2/cont/'
 load(fullfile(modeldir,'predxdat.mat'));
 threshold = false
 %%
@@ -16,9 +17,9 @@ maxu = max(upredt(:));
 n = size(upredt,1); 
 udat = uq(1:n,1);
 udatnoise = udat + randn(n,1)*sigma;
-% if threshold
-% udatnoise(udatnoise<0)=0;
-% end
+if threshold
+    udatnoise(udatnoise<0)=0;
+end
 err  = abs(upredt - udat); % need to load uq
 
 Dslice = D(:,:,zslice);
@@ -27,26 +28,26 @@ phislice = phi(:,:,zslice);
 %%
 [ax1,himg,ax2,hsc] = plot_mri_over(Dslice,xqs(:,2),xqs(:,1),udatnoise);
 title(ax1,'udat with noise over D');
-ax2.CLim = [0 max(uq)] + [0, 2*sigma]
-export_fig(fullfile(modeldir,'fig_udat_noise2.mat'),'-m3');
+% ax2.CLim = [0 max(uq)] + [0, 2*sigma]
+export_fig(fullfile(modeldir,'fig_udat_noise.jpg'),'-m3');
 
 %%
 
 [ax1,himg,ax2,hsc] = plot_mri_over(Dslice,xqs(:,2),xqs(:,1),err);
 title(ax1,'err over D');
-export_fig(fullfile(modeldir,'fig_err.mat'),'-m3');
+export_fig(fullfile(modeldir,'fig_err.jpg'),'-m3');
 
 %%
 [ax1,himg,ax2,hsc] = plot_mri_over(Dslice,xqs(:,2),xqs(:,1),upredt);
 title(ax1,'pred u over phi');
-
-export_fig(fullfile(modeldir,'fig_upred.mat'),'-m3');
+% ax2.CLim = [0 max(uq)] + [0, 2*sigma]
+export_fig(fullfile(modeldir,'fig_upred.jpg'),'-m3');
 
 %%
 [ax1,himg,ax2,hsc] = plot_mri_over(Dslice,xqs(:,2),xqs(:,1),udat);
 title(ax1,'u dat over D');
-ax2.CLim = [0 max(uq)]
-export_fig(fullfile(modeldir,'fig_udat2.mat'),'-m3');
+% ax2.CLim = [0 max(uq)] + [0, 2*sigma]
+export_fig(fullfile(modeldir,'fig_udat.jpg'),'-m3');
 
 %%
 

@@ -1,5 +1,5 @@
 function [t,info] = readlog(path)
-%
+% read logging file
 dats = [];
 info = {};
 if exist(path, 'file') ~= 2
@@ -18,9 +18,6 @@ while ~feof(fid)
         continue
     end
 
-    
-    
-    
     s = split(tline,',');
     if all(isstrprop(s{1},'digit')) %get data
         dats(end+1,:) = cellfun(@str2num, s);
@@ -32,12 +29,6 @@ while ~feof(fid)
         end
         
     end
-    
-    
-    
-    
-        
-    
     
 end
 

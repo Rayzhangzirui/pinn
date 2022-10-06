@@ -13,8 +13,7 @@ classdef GliomaSolver<handle
         ix 
         dim %dimension
         tend % final time
-        
-        seed % random seed, sampling
+
 
         df % diffusion coefficient as field
 
@@ -36,28 +35,16 @@ classdef GliomaSolver<handle
         phi
         uall
         tall
+        uend
         
-        % radius of tumor region
-        rmax 
+        % scaling
+        rmax % radius of tumor region
         L
         T
         DW
         RHO
-
-        % sample
-        Pwmq
-        Pgmq
-        phiq
-        dq
-        xq
-        tq
-        n % number of spatial points
-        uq
-        uqe % uq at final time
         
-       
-        datadir = '/Users/Ray/project/glioma/matlabscripts/data/';
-    end
+        end
     
     methods
         function obj = GliomaSolver(dim, d, rho, x0, tend, zslice)
@@ -88,7 +75,8 @@ classdef GliomaSolver<handle
         end
         
         function readmri(obj,fdir)
-            % read mri data
+            % read mri data, fdir = dir to atlas
+
             gm = MRIread( [fdir 'GM.nii']);
             wm = MRIread( [fdir 'WM.nii']);
             csf = MRIread( [fdir 'CSF.nii']);
@@ -113,8 +101,9 @@ classdef GliomaSolver<handle
         end% 
         
         function savesol(obj)
+            % save solution to mat file
             fsol = sprintf('sol_%s',obj.name);
-            fp = fullfile(obj.datadir, fsol );
+            fp = fullfile(fsol);
             
             
             yessave = 'n';
@@ -139,7 +128,9 @@ classdef GliomaSolver<handle
         end
 
         function solve(obj)
-            [obj.phi,obj.uall,obj.tall] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.dim);
+            [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.dim);
+            obj.getrmax();
+            fprintf('rmax = %g\n',obj.rmax);
 %             obj.savesol();
         end
 
@@ -165,49 +156,39 @@ classdef GliomaSolver<handle
             end
         end
 
-        function [ax1, h1, ax2, h2] = plotu(obj, varargin)
-            % tk = which time step to visualize
-            % slice = which slice
-            % bg = background D or phi
-            % th = threshold for transparent u
-            p = inputParser;
-            addParameter(p,'tk',length(obj.tall));
-            addParameter(p,'slice', obj.zslice);
-            addParameter(p,'bg', 'D');
-            addParameter(p,'th', 0.01);
-            
-            parse(p,varargin{:});
-            tk = p.Results.tk;
-            vz = p.Results.slice;
-            th = p.Results.th;
-            bg = p.Results.bg;
-            
-            [uslice, Dslice, phislice] = obj.getdat( tk, vz);
-            
-            if strcmp(bg,'D')
-                background = Dslice;
-            elseif strcmp(bg,'phi')
-                background = phislice;
-            else 
-                error('unknow backgroun')
-            end
-            
-            maxu = max(obj.uall(:)); % maximum concentration, used to scale color map
-
+        function [fig,ax1] = plotbkgd(obj, bgname)
+            assert(obj.dim == 2); % todo: 3d
+            dat = obj.(bgname);
+            sz = size(dat);
+            fig = figure;
             ax1 = axes;
-            colormap(ax1,gray(20));
-            h1 = imagesc(background);
+            
+            h1 = imagesc(ax1,dat);
+%             axis equal;
+%             xlim([1 sz(1)])
+%             ylim([1 sz(2)])
+            
+            
+            cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
-
+        end
+        
+        function [fig,ax1, ax2, hLink] = imagesc(obj,bgname, varargin)
+            [fig,ax1] = plotbkgd(obj, bgname);
             ax2 = axes;
-            h2 = imagesc(uslice.*phislice);
-            h2.AlphaData = double(uslice>th); % threshold for transparency
+            h2 = imagesc(varargin{:});
             cmp = colormap(ax2,'parula');
-            caxis(ax2,[0 maxu]); % caxis is clim in newer version of matlab
+            h2.AlphaData = double(h2.CData>1e-2); % threshold for transparency
+            maxcdata = max(h2.CData(:));
+            clim(ax2,[0,maxcdata]);
             set(ax2,'color','none','visible','on')
             cb2 = colorbar(ax2,'Location','eastoutside')
+            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
+        end
 
-            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position'});
+        function [fig, ax1, ax2] = plotuend(obj)
+            [fig, ax1, ax2]  = obj.imagesc('df', obj.uend);
         end
 
         function getrmax(obj)
@@ -223,67 +204,44 @@ classdef GliomaSolver<handle
             ls = distix - obj.rmax; % level set function
         end
 
-        function sample(obj,n,seed)
-            if nargin == 2
-                obj.seed = 1;
-            end
-            % sample collocation points
-            obj.getrmax();
-            obj.n = n;
-
-            %% interpolate the data
-            rng(obj.seed,'twister');
-            obj.xq = sampleDenseBall(n,obj.dim, obj.rmax, obj.x0); % sample coord, unit
-            obj.tq = rand(n,1)*obj.tend; % sample t, unit
-        end
-
-        function fq = interpf(obj, f, method)
-            % interpolate in ndgrid
+        function fq = interpf(obj, f, X, method)
+            % interpolate f(x)
             if obj.dim == 3
-                fq = interpn(obj.gx, obj.gy, obj.gz, f, obj.xq(:,1), obj.xq(:,2), obj.xq(:,3),method);
+                fq = interpn(obj.gx, obj.gy, obj.gz, f, X(:,1), X(:,2), X(:,3), method);
             else
-                fq = interpn(obj.gx, obj.gy, f, obj.xq(:,1), obj.xq(:,2) ,method);
+                fq = interpn(obj.gx, obj.gy, f, X(:,1), X(:,2), method);
             end 
         end
 
-        function fq = interpu(obj, t, method)
+        function fq = interpu(obj, t, X, method)
+            % interpolate u(x,t)
+
             f = @(x) reshape(x,[],1);
-            % interpolate  u ndgrid and t
+
             if obj.dim == 3
                 xg = f(obj.gx(:,1,1));
                 yg = f(obj.gy(1,:,1));
                 zg = f(obj.gz(1,1,:));
-                fq = interpn(xg, yg, zg, obj.tall, obj.uall, obj.xq(:,1), obj.xq(:,2), obj.xq(:,3), t, method);
+                fq = interpn(xg, yg, zg, obj.tall, obj.uall, X(:,1), X(:,2), X(:,3), t, method);
             else
                 xg = f(obj.gx(:,1));
                 yg = f(obj.gy(1,:));
-                fq = interpn(xg, yg, obj.tall, obj.uall, obj.xq(:,1), obj.xq(:,2), t, method);
+                fq = interpn(xg, yg, obj.tall, obj.uall, X(:,1), X(:,2), t, method);
             end 
         end
 
-        function interp(obj,method)
-            obj.Pwmq = obj.interpf(obj.Pwm, method);
-            obj.Pgmq = obj.interpf(obj.Pgm, method);
-            obj.phiq = obj.interpf(obj.phi, method);
-            obj.uq = obj.interpu(obj.tq, method);
-            obj.uqe = obj.interpu(ones(obj.n,1)*obj.tend, method);
-        end
-
-        function hsc = visualxq(obj,prop)
-            % visualize sampled points
-            dat = obj.(prop);
-            if obj.dim == 2
-                hsc = scatter(obj.xq(:,2),obj.xq(:,1),6,dat,'filled');
-                set(gca,'YDir','reverse')
-            end
-
-            if obj.dim == 3
-                hsc = scatter3(obj.xq(:,2),obj.xq(:,1),obj.xq(:,3),6,dat,'filled');
-                set(gca,'YDir','reverse')
-            end
+        function [fig,ax1,ax2,hLink] = scatter(obj,bgname,X,sz,dat,varargin)
+            [fig,ax1] = plotbkgd(obj, bgname);
+            ax2 = axes;
+            scatter(ax2,X(:,2),X(:,1),sz,dat,varargin{:});
+            set(ax2,'YDir','reverse')
+            set(ax2,'color','none','visible','off');
+            cb2 = colorbar(ax2,'Location','eastoutside');
+            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
         
-        function [h1,h2] = visualover(obj, prop, varargin)
+        function [h1,ax1,h2,ax2] = visualover(obj, prop, varargin)
             % visualize 2d scattered data, overlay
             
             bkgd = obj.(prop);
@@ -295,7 +253,7 @@ classdef GliomaSolver<handle
             cb1 = colorbar(ax1,'Location','westoutside');
             
             ax2 = axes;
-            h2 =scatter(ax2, varargin{:});
+            h2 = scatter(ax2, varargin{:});
             cmp = colormap(ax2,'parula');
             set(ax2,'YDir','reverse');
             % caxis(ax2,[minu maxu]); % caxis is clim in newer version of matlab
@@ -314,32 +272,83 @@ classdef GliomaSolver<handle
             obj.RHO = sqrt(rhoc/dwc)*lc;
             obj.T = obj.L/sqrt(dwc * rhoc);
         end
-        
-        function readydat(obj)
-            % anatomy data
-            Pwmq = obj.Pwmq;
-            Pgmq = obj.Pgmq;
-            phiq = obj.phiq;
+
+        function datname = ReadyDat(obj, n, varargin)
+            % prepare data for training
+            p = inputParser;
+            p.KeepUnmatched = true;
+            addParameter(p, 'noiseon', 'uqe'); %none = no noise, uq noise after interp, u interp after noise
+            addParameter(p, 'method', 'linear');
+            addParameter(p, 'seed', 1);
+            addParameter(p, 'tag', '');
+            parse(p, varargin{:});
             
-            xqcenter = obj.xq - obj.x0;
+            seed = p.Results.seed;
+            method = p.Results.method;
+            if ~isempty(p.Results.tag)
+                tag = "_"+p.Results.tag;
+            end
+
+
+            % sample collocation points
+            rng(seed,'twister');
+            xq = sampleDenseBall(n, obj.dim, obj.rmax, obj.x0); % sample coord, unit
+            tq = rand(n,1)*obj.tend; % sample t, unit
+
+
+
+            Pwmq = obj.interpf(obj.Pwm, xq, method);
+            Pgmq = obj.interpf(obj.Pgm, xq, method);
+            phiq = obj.interpf(obj.phi, xq, method);
+            uq = obj.interpu(tq, xq, method); % u(tq, xq)
+            tqe = ones(n,1)*obj.tend; % all final time
+
+            uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
+            
+            if strcmpi(p.Results.noiseon, 'uqe')
+                % interp then add noise
+                fprintf('interp then add noise\n');
+                nzuqe = addNoise(uqe,varargin{:}); % noisy uqe
+            elseif strcmpi(p.Results.noiseon, 'uend')
+                % add noise to uend then interp
+                fprintf('add noise then interp\n');
+                nzuend = addNoise(obj.uend,varargin{:});
+                nzuqe = obj.interpf(nzuend, xq, method); % u(t_end,xq)
+            else
+               error('unknow option') 
+            end
+
+
+            xqcenter = xq - obj.x0;
 
             % single point data 
-            xdat = [ones(obj.n,1) * obj.tend/obj.T xqcenter/obj.L];
-            udat = obj.uqe;
+            xdat = [tqe/obj.T xqcenter/obj.L];
+            udat = nzuqe;
+
             % testing data, all time
-            xtest = [obj.tq/obj.T xqcenter/obj.L];
-            utest = obj.uq;
+            xtest = [tq/obj.T xqcenter/obj.L];
+            utest = uq;
             
             
             DW = obj.DW;
             RHO = obj.RHO;
             L = obj.L;
             T = obj.T;
+            argsample = varargin;
             
-            datname = sprintf('dat_%s.mat',obj.name);
-            save(datname,'xdat','udat','xtest','utest','DW','RHO','L','T', 'Pwmq', 'Pgmq', 'phiq');
+            datname = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
+            save(datname,'xdat','udat','uqe','xq','xtest','utest','DW','RHO','L','T', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed');
+            fprintf('save training dat to %s\n',datname)
         end
-
+        
+        function [ts,x,upred,upredall] = loadresults(obj, predmatfile)
+            s = load(predmatfile);
+            x = double(s.x) * obj.L + obj.x0;
+            ts = double(s.ts) * obj.T;
+            upredall = double(s.upred);
+            i = find(ts==obj.tend);
+            upred = upredall(:,i);
+        end
     end
 end
 
