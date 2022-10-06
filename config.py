@@ -13,7 +13,7 @@ if 'gru' in hostname:
 elif 'hpc3' in hostname:
     DATADIR='~/pinndata'
 elif 'poison' in hostname:
-    DATADIR='/home/ziruz16/pinndata'
+    DATADIR='/home/ziruz16/models'
 else:
     DATADIR='./'
 

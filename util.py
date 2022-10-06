@@ -2,7 +2,18 @@ from config import *
 import numpy as np
 from scipy import interpolate
 import tensorflow as tf
+from time import time
+from scipy.io import loadmat
 
+# decorator for timing
+def timer(func):
+    def wrapper(*args, **kwargs):
+        start=time()
+        result = func(*args, **kwargs)
+        end= time()
+        print(func.__name__+ ' took ' + str((end-start)) + ' seconds')
+        return result
+    return wrapper
 
 def interpsol(filepath, nt, nr, x_dat):
     dat = np.loadtxt(filepath,delimiter=',',skiprows=1)
@@ -23,9 +34,9 @@ def sample_spherical(npoints, ndim):
     vec /= np.linalg.norm(vec, axis=0)
     return vec.T
 
-def sample_time_space(n, spacedim, bd, spherical=False):
+def sample_time_space(n, spacedim, bd, spherical=False, tfinal=1):
    
-    t = np.random.uniform(0,1,(n,1))
+    t = np.random.uniform(0,1,(n,1))*tfinal
     
     if spherical:
         # not uniform in space, denser at center
@@ -36,10 +47,56 @@ def sample_time_space(n, spacedim, bd, spherical=False):
     x = np.hstack((t,space))
     return tf.convert_to_tensor(x,dtype=DTYPE)
 
+def sample_uniform_ball(n, xdim, R, fw = None):
+    ''' sampling uniform [0,1] in time, uniform in ball of xdim
+    fw is the weight function, function of r
+    '''
+    t = np.random.uniform(0,1,(n,1))
+    r = np.random.uniform(0.0, R, (n,1))**(1/xdim)
+    x = sample_spherical(n,xdim) * r.reshape((n,1))
+    dat = tf.convert_to_tensor(np.hstack((t,x)),dtype=DTYPE)
+    w = tf.ones([tf.shape(dat)[0],1])
+    if fw is not None:
+        w = tf.convert_to_tensor(fw(r),dtype=DTYPE)
+    return dat, w 
+
 def sample(n, bd):
-   
+    ''' uniform sampling in box bd = [[a0,b0],...[ak,bk]]
+    '''
     ndim = len(bd)
     cols = []
     for i in range(ndim):
         cols.append(tf.random.uniform([n,1],minval=bd[i][0], maxval=bd[i][1]))
     return tf.concat(cols, axis=1)
+
+def n2t(x):
+    if x is None:
+        return None
+    return tf.convert_to_tensor(x,dtype=DTYPE)
+
+def t2n(x):
+    if x is None:
+        return None
+    return x.numpy()
+
+def read_mri_dat(n,inv_dat_file,dim):
+    ''' 
+    inv_dat_file: data for t, x, y, (z), phi, pwm, pgm, u
+    dim is t,x,y,z
+    '''
+    _ , ext = os.path.splitext(inv_dat_file)
+    if ext=='.txt':
+        dat = np.loadtxt(inv_dat_file,delimiter=',')
+        xdat = dat[0:n,0:dim]
+        udat = dat[0:n,-1::]
+        phi  = dat[0:n,dim:dim+1]
+        pwm  = dat[0:n,dim+1:dim+2]
+        pgm  = dat[0:n,dim+2:dim+3]
+    if ext == '.mat':
+        matdat = loadmat(inv_dat_file)
+        xdat = matdat['xdat'][0:n,:]
+        udat = matdat['uq'][0:n,:]
+        phi =  matdat['phiq'][0:n,:]
+        pwm =  matdat['Pwmq'][0:n,:]
+        pgm =  matdat['Pgmq'][0:n,:]
+    return xdat, udat, phi, pwm, pgm

@@ -19,3 +19,6 @@ def plot_loss_history(hist):
     ax.set_ylabel('loss')
     return fig
 
+def relerr(a,e):
+    return (a-e)/e
+

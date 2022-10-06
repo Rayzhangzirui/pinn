@@ -1,103 +1,124 @@
 #!/usr/bin/env python
+import sys
+sys.path.insert(1, '/home/ziruz16/pinn')
+
+
 import os
 from re import U
 from config import *
 from pinn import *
-import sys
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
 # paths
-model_name = "growth2d"
-timetag = datetime.now().strftime('%Y%m%d_%H%M')
-dirname = f"{model_name}_{timetag}"
-MD_SAVE_DIR = os.path.join(DATADIR,dirname)
-# mkdir if not exist
-os.makedirs(MD_SAVE_DIR,exist_ok=True)
+model_name = "growth2d_tmp"
 
 tf.random.set_seed(1234)
 
 # hyper parameters
 hp = {
-    "num_init_train" : 40000, # initial traning iteration
+    "num_init_train" : 10000, # initial traning iteration
     "n_res_pts" : 20000, # number of residual point
     "n_dat_pts" : 1000, # number of data points
-    "n_test_points" : 100, # number of testing point
     "num_hidden_layer": 3,
     "num_hidden_unit" : 100, # hidden unit in one layer
-    "num_add_pt" : 10, # number of anchor point
-    "max_adpt_step" : 1, # number of adaptive sampling
-    "num_adp_train" : 1000, #adaptive adam training step
     "print_res_every" : 1000, # print residual
-    "save_res_every" : None, # save residual
-    "w_dat" : 0, # weight of data, weight of res is 1-w_dat
+    "w_dat" : 0.5, # weight of data, weight of res is 1-w_dat
     "model_name" : model_name,
-    "model_dir": MD_SAVE_DIR,
+    "model_dir": './tmp',
     }
 
-lbfgs_opt = {"maxcor": 100, "ftol": 0, "gtol": 1e-8, "maxiter": 10000, "maxls": 50}
+lbfgs_opt = {"maxcor": 100, "ftol": 0, "gtol": 0, "maxiter": 10000, "maxls": 50}
 
 # define problem
-DIM = 3 # dimension of the problem, including time
-epsilon = 0.01 # width of diffused domain
-T = 300
-D = 0.13e-4
+XDIM = 1
+DIM = XDIM+1 # dimension of the problem, including time
+EPSILON = 0.01 # width of diffused domain
+T = 300.0 # time scale
+L = 50.0 # length scale
+
+dcoef = 0.13 # diffusion coeff, un normalized
 rho = 0.025
-bound = 0.55 #bound in xy plane
 
-inverse = False
+d0 = 0.1 # diffusion coeff, initial guess
+rho0 = 0.01 # growth factor, initial guess
 
-## 1d test case
-param = tf.Variable([D, rho], trainable=True)
-param_true = tf.Variable([D, rho], trainable=False)
-if inverse is False:
-    # param.assign(param_true)
-    param = param_true
+D = dcoef*T/(L**2)
+RHO = rho*T
 
-domain = [[0., 1.],[-bound,bound],[-bound,bound]]
+BD = 1.1 #normalized bound in xy plane, >1 for diffused domain method
+
+INVERSE = False
+inv_dat_file = 'exactu_dim2_n20000.txt'
+
+
+if INVERSE:
+    # if inverse, must provide data
+    assert(hp["w_dat"]>0)
+    param = {'D':tf.Variable(D, trainable=INVERSE), 'RHO': tf.Variable(RHO, trainable=INVERSE)}
+    dat = tf.convert_to_tensor(np.loadtxt(inv_dat_file,delimiter=','),dtype=DTYPE)
+    x_dat = dat[:,0:DIM]
+    u_dat = dat[:,DIM:DIM+1]
+    x_r = x_dat
+else:
+    # otherwise, sample collocation point
+    param = {'D':tf.Variable(D, trainable=INVERSE), 'RHO': tf.Variable(RHO, trainable=INVERSE)}
+    x_r = sample_time_space(hp["n_res_pts"], DIM-1, BD, True)
+    x_dat = None
+    u_dat = None
+
+domain = [[0., 1.]]+[[-BD,BD]]*XDIM
 assert(len(domain)==DIM)
 
 def ic(x):
-    r = tf.reduce_sum(tf.square(x[:, 1:DIM]),1,keepdims=True)
-    return 0.1*tf.exp(-1000*r)
+    r2 = tf.reduce_sum(tf.square(x[:, 1:DIM]),1,keepdims=True)
+    return 0.1*tf.exp(-500*r2)
 
 def pde(x_r,f):
+    # t,x,y normalized here
     t = x_r[:,0:1]
     x = x_r[:,1:2]
-    y = x_r[:,2:3]
-    xr = tf.concat([t, x, y], axis=1)
-    u =  f(xr)
-    phi = 0.5 + 0.5*tf.tanh((0.5 - tf.sqrt(tf.reduce_sum(tf.square(xr[:,1:DIM]),1,keepdims=True)))/epsilon)
     
-    u_x = tf.gradients(u, x)[0]
-    u_y = tf.gradients(u, y)[0]
-    phiux = phi*u_x
-    phiuy = phi*u_y
+    list_of_vars = [t,x]
+    if DIM > 2:
+        y = x_r[:,2:3]
+        list_of_vars.append(y)
+        if DIM > 3:
+            z = x_r[:,3:4]
+            list_of_vars.append(z)
+
+    xr = tf.concat(list_of_vars, axis=1)
+    u =  f(xr)
+    phi = 0.5 + 0.5*tf.tanh((1 - tf.sqrt(tf.reduce_sum(tf.square(xr[:,1:DIM]),1,keepdims=True)))/EPSILON)
     
     u_t = tf.gradients(u, t)[0]
+    u_x = tf.gradients(u, x)[0]
+    phiux = phi*u_x
     u_xx = tf.gradients(phiux, x)[0]
-    u_yy = tf.gradients(phiuy, y)[0]
+    lapu = u_xx
+
+    if DIM > 2:
+        u_y = tf.gradients(u, y)[0]
+        phiuy = phi*u_y
+        u_yy = tf.gradients(phiuy, y)[0]
+        lapu += u_yy
+
+        if DIM > 3:
+            u_z = tf.gradients(u, z)[0]
+            phiuz = phi*u_z
+            u_zz = tf.gradients(phiuz, z)[0]
+            lapu += u_zz
     
-    return u_t - T*(D*(u_xx+u_yy) + rho*phi*u*(1-u))
+
+    return u_t - (f.param['D']*(lapu) + f.param['RHO']*phi*u*(1-u))
 
 def output_transform(x,u):
     return u* x[:, 0:1]+ ic(x)
 
 u_exact = None
 
-# Draw uniformly sampled collocation points
-# x_r = sample(hp["n_res_pts"], domain)
-x_r = sample_time_space(hp["n_res_pts"], DIM-1, bound, True)
-
-
-x_dat = None
-u_dat = None
-if hp["w_dat"] > 0:
-    x_dat = x_r
-    if u_exact is not None:
-        u_dat = u_exact(x_dat)
-    # u_dat = interpsol('sol1d.txt', 100, 100, x_dat)
-
+### finish set up, start training
 
 # Initialize model
 model = PINN(param=param,
@@ -107,29 +128,22 @@ model = PINN(param=param,
 model.build(input_shape=(None,DIM))
 
 
+
+
 # model = tf.keras.models.load_model('/home/ziruz16/pinndata/growth2d_20220810_0852/afteradam')
 # Initilize PINN solver
-solver = PINNSolver(model, pde, x_r, x_dat=x_r, u_dat=u_dat, u_exact=u_exact, options=hp)
-
-# Start timer
-t0 = time()
+solver = PINNSolver(model, pde,  options=hp)
 
 # Solve with adam
 # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay([10000,20000],[1e-2,1e-3,e-4])
 # lr = tf.keras.optimizers.schedules.PolynomialDecay(1e-2, decay_steps=hp["num_init_train"], end_learning_rate=1e-5)
-lr = 1e-4
+lr = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate=1e-3, decay_steps=hp["num_init_train"], alpha=1e-3, name=None)
 optim = tf.keras.optimizers.Adam(learning_rate=lr)
-solver.solve_with_TFoptimizer(optim, x_dat, u_dat, N=hp["num_init_train"])
-
-model.save(os.path.join(MD_SAVE_DIR,'afteradam'))
+solver.solve_with_TFoptimizer(optim, x_r, x_dat, u_dat, N=hp["num_init_train"])
 
 # Solve wit bfgs
-results = solver.solve_with_ScipyOptimizer(x_dat, u_dat, method='L-BFGS-B', options=lbfgs_opt)
+results = solver.solve_with_ScipyOptimizer(x_r, x_dat, u_dat, method='L-BFGS-B', options=lbfgs_opt)
 # results = solver.solve_with_tfbfgs(x_dat,u_dat)
 
-# Print computation time
-print('\nComputation time: {} seconds'.format(time()-t0))
 
-
-model.save(os.path.join(MD_SAVE_DIR,'savemodel'))
-solver.save_history(os.path.join(MD_SAVE_DIR, 'history.dat'))
+solver.save()
