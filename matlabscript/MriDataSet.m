@@ -6,9 +6,8 @@ classdef MriDataSet<handle
         infos % tag for each mod
         savefig
         visdir
-        maxadc
-        minadc
         box
+        range % used for colormap
         id % patient id
     end
    
@@ -16,7 +15,7 @@ classdef MriDataSet<handle
         function obj = MriDataSet(varargin)
             p = inputParser;
             addParameter(p,'modeldir','',@ischar);
-            addParameter(p,'visdir','visualization',@ischar); % visualization dir
+            addParameter(p,'visdir','',@ischar); % visualization dir
             addParameter(p,'mods',{},@iscell);
             addParameter(p,'dats',{},@iscell);
             addParameter(p,'savefig',true,@islogical);
@@ -30,12 +29,7 @@ classdef MriDataSet<handle
             [~,obj.id,~]=fileparts(obj.modeldir);
             
             % visualization
-            visdir = p.Results.visdir;
-            if contains(visdir,'/')
-                % if full path is provided, 
-                obj.visdir = visdir;
-            end
-            obj.visdir = fullfile(obj.modeldir,visdir);
+            obj.visdir = p.Results.visdir;
             obj.savefig = p.Results.savefig;
 
             % which mods are readed
@@ -103,64 +97,53 @@ classdef MriDataSet<handle
             end
         end
         
-        function restrictadc(obj,minadc,maxadc)
-            seg = obj.get('seg');
-            adc = obj.get('md');
-            adc(seg==0)=nan;
-            
-            obj.minadc =  minadc;
-            obj.maxadc = maxadc;
-            
-            adc(adc>maxadc) = maxadc;
-            obj.append('adccap',adc,'adc in seg, capped');
-            adc(adc<minadc) = minadc;
-            
-            obj.append('adc',adc,'adc in seg, thresholded');
-            
-        end
-        
-        function getu(obj)
+        function getuadc(obj,minadc,maxadc)
             % different method to compute u from adc
             seg = obj.get('seg');
-            adc = obj.get('adc');
+            adc = obj.get('md');
             
+            adc = threshold(adc, minadc,maxadc);
+            adc(seg<1)= nan;
+            obj.append('adcseg',adc,'adc in seg');
             
             % linear transform in all region
-            msk = seg>1;
-            u = zeros(size(adc));
-            u(msk) = (obj.maxadc - adc(msk))/(obj.maxadc-obj.minadc);
-            obj.append('u1inv',u,'u linear, all region');
+            % msk = seg>1;
+            % u = zeros(size(adc));
+            % u(msk) = (obj.maxadc - adc(msk))/(obj.maxadc-obj.minadc);
+            % obj.append('u1inv',u,'u linear, all region');
             
-            % quadratic in all region
-            msk = seg>1;
-            b = 0.25;
-            u = zeros(size(adc));
-            f = obj.minadc*b./adc(msk);
-            u(msk) = (1 + sqrt(1-4*f))/2;
-            obj.append('u1quad',u,'u quad, all region');
+            % % quadratic in all region
+            % msk = seg>1;
+            % b = 0.25;
+            % u = zeros(size(adc));
+            % f = obj.minadc*b./adc(msk);
+            % u(msk) = (1 + sqrt(1-4*f))/2;
+            % obj.append('u1quad',u,'u quad, all region');
             
-            % linear transform in necrosis and tumor region
-            msk = seg>3;
-            u = zeros(size(adc));
-            u(msk) = (obj.maxadc - adc(msk))/(obj.maxadc-obj.minadc);
-            obj.append('u3inv',u,'u linear, tumor and necrosis region');
+            % % linear transform in necrosis and tumor region
+            % msk = seg>3;
+            % u = zeros(size(adc));
+            % u(msk) = (obj.maxadc - adc(msk))/(obj.maxadc-obj.minadc);
+            % obj.append('u3inv',u,'u linear, tumor and necrosis region');
             
-            % quadratic transform
-            msk = seg>3;
-            u = zeros(size(adc));
-            f = obj.minadc*b./adc(msk);
-            u(msk) = (1 + sqrt(1-4*f))/2;
-            obj.append('u3quad',u,'u quad, tumor and necrosis region');
+            % % quadratic transform
+            % msk = seg>3;
+            % u = zeros(size(adc));
+            % f = obj.minadc*b./adc(msk);
+            % u(msk) = (1 + sqrt(1-4*f))/2;
+            % obj.append('u3quad',u,'u quad, tumor and necrosis region');
             
             % separate transform
+            b = 1/4;
             u = zeros(size(adc));
             mske = seg==2; % indicator edema region
             mskt = seg>3; % indicator tumor region
-            u(mskt) = (1 + sqrt(1-4*(obj.minadc*b./adc(mskt))))/2;    
-            u(mske) = obj.minadc./adc(mske);
+            u(mskt) = (1 + sqrt(1-4*(minadc*b./adc(mskt))))/2;    
+            u(mske) = minadc./adc(mske);
 
             u = imgaussfilt3(u,2,'FilterDomain','spatial');
-            obj.append('ulinqua',u,'u linear in edema, quadratic else, smooth');
+            u(seg<1) = nan;
+            obj.append('uadc',u,'u lin quad adc');
             
         end
 
@@ -245,9 +228,6 @@ classdef MriDataSet<handle
                 caxis([0 6]);
             end
             
-            if startsWith(mod,'adc')
-                caxis([0 obj.maxadc]);
-            end
             
             if startsWith(mod,'u')
                 caxis([0 1]);
@@ -378,7 +358,7 @@ classdef MriDataSet<handle
 
         function p = plotline(obj, mod)
             % 1d plot of data
-            dat = obj.get(mod);
+            [dat,idx] = obj.get(mod);
             seg = obj.get('seg');
             
             m = ceil(mean(obj.box,2));
@@ -395,7 +375,7 @@ classdef MriDataSet<handle
                 msk = lseg==seglvl(i);
                 scatter(x(msk),y(msk),'filled','MarkerFaceColor',colors{i});
             end
-            p = plot(x(lseg>1),y(lseg>1),'DisplayName',mod);
+            p = plot(x(lseg>1),y(lseg>1),'k','DisplayName',obj.infos{idx});
             legend(p,'Location','best');
             hold off;
         end

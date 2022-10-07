@@ -25,7 +25,10 @@ for i = 1:length(datdir)
     allseg(:,:,:,i) = dat(i).get('seg');
     alladc(:,:,:,i) = dat(i).get('md');
 end
+
+
 %%
+
 alldat = threshold(alladc,0,0.003);
 close all
 figure;
@@ -37,22 +40,32 @@ legend('Location','best');
 
 %%
 
-for i = 5
-    dat(i) = MriDataSet('modeldir',datdir{i},'visdir','vis','mods',{'seg','pet','md'},'savefig',false);
-    dat(i).getupet(0, 1e4);
+adcth = [0, 3e-3]; % threshold
+petth = [0, 1e4];
+
+for i = 1:length(datdir)
+% for i = 1:2
+    dat(i) = MriDataSet('modeldir',datdir{i},'visdir',visdir,'mods',{'seg','pet','md'},'savefig',true);
     mid = ceil(mean(dat(i).box(3,:)));
+    
+    dat(i).getupet(petth(1), petth(2));
 
+    dat(i).getuadc(adcth(1),adcth(2));
 
-    dat(i).visualmods({'pet','seg','petseg','petscale','upet'},2,mid,'');
+    [fig,ha] = dat(i).visualmods({'seg','adcseg','petseg','','uadc','upet'},2,mid,'');
+    ha(2).CLim = adcth; ha(3).CLim = petth;
 end
 
-%%
+%% look at line plot
 close all
 p(1) = dat(i).plotline('upet')
 hold on
 p(2) = dat(i).plotline('petscale')
 legend(p)
+ax = gca;
+ax.LineStyleOrder = {'-',':'}
 
+dat(i).saveplot('line')
 % [x,y,lseg] = dat(i).plotline('petscale')
 % up = (1+sqrt(1-y/4))/2;
 % um = (1-sqrt(1-y/4))/2;
@@ -61,31 +74,3 @@ legend(p)
 % plot(x,up)
 % plot(x,um)
 % plot(x,y2)
-
-
-%%
-
-for i = 6:9
-    dat = MriDataSet('modeldir',datdir{i},'visdir','vis');
-
-    
-    [~,~,bz] = dat.box();
-    mid  = ceil(bz(1) + diff(bz)/2);
-    
-    
-    dat.restrictadc(5e-4,0.003);
-%     dat.getu()
-%     dat.visualmods({'cbv','fla','isodiff','md','pet','seg','t1','t1c','t2'},3,mid,'');
-    dat.histo('pet');
-    
-    
-    
-%     dat.histo('adccap')
-%     dat.corrplot2('adc',{'t1','t1c','t2'})
-%     dat.corrplot({'adc','t1','t1c','t2','cbv','fla'})
-%     
-%     dat.visualmods({},2,mid,'');    
-    
-%     dat.visualmods({'md','seg','adc','u1inv','u1quad','ulinqua'},2,mid,'u');
-    
-end
