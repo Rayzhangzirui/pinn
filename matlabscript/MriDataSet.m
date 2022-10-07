@@ -3,12 +3,13 @@ classdef MriDataSet<handle
         modeldir
         mods
         dats
-        infos
+        infos % tag for each mod
         savefig
         visdir
         maxadc
         minadc
-        
+        box
+        id % patient id
     end
    
     methods
@@ -21,32 +22,51 @@ classdef MriDataSet<handle
             addParameter(p,'savefig',true,@islogical);
             
             parse(p,varargin{:});
-
+            
+            % handel path
             obj.modeldir = p.Results.modeldir;
             assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
             fs = dir(fullfile(obj.modeldir,'*.nii.gz')); % file paths
-
-            obj.visdir = p.Results.visdir;
-            obj.visdir = fullfile(obj.modeldir,obj.visdir);
+            [~,obj.id,~]=fileparts(obj.modeldir);
+            
+            % visualization
+            visdir = p.Results.visdir;
+            if contains(visdir,'/')
+                % if full path is provided, 
+                obj.visdir = visdir;
+            end
+            obj.visdir = fullfile(obj.modeldir,visdir);
             obj.savefig = p.Results.savefig;
-            
-            
 
+            % which mods are readed
+            readmods = p.Results.mods;
+            
+            j = 1;
             for i = 1:length(fs)
                 parts = split(fs(i).name,{'.','_'});
-                obj.mods{i} = parts{3};
+                whichmod = parts{3};
+
+                % if isempty, read all, 
+                if ~isempty(readmods) && ~contains(whichmod,readmods)
+                    continue;
+                end
+                
+                obj.mods{j} = whichmod;
+
                 path = fullfile(fs(i).folder,fs(i).name);
                 dat = MRIread(path);
-                obj.dats{i}  = dat.vol;
-%                 obj.dats{i}  = imgaussfilt3(dat.vol);
-                obj.infos{i}  = obj.mods{i};
+                obj.dats{j}  = dat.vol;
+                obj.infos{j}  = whichmod;
                 
                 % originally, seg, 1 = necrosis, 2 = edema, 4 = tumor
-                if strcmp(obj.mods{i},'seg')
-                    % now, 2 = edema, 4 = tumor, 6 = necrosis
+                if strcmp(whichmod,'seg')
+                    % now, 1 = edema, 2 = tumor, 3 = necrosis
                     dat.vol(dat.vol==1)=6;
-                    obj.dats{i} = dat.vol;
+                    obj.dats{j} = dat.vol;
+                    obj.getBox();
                 end
+
+                j = j + 1; % inc counter
             end 
         end %end of constructor
         
@@ -100,6 +120,7 @@ classdef MriDataSet<handle
         end
         
         function getu(obj)
+            % different method to compute u from adc
             seg = obj.get('seg');
             adc = obj.get('adc');
             
@@ -137,22 +158,45 @@ classdef MriDataSet<handle
             mskt = seg>3; % indicator tumor region
             u(mskt) = (1 + sqrt(1-4*(obj.minadc*b./adc(mskt))))/2;    
             u(mske) = obj.minadc./adc(mske);
-            
+
             u = imgaussfilt3(u,2,'FilterDomain','spatial');
             obj.append('ulinqua',u,'u linear in edema, quadratic else, smooth');
             
         end
 
-        function [bx,by,bz] = box(obj)
+
+        function getupet(obj, lb, ub)
+            seg = obj.get('seg');
+            pet = obj.get('pet');
+            pet = threshold(pet,lb, ub);
+            u = zeros(size(pet));
+
+            msk = seg>1;
+            pet(~msk) = nan;
+            obj.append('petseg',pet,'pet in seg');
+
+            pet(msk) = rescale(pet(msk));
+            obj.append('petscale',pet,'pet in seg scaled');
+
+            tumor = seg>3;
+            edema = seg==2;
+            u(tumor) = (1 + sqrt(1-pet(tumor)/4))/2;
+            u(edema) = (1 - sqrt(1-pet(edema)/4))/2;
+            u = imgaussfilt3(u,2,'FilterDomain','spatial');
+            u(seg<1) = nan;
+            obj.append('upet',u,'u quad pet');
+        end
+
+        function getBox(obj)
             % find bounding box of tumor segmentation
             msk = obj.get('seg')>1;
             idx = find(msk);
             [i,j,k] = ind2sub(size(obj.get('seg')),idx);
-            % get bound with padding
             f = @(x) [min(x),max(x)];
             bx = f(i);
             by = f(j);
             bz = f(k);
+            obj.box = [bx;by;bz];
         end
         
         % note: this seems to behave as handle, the original data is
@@ -166,8 +210,6 @@ classdef MriDataSet<handle
 %                 dataset.map(mod) = dat(bx(1):bx(2),by(1):by(2),bz(1):bz(2));
 %             end
 %         end
-
-      
       
         function visual(obj,varargin)
 %             https://stackoverflow.com/questions/39365970/matlab-optional-handle-argument-first-for-plot-like-functions
@@ -252,7 +294,7 @@ classdef MriDataSet<handle
                 end
                 obj.visual(ha(i),obj.mods{j},slice);
             end
-            fname = sprintf('fig_%s_slice%d',prefix,slice);
+            fname = sprintf('%s_slice%d',prefix,slice);
             obj.saveplot(fname);
         end
              
@@ -266,9 +308,11 @@ classdef MriDataSet<handle
                 sprintf('Output folder does not exist, creating it in: \n %s', obj.visdir)
                 mkdir(obj.visdir)
             end
-
-            export_fig(gcf,fullfile(obj.visdir,fname),'-jpg','-m3')
+            ffname = sprintf('fig_%s_%s',obj.id,fname); % add patient number
+            export_fig(gcf,fullfile(obj.visdir,ffname),'-jpg','-m3')
         end
+
+        
         
         function histo(obj,mod)
             % histogram of adc
@@ -285,9 +329,11 @@ classdef MriDataSet<handle
             histogram(dat(seg==6),'DisplayName','necrosis');
             legend('Location','best');
             
-            fname = 'fig_adc_hist_seg';
+            fname = 'adc_hist_seg';
             obj.saveplot(fname);
         end
+
+
         
         function corrplot(obj,mods)
             % correlation plot
@@ -302,7 +348,7 @@ classdef MriDataSet<handle
             t = array2table(X,'VariableNames',mods);
             corrplot(t);
             
-            fname = 'fig_corrplot';
+            fname = 'corrplot';
             obj.saveplot(fname);
         end
         
@@ -327,8 +373,33 @@ classdef MriDataSet<handle
                 ylabel(tmods{i});
                 title(sprintf('r=%.2f',r(1,2)));
             end
-            export_fig(gcf,fullfile(obj.visdir,'fig_corrplot2'),'-png','-m2')
+            export_fig(gcf,fullfile(obj.visdir,'corrplot2'),'-png','-m2')
         end
+
+        function p = plotline(obj, mod)
+            % 1d plot of data
+            dat = obj.get(mod);
+            seg = obj.get('seg');
+            
+            m = ceil(mean(obj.box,2));
+            
+            lseg = seg(:,m(2),m(3));
+            y = dat(:,m(2),m(3));
+            x = 1:length(lseg);
+            
+            segs = {'edema','tumor','necrosis'};
+            colors = {"#0072BD","#D95319","#EDB120"};
+            seglvl = [ 2 4 6];
+            hold on
+            for i = 1:3
+                msk = lseg==seglvl(i);
+                scatter(x(msk),y(msk),'filled','MarkerFaceColor',colors{i});
+            end
+            p = plot(x(lseg>1),y(lseg>1),'DisplayName',mod);
+            legend(p,'Location','best');
+            hold off;
+        end
+
 
     end
 end
