@@ -13,7 +13,8 @@ classdef GliomaSolver<handle
         ix 
         dim %dimension
         tend % final time
-
+        
+        soldir % directory to save fdm solution
 
         df % diffusion coefficient as field
 
@@ -100,38 +101,53 @@ classdef GliomaSolver<handle
             [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
         end% 
         
-        function savesol(obj)
+        function savesol(obj,fp)
             % save solution to mat file
-            fsol = sprintf('sol_%s',obj.name);
-            fp = fullfile(fsol);
-            
-            
-            yessave = 'n';
-            issave = false;
             if isfile(fp)
-                fprintf('%s already exist\n',datafname);
-                yessave=input('Do you want to continue, y/n [y]:','s');
-                if yessave~='y'
-                    issave = true;
-                end
-            else
-                issave = true;
-            end
-                
-            if issave
-                fprintf('save to %s\n',fp);
-                save(fp,'obj.uall','obj.tall','obj.phi','-v7.3');
-            else
-                fprintf('not saved');
+                fprintf('%s already exist\n',fp);
+                return
             end
             
+            uall = obj.uall;
+            tall = obj.tall;
+            phi = obj.phi;
+            save(fp,'uall','tall','phi','-v7.3');
+            fprintf('save to %s\n',fp)
+        end
+
+        function loadsol(obj, fp)
+            % load result of fdm solution, uall, tall, phi
+            assert(isfile(fp), '%s not found\n',path);
+
+            dat = load(fp);
+            obj.uall = dat.uall;
+            obj.tall = dat.tall;
+            obj.phi = dat.phi;
+            if obj.dim == 2
+                obj.uend = obj.uall(:,:,end);
+            else
+                obj.uend = obj.uall(:,:,:,end);
+            end
+        end
+
+        function [fp, es] = solpath(obj)
+            fp = fullfile(obj.soldir, sprintf("sol_%s.mat",obj.name));
+            es = isfile(fp);
         end
 
         function solve(obj)
-            [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.dim);
+            [fp,es] = obj.solpath;
+            if es
+                fprintf('load existing solution\n');
+                obj.loadsol(fp);
+            else
+               fprintf('solve and save pde\n');
+               [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.dim);
+               obj.savesol(fp); 
+            end
+
             obj.getrmax();
-            fprintf('rmax = %g\n',obj.rmax);
-%             obj.savesol();
+            
         end
 
         function [u, d, phi] = getdat(obj, tk, vz)
@@ -202,6 +218,7 @@ classdef GliomaSolver<handle
             [maxdis,maxidx] = max(distix(idx));
             obj.rmax = maxdis+3;
             ls = distix - obj.rmax; % level set function
+            fprintf('rmax = %g\n',obj.rmax);
         end
 
         function fq = interpf(obj, f, X, method)
@@ -281,21 +298,20 @@ classdef GliomaSolver<handle
             addParameter(p, 'method', 'linear');
             addParameter(p, 'seed', 1);
             addParameter(p, 'tag', '');
+            addParameter(p, 'datdir', './'); % which directory to save
             parse(p, varargin{:});
             
             seed = p.Results.seed;
+            datdir = p.Results.datdir;
             method = p.Results.method;
             if ~isempty(p.Results.tag)
                 tag = "_"+p.Results.tag;
             end
 
-
             % sample collocation points
             rng(seed,'twister');
-            xq = sampleDenseBall(n, obj.dim, obj.rmax, obj.x0); % sample coord, unit
+            xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0); % sample coord, unit
             tq = rand(n,1)*obj.tend; % sample t, unit
-
-
 
             Pwmq = obj.interpf(obj.Pwm, xq, method);
             Pgmq = obj.interpf(obj.Pgm, xq, method);
@@ -308,17 +324,17 @@ classdef GliomaSolver<handle
             if strcmpi(p.Results.noiseon, 'uqe')
                 % interp then add noise
                 fprintf('interp then add noise\n');
-                nzuqe = addNoise(uqe,varargin{:}); % noisy uqe
+                nzuqe = addNoise(uqe, p.Unmatched); % noisy uqe
             elseif strcmpi(p.Results.noiseon, 'uend')
                 % add noise to uend then interp
                 fprintf('add noise then interp\n');
-                nzuend = addNoise(obj.uend,varargin{:});
+                nzuend = addNoise(obj.uend, p.Unmatched);
                 nzuqe = obj.interpf(nzuend, xq, method); % u(t_end,xq)
             else
-               error('unknow option') 
+               error('unknown option') 
             end
 
-
+            % sample
             xqcenter = xq - obj.x0;
 
             % single point data 
@@ -338,10 +354,11 @@ classdef GliomaSolver<handle
             
             datname = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
             save(datname,'xdat','udat','uqe','xq','xtest','utest','DW','RHO','L','T', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed');
-            fprintf('save training dat to %s\n',datname)
+            fprintf('save training dat to %s\n', fullfile(datdir, datname));
         end
         
         function [ts,x,upred,upredall] = loadresults(obj, predmatfile)
+            % load neural net results
             s = load(predmatfile);
             x = double(s.x) * obj.L + obj.x0;
             ts = double(s.ts) * obj.T;
