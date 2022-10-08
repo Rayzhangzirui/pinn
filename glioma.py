@@ -13,15 +13,21 @@ from pinn import *
 class DataSet:
     def __init__(self, opts) -> None:
         self.opts = opts
-        n = opts["n_res_pts"]
+        
         
         inv_dat_file = opts['inv_dat_file']
 
         assert os.path.exists(inv_dat_file), f'{inv_dat_file} not exist'
+        
         _ , ext = os.path.splitext(inv_dat_file)
+        
         assert ext == '.mat', 'not reading mat file'
         
         matdat = loadmat(inv_dat_file)
+        if opts["n_res_pts"] is not None:
+            n = opts["n_res_pts"]
+        else:
+            n = matdat.get('xtest').shape[0]
         
         self.xtest = matdat.get('xtest')[0:n,:]
         self.utest = matdat.get('utest')[0:n,:] #all time
@@ -103,7 +109,10 @@ class Gmodel:
     
     def solve(self):
         self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"],patience = self.opts["patience"])
-        results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])
+
+        if self.opts['lbfgs_opts'] is not None:
+            results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])
+
         self.saveopts()
         
     def saveopts(self):

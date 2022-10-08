@@ -257,28 +257,6 @@ classdef GliomaSolver<handle
             hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
-        
-        function [h1,ax1,h2,ax2] = visualover(obj, prop, varargin)
-            % visualize 2d scattered data, overlay
-            
-            bkgd = obj.(prop);
-            
-            fig = figure
-            ax1 = axes;
-            colormap(ax1,gray(20));
-            h1 = imagesc(bkgd);
-            cb1 = colorbar(ax1,'Location','westoutside');
-            
-            ax2 = axes;
-            h2 = scatter(ax2, varargin{:});
-            cmp = colormap(ax2,'parula');
-            set(ax2,'YDir','reverse');
-            % caxis(ax2,[minu maxu]); % caxis is clim in newer version of matlab
-            set(ax2,'color','none','visible','off');
-            cb2 = colorbar(ax2,'Location','eastoutside');
-            % 
-            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
-        end
 
         function scale(obj, dwc, rhoc, lc)
             % scale the data for training
@@ -290,7 +268,7 @@ classdef GliomaSolver<handle
             obj.T = obj.L/sqrt(dwc * rhoc);
         end
 
-        function datname = ReadyDat(obj, n, varargin)
+        function fp = ReadyDat(obj, n, varargin)
             % prepare data for training
             p = inputParser;
             p.KeepUnmatched = true;
@@ -303,6 +281,8 @@ classdef GliomaSolver<handle
             
             seed = p.Results.seed;
             datdir = p.Results.datdir;
+            [status,msg,msgid] = mkdir(datdir);
+            assert(status);
             method = p.Results.method;
             if ~isempty(p.Results.tag)
                 tag = "_"+p.Results.tag;
@@ -352,9 +332,10 @@ classdef GliomaSolver<handle
             T = obj.T;
             argsample = varargin;
             
-            datname = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
-            save(datname,'xdat','udat','uqe','xq','xtest','utest','DW','RHO','L','T', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed');
-            fprintf('save training dat to %s\n', fullfile(datdir, datname));
+            fp = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
+            fp = fullfile(datdir, fp);
+            save(fp,'xdat','udat','uqe','xq','xtest','utest','DW','RHO','L','T', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed');
+            fprintf('save training dat to %s\n', fp );
         end
         
         function [ts,x,upred,upredall] = loadresults(obj, predmatfile)

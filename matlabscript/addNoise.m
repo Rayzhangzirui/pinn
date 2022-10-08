@@ -22,10 +22,10 @@ function [nzu] = addNoise(u, varargin)
 
     if cor > 0 && length(size(grand))>1
         fprintf('apply filter with window %d\n',cor)
-        grand = imboxfilt3(grand,cor);
+        grand = imgaussfilt3(grand,cor);
     end
     
-    fprintf('add noise of type %s \n', nztype);
+    fprintf('add noise of type %s, mu %g, std %g \n', nztype,mu, std);
     if strcmpi(nztype,'add')
         nzu = u + grand;
     elseif strcmpi(nztype,'mult')
