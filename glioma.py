@@ -62,7 +62,7 @@ class Gmodel:
         self.optim = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
         INVERSE = opts.get('inverse')
-        param = {'rD':tf.Variable(2.0, trainable=INVERSE), 'rRHO': tf.Variable(2.0, trainable=INVERSE)}
+        param = {'rD':tf.Variable( opts['D0'], trainable=INVERSE), 'rRHO': tf.Variable(opts['rho0'], trainable=INVERSE)}
 
         self.info = {}
 

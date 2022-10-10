@@ -198,9 +198,14 @@ class PINNSolver():
         if (not self.manager.latest_checkpoint) and options.get('dicard_ckpt')==False:
             print("Don't restore")
         else:
-            print("Restored from {}".format(self.manager.latest_checkpoint))
-            self.checkpoint.restore(self.manager.latest_checkpoint)
+            if options.get('restore') is not None:
+                ckptpath = options.get('restore')
+                # assert os.path.exists(ckptpath), f'{ckptpath} not exist'
+            else:
+                ckptpath = self.manager.latest_checkpoint
             
+            self.checkpoint.restore(ckptpath)
+            print("Restored from {}".format(ckptpath))
 
     @tf.function
     def loss_fn(self):

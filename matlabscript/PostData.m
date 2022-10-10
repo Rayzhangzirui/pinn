@@ -8,6 +8,7 @@ classdef PostData<handle
       log % table of training log
       info  % information of model
       datinfo % info or training data
+      history
    end
    
    methods
@@ -60,12 +61,14 @@ classdef PostData<handle
 
 %           dat = load(fullfile(obj.modeldir,'upred_scipylbfgs.mat'));
 %           obj.upred{2} = dat;
-          
-          fp = fullfile(obj.modeldir, obj.info.inv_dat_file);
-          if isfile(fp)
-              fprintf('read %s\n',fp);
-              obj.datinfo = load(fp);
+          if ~isempty(obj.info)
+              fp = fullfile(obj.modeldir, obj.info.inv_dat_file);
+              if isfile(fp)
+                  fprintf('read %s\n',fp);
+                  obj.datinfo = load(fp);
+              end
           end
+          
 
 
       end %end of constructor
@@ -90,7 +93,9 @@ classdef PostData<handle
            % remove scaling,
            scale = [T ones(1,xdim)*L];
            for i = 1:length(obj.upred)
-               obj.upred{i}.xdat = obj.upred{i}.xdat .*scale + [0 x0];
+               if isprop(obj.upred{i},"xdat")
+                   obj.upred{i}.xdat = obj.upred{i}.xdat .*scale + [0 x0];
+               end
                obj.upred{i}.xr = obj.upred{i}.xr .*scale + [0 x0];
            end
        end

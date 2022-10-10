@@ -1,19 +1,13 @@
 % forward solve using results from pde
 %% solver parameters
+clear
 startup
-modeldir = '../pinn/models/mri2dscale2/cont/'
+load model.mat
+modeldir = '/Users/Ray/project/glioma/pinn/models/mri2dfwd/mri2d_fwd'
 
-load(fullfile(modeldir,'predxdat.mat'))
+m = PostData(modeldir);
+m.unscale(2, g.T, g.L, g.x0);
 
-DIM = 2;
-zslice = 99; % slice for visualization
-tend = 150; %day
-
-Dw = 0.13; % mm^2/day
-rho= 0.025; %0.025/day
-x0 = [164 116];
-
-g = GliomaSolver(DIM, Dw, rho, x0, tend, zslice)
 %%
 g.readmri(DIR_MRI)
 g.solve
