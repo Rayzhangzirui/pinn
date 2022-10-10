@@ -21,8 +21,8 @@ function [nzu] = addNoise(u, varargin)
     end
 
     if cor > 0 && length(size(grand))>1
-        fprintf('apply filter with window %d\n',cor)
-        grand = imgaussfilt3(grand,cor);
+        fprintf('apply filter with cor %d\n',2*cor)
+        grand = imgaussfilt3(grand,cor,'FilterDomain','spatial');
     end
     
     fprintf('add noise of type %s, mu %g, std %g \n', nztype,mu, std);

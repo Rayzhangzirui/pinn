@@ -7,6 +7,7 @@ classdef PostData<handle
       upred % predictioin at residual points
       log % table of training log
       info  % information of model
+      datinfo % info or training data
    end
    
    methods
@@ -53,11 +54,19 @@ classdef PostData<handle
                   continue
               end
           end
-
+            
           dat = load(fullfile(obj.modeldir,'upred_tfadam.mat'));
           obj.upred{1} = dat;
-          dat = load(fullfile(obj.modeldir,'upred_scipylbfgs.mat'));
-          obj.upred{2} = dat;
+
+%           dat = load(fullfile(obj.modeldir,'upred_scipylbfgs.mat'));
+%           obj.upred{2} = dat;
+          
+          fp = fullfile(obj.modeldir, obj.info.inv_dat_file);
+          if isfile(fp)
+              fprintf('read %s\n',fp);
+              obj.datinfo = load(fp);
+          end
+
 
       end %end of constructor
 
@@ -99,11 +108,8 @@ classdef PostData<handle
            errRHO = relerr(obj.log.rRHO, rRHOe);
 
            fig = figure;
-           ts = sprintf('%s rel err\n adam rD = %0.2e, rRHO = %0.2e\n lbfg rD = %0.2e, rRHO = %0.2e',...
-               obj.tag,...
-           relerr(obj.upred{1}.rD, rDe),relerr(obj.upred{1}.rRHO, rRHOe),...
-           relerr(obj.upred{2}.rD, rDe),relerr(obj.upred{2}.rRHO, rRHOe))
-%            info = sprintf('afte'
+           ts = sprintf('%s rel err\n adam rD = %0.2e, rRHO = %0.2e\n',...
+               obj.tag, relerr(obj.upred{1}.rD, rDe),relerr(obj.upred{1}.rRHO, rRHOe))
            sc(1) = plot(obj.log.it, errD,'DisplayName', 'rD',varargin{:});
            hold on;
            sc(2) = plot(obj.log.it, errRHO,'DisplayName', 'rRHO',varargin{:} );
