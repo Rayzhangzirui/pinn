@@ -55,7 +55,7 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
     r2 = h.^2*((gx-ix(1)).^2+(gy-ix(2)).^2+(gz-ix(3)).^2); % distance squared
     u0 = 0.1*exp(-0.1*r2); 
 
-    dt0 = h^2/(8*max(D(:))); % CFL condition, timestep
+    dt0 = 0.99*h^2/(6*max(D(:))); % CFL condition, timestep
     % Euler's method in time
     u = u0;
     t = 0;

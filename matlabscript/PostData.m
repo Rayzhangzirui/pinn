@@ -54,10 +54,17 @@ classdef PostData<handle
                   fprintf('read %s\n',path);
                   continue
               end
+
+              if startsWith(fs(i).name,'upred') && endsWith(fs(i).name,'mat')
+                dat = load(path);
+                obj.upred{end+1} = dat;
+                obj.upred{end}.file = path;
+              end
           end
             
-          dat = load(fullfile(obj.modeldir,'upred_tfadam.mat'));
-          obj.upred{1} = dat;
+
+
+
 
 %           dat = load(fullfile(obj.modeldir,'upred_scipylbfgs.mat'));
 %           obj.upred{2} = dat;
@@ -68,9 +75,6 @@ classdef PostData<handle
                   obj.datinfo = load(fp);
               end
           end
-          
-
-
       end %end of constructor
 
        function [fig,sc] = PlotLoss(obj,varargin)
@@ -90,10 +94,10 @@ classdef PostData<handle
        end
 
        function unscale(obj, xdim, T, L, x0)
-           % remove scaling,
+           % remove scaling of (t,x)
            scale = [T ones(1,xdim)*L];
            for i = 1:length(obj.upred)
-               if isprop(obj.upred{i},"xdat")
+               if isfield(obj.upred{i},"xdat")
                    obj.upred{i}.xdat = obj.upred{i}.xdat .*scale + [0 x0];
                end
                obj.upred{i}.xr = obj.upred{i}.xr .*scale + [0 x0];

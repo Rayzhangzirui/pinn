@@ -2,7 +2,7 @@
 %% solver parameters
 clear
 startup
-modeldir = '../pinn/models/mri2dscale2/cont/'
+modeldir = '~/project/glioma/pinn/models/noise_uend_std/std0.01cont'
 
 load(fullfile(modeldir,'predxdat.mat'))
 

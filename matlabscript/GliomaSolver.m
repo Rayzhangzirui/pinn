@@ -107,7 +107,6 @@ classdef GliomaSolver<handle
                 fprintf('%s already exist\n',fp);
                 return
             end
-            
             uall = obj.uall;
             tall = obj.tall;
             phi = obj.phi;
@@ -150,49 +149,43 @@ classdef GliomaSolver<handle
             
         end
 
-        function [u, d, phi] = getdat(obj, tk, vz)
+        function f = getSlice(obj, name, vz, tk)
             % get data at time index tk, slice vz (optional)
-            if obj.dim==3
-                if nargin == 3
-                    u = obj.uall(:,:,vz,tk);
-                    d = obj.df(:,:,vz);
-                    phi = obj.phi(:,:,vz);
-                else
-                    u = obj.uall(:,:,:,tk);
-                    d = obj.df(:,:,:);
-                    phi = obj.phi(:,:,:);
-                end
+            if nargin < 4
+                tk = length(obj.tall); % tk defaul end
+            end
+            if nargin < 3
+                vz = obj.zslice; % vz default zslice
             end
 
-            if obj.dim == 2
-                uslice = obj.uall(:,:,tk);
-                d = obj.df;
-                phi = obj.phi;
-                u = obj.uall(:,:,tk);
+            dat = obj.(name);
+            datdim = length(size(dat));
+        
+            if datdim==4
+                f = dat(:,:,vz,tk);
+            elseif datdim == 3
+                f = dat(:,:,vz);
+            else
+                f = dat;
             end
         end
 
-        function [fig,ax1] = plotbkgd(obj, bgname)
-            assert(obj.dim == 2); % todo: 3d
-            dat = obj.(bgname);
-            sz = size(dat);
+        function [fig,ax1] = plotbkgd(obj, dat)
+            
             fig = figure;
             ax1 = axes;
             
             h1 = imagesc(ax1,dat);
-%             axis equal;
-%             xlim([1 sz(1)])
-%             ylim([1 sz(2)])
-            
-            
             cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
         end
         
-        function [fig,ax1, ax2, hLink] = imagesc(obj,bgname, varargin)
-            [fig,ax1] = plotbkgd(obj, bgname);
+        function [fig,ax1, ax2, hLink] = twoimagesc(obj, bgdat, fgdat)
+            
+            [fig,ax1] = plotbkgd(obj, bgdat);
+            
             ax2 = axes;
-            h2 = imagesc(varargin{:});
+            h2 = imagesc(fgdat);
             cmp = colormap(ax2,'parula');
             h2.AlphaData = double(h2.CData>1e-2); % threshold for transparency
             maxcdata = max(h2.CData(:));
@@ -203,16 +196,22 @@ classdef GliomaSolver<handle
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
-        function [fig, ax1, ax2] = plotuend(obj)
-            [fig, ax1, ax2]  = obj.imagesc('df', obj.uend);
+        function [fig, ax1, ax2] = imagesc(obj, bgname, fgdat, varargin)
+            bgdat = obj.getSlice(bgname, varargin{:});
+            [fig, ax1, ax2]  = obj.twoimagesc(bgdat, fgdat);
+        end
+
+        function [fig, ax1, ax2] = plotuend(obj,varargin)
+            uend = obj.getSlice('uend',varargin{:});
+            [fig, ax1, ax2]  = obj.imagesc('df', uend, varargin{:});
         end
 
         function getrmax(obj)
             % get radius of solution
             tk = length(obj.tall); 
-            [u,d,phi] = obj.getdat(tk);
             
-            idx = find(u.*phi>0.01); % index of u value greater than threshold
+            
+            idx = find(obj.uend.*obj.phi>0.01); % index of u value greater than threshold
             
             distix = sqrt((obj.gx-obj.ix(1)).^2+ (obj.gy-obj.ix(2)).^2+(obj.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
@@ -267,7 +266,7 @@ classdef GliomaSolver<handle
             obj.RHO = sqrt(rhoc/dwc)*lc;
             obj.T = obj.L/sqrt(dwc * rhoc);
         end
-
+       
         function fp = ReadyDat(obj, n, varargin)
             % prepare data for training
             p = inputParser;
@@ -347,6 +346,21 @@ classdef GliomaSolver<handle
             i = find(ts==obj.tend);
             upred = upredall(:,i);
         end
+
+        function p = plotline(obj)
+            % 1d plot of data, mid section
+            u = obj.uend.*obj.phi;
+            [~,mid] = getBox(u, 0.01, 0);
+            
+            y = u(:,mid(2));
+            x = 1:length(y);
+            p = plot(x,y,'k','DisplayName','u');
+            legend(p,'Location','best');
+            
+        end
+
+
+        
     end
 end
 

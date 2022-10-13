@@ -7,11 +7,13 @@ function [nzu] = addNoise(u, varargin)
     addParameter(p, "std", 0.1);
     addParameter(p, "cor", 0);
     addParameter(p, "type", 'none');
+    addParameter(p, "threshold", [0,1]);
     parse(p, varargin{:});
     mu = p.Results.mu;
     std = p.Results.std;
     cor = p.Results.cor;
     nztype = p.Results.type;
+    th = p.Results.threshold;
     grand = randn(size(u))*std + mu;
     
     if strcmpi(nztype,'none')
@@ -36,8 +38,8 @@ function [nzu] = addNoise(u, varargin)
         error('unknow type')    
     end
 
-    fprintf('lower bound by 0\n');
-    nzu(nzu<0) = 0;
+    fprintf('threshold by [%g,%g]\n',th);
+    nzu = threshold(nzu, th(1), th(2));
     
 
 end

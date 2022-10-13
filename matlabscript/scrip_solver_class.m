@@ -1,13 +1,14 @@
 %% MRI data
+addpath /Users/Ray/project/glioma/pinn/matlabscript
 startup
-%% solver parameters
-DIM = 2;
+
+DIM = 3;
 zslice = 99; % slice for visualization
 
 tend = 150; %day
 Dw = 0.13; % mm^2/day
-rho= 0.025; %0.025/day
-x0 = [164 116];
+rho= 0.05; %0.025/day
+x0 = [164 116,99];
 
 g = GliomaSolver(DIM, Dw, rho, x0, tend, zslice)
 %%
@@ -23,8 +24,8 @@ g.plotuend
 % traindatfile = g.ReadyDat(20000,'method','spline','tag','nzinterp_add_cor','noiseon','uend','type','add','cor',3)
 % traindatfile = g.ReadyDat(20000,'method','spline','tag','nzinterp_mult','noiseon','uend','type','mult','std',1)
 % traindatfile = g.ReadyDat(20000,'method','spline','tag','interpnz_add','noiseon','uqe','type','add')
-traindatfile = g.ReadyDat(20000,'method','spline','tag','none','noiseon','uqe','type','none')
-load(traindatfile)
+% traindatfile = g.ReadyDat(20000,'method','spline','tag','none','noiseon','uqe','type','none')
+% load(traindatfile)
 %%
 g.scatter('df', xq, 6, udat-uqe ,'filled')
 colorbar
