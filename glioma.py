@@ -32,8 +32,12 @@ class DataSet:
         self.xtest = matdat.get('xtest')[0:n,:]
         self.utest = matdat.get('utest')[0:n,:] #all time
 
-        self.xdat = matdat.get('xdat')[0:n,:]
-        self.udat = matdat.get('udat')[0:n,:] # final time time
+        if opts['w_dat'] == 0:
+            self.xdat = None
+            self.udat = None # final time time
+        else:
+            self.xdat = matdat.get('xdat')[0:n,:]
+            self.udat = matdat.get('udat')[0:n,:] # final time time
 
         self.xr = self.xtest
 
@@ -51,12 +55,14 @@ class DataSet:
         # characteristic diffusion ceofficient at each point
         self.Dphi = (self.pwm * self.DW + self.pgm * (self.DW/10)) * self.phi        
         self.dim = self.xr.shape[1]
+        self.xdim = self.xr.shape[1]-1
 
 class Gmodel:
     def __init__(self, opts) -> None:
 
         self.dataset = DataSet(opts)
         self.dim = self.dataset.dim
+        self.xdim = self.dataset.xdim
         self.opts = opts
 
         self.optim = tf.keras.optimizers.Adam(learning_rate=1e-3)
@@ -72,25 +78,50 @@ class Gmodel:
         
         def ot(x,u):
             return u* x[:, 0:1]+ ic(x)
+        
+        if self.xdim == 2:
+            def pde(x_r, f):
+                t = x_r[:,0:1]
+                x = x_r[:,1:2]
+                y = x_r[:,2:3]
+                xr = tf.concat([t,x,y], axis=1)
+                u =  f(xr)
+                
+                u_t = tf.gradients(u, t)[0]
 
-        def pde(x_r,f):
-            # t,x,y normalized here
-            t = x_r[:,0:1]
-            x = x_r[:,1:2]
-            y = x_r[:,2:3]
-            xr = tf.concat([t,x,y], axis=1)
-            u =  f(xr)
-            
-            u_t = tf.gradients(u, t)[0]
+                u_x = tf.gradients(u, x)[0]
+                u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
+                
+                u_y = tf.gradients(u, y)[0]
+                u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
 
-            u_x = tf.gradients(u, x)[0]
-            u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
-            
-            u_y = tf.gradients(u, y)[0]
-            u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
+                res = u_t - (f.param['rD'] * (u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                return res
+        else:
+            def pde(x_r, f):
+                 # t,x,y normalized here
+                t = x_r[:,0:1]
+                x = x_r[:,1:2]
+                y = x_r[:,2:3]
+                z = x_r[:,3:4]
+                xr = tf.concat([t,x,y,z], axis=1)
+                u =  f(xr)
+                
+                u_t = tf.gradients(u, t)[0]
 
-            res = u_t - (f.param['rD'] * (u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
-            return res
+                u_x = tf.gradients(u, x)[0]
+                u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
+                
+                u_y = tf.gradients(u, y)[0]
+                u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
+
+                u_z = tf.gradients(u, z)[0]
+                u_zz = tf.gradients(self.dataset.Dphi*u_z, z)[0]
+
+                res = u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                return res
+
+
 
         self.model = PINN(param=param,
                 input_dim=self.dim,
