@@ -206,7 +206,7 @@ classdef GliomaSolver<handle
             [fig, ax1, ax2]  = obj.imagesc('df', uend, varargin{:});
         end
 
-        function getrmax(obj)
+        function [ls, rmax, inside] = getrmax(obj)
             % get radius of solution
             tk = length(obj.tall); 
             
@@ -215,8 +215,10 @@ classdef GliomaSolver<handle
             
             distix = sqrt((obj.gx-obj.ix(1)).^2+ (obj.gy-obj.ix(2)).^2+(obj.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
-            obj.rmax = maxdis+3;
+            rmax  = maxdis+3;
+            obj.rmax = rmax;
             ls = distix - obj.rmax; % level set function
+            inside = find(ls<0);
             fprintf('rmax = %g\n',obj.rmax);
         end
 
@@ -246,10 +248,14 @@ classdef GliomaSolver<handle
             end 
         end
 
-        function [fig,ax1,ax2,hLink] = scatter(obj,bgname,X,sz,dat,varargin)
-            [fig,ax1] = plotbkgd(obj, bgname);
+        function [fig,ax1,ax2,hLink] = scatter(obj,bgname,X,varargin)
+            % backgound imagesc is plotted with YDir reversed
+            % grid is ndgrid, so x coor is vertical, y coord is horizontal
+            % 
+            bgdat = obj.getSlice(bgname);
+            [fig,ax1] = plotbkgd(obj, bgdat);
             ax2 = axes;
-            scatter(ax2,X(:,2),X(:,1),sz,dat,varargin{:});
+            scatter(ax2,X(:,2),X(:,1),varargin{:});
             set(ax2,'YDir','reverse')
             set(ax2,'color','none','visible','off');
             cb2 = colorbar(ax2,'Location','eastoutside');
@@ -273,6 +279,7 @@ classdef GliomaSolver<handle
             p.KeepUnmatched = true;
             addParameter(p, 'noiseon', 'uqe'); %none = no noise, uq noise after interp, u interp after noise
             addParameter(p, 'method', 'linear');
+            addParameter(p, 'isuniform', false);
             addParameter(p, 'seed', 1);
             addParameter(p, 'tag', '');
             addParameter(p, 'datdir', './'); % which directory to save
@@ -280,6 +287,8 @@ classdef GliomaSolver<handle
             
             seed = p.Results.seed;
             datdir = p.Results.datdir;
+            isuniform = p.Results.isuniform;
+
             [status,msg,msgid] = mkdir(datdir);
             assert(status);
             method = p.Results.method;
@@ -289,7 +298,7 @@ classdef GliomaSolver<handle
 
             % sample collocation points
             rng(seed,'twister');
-            xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0); % sample coord, unit
+            xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0,isuniform); % sample coord, unit
             tq = rand(n,1)*obj.tend; % sample t, unit
 
             Pwmq = obj.interpf(obj.Pwm, xq, method);

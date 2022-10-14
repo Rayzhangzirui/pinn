@@ -62,12 +62,7 @@ classdef PostData<handle
               end
           end
             
-
-
-
-
-%           dat = load(fullfile(obj.modeldir,'upred_scipylbfgs.mat'));
-%           obj.upred{2} = dat;
+          % read data file
           if ~isempty(obj.info)
               fp = fullfile(obj.modeldir, obj.info.inv_dat_file);
               if isfile(fp)
