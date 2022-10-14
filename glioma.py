@@ -36,8 +36,15 @@ class DataSet:
             self.xdat = None
             self.udat = None # final time time
         else:
-            self.xdat = matdat.get('xdat')[0:n,:]
-            self.udat = matdat.get('udat')[0:n,:] # final time time
+            if opts.get('testasdat') == True:
+                # use test data as data loss, full time
+                self.xdat = self.xtest
+                self.udat = self.utest
+            else:
+                # single time inference
+                self.xdat = matdat.get('xdat')[0:n,:]
+                self.udat = matdat.get('udat')[0:n,:] # final time time
+            
 
         self.xr = self.xtest
 
