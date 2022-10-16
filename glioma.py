@@ -30,20 +30,20 @@ class DataSet:
             n = matdat.get('xtest').shape[0]
         
         self.xtest = matdat.get('xtest')[0:n,:]
-        self.utest = matdat.get('utest')[0:n,:] #all time
+        self.phiutest = matdat.get('phiutest')[0:n,:] #all time
 
         if opts['w_dat'] == 0:
             self.xdat = None
-            self.udat = None # final time time
+            self.phiudat = None # final time time
         else:
             if opts.get('testasdat') == True:
                 # use test data as data loss, full time
                 self.xdat = self.xtest
-                self.udat = self.utest
+                self.phiudat = self.phiutest
             else:
                 # single time inference
                 self.xdat = matdat.get('xdat')[0:n,:]
-                self.udat = matdat.get('udat')[0:n,:] # final time time
+                self.phiudat = matdat.get('phiudat')[0:n,:] # final time time
             
 
         self.xr = self.xtest
@@ -52,7 +52,7 @@ class DataSet:
         self.pwm =  matdat.get('Pwmq')[0:n,:]
         self.pgm =  matdat.get('Pgmq')[0:n,:]
 
-        # non dimensional
+        # non dimensional parameters
         self.T = matdat['T'].item()
         self.L = matdat['L'].item()
         self.DW = matdat['DW'].item() #characteristic DW
@@ -75,7 +75,7 @@ class Gmodel:
         self.optim = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
         INVERSE = opts.get('inverse')
-        param = {'rD':tf.Variable( opts['D0'], trainable=INVERSE), 'rRHO': tf.Variable(opts['rho0'], trainable=INVERSE)}
+        param = {'rD':tf.Variable( opts['D0'], trainable=INVERSE), 'rRHO': tf.Variable(opts['RHO0'], trainable=INVERSE)}
 
         self.info = {}
 
@@ -102,7 +102,7 @@ class Gmodel:
                 u_y = tf.gradients(u, y)[0]
                 u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
 
-                res = u_t - (f.param['rD'] * (u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
                 return res
         else:
             def pde(x_r, f):
@@ -125,7 +125,7 @@ class Gmodel:
                 u_z = tf.gradients(u, z)[0]
                 u_zz = tf.gradients(self.dataset.Dphi*u_z, z)[0]
 
-                res = u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
                 return res
 
 
@@ -140,9 +140,9 @@ class Gmodel:
         self.solver = PINNSolver(self.model, pde, 
                                 xr = self.dataset.xr,
                                 xdat = self.dataset.xdat,
-                                udat = self.dataset.udat,
+                                udat = self.dataset.phiudat,
                                 xtest= self.dataset.xtest,
-                                utest= self.dataset.utest,
+                                utest= self.dataset.phiutest,
                                 options = opts)
     
     def solve(self):
