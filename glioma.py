@@ -24,14 +24,18 @@ class DataSet:
         assert ext == '.mat', 'not reading mat file'
         
         matdat = loadmat(inv_dat_file)
-        if opts["n_res_pts"] is not None:
-            n = opts["n_res_pts"]
-        else:
-            n = matdat.get('xtest').shape[0]
         
-        self.xtest = matdat.get('xtest')[0:n,:]
-        self.utest = matdat.get('utest')[0:n,:] #all time
 
+        ntest = opts.get("n_test_pts", matdat.get('xtest').shape[0])  
+        ndat =  opts.get("n_dat_pts",  matdat.get('xdat').shape[0]) 
+        nres =  opts.get("n_res_pts",  matdat.get('xr').shape[0])
+        
+        # testing data
+        self.xtest = matdat.get('xtest')[0:ntest,:]
+        self.utest = matdat.get('utest')[0:ntest,:] 
+        self.phitest = matdat.get('phitest')[0:ntest,:]
+
+        # data loss
         if opts['w_dat'] == 0:
             self.xdat = None
             self.udat = None # final time time
@@ -41,17 +45,18 @@ class DataSet:
                 # use test data as data loss, full time
                 self.xdat = self.xtest
                 self.udat = self.utest
+                self.phidat = self.phitest
             else:
                 # single time inference
-                self.xdat = matdat.get('xdat')[0:n,:]
-                self.udat = matdat.get('udat')[0:n,:] # final time time
+                self.xdat = matdat.get('xdat')[0:ndat,:]
+                self.udat = matdat.get('udat')[0:ndat,:] 
+                self.phidat = matdat.get('phidat')[0:ndat,:]
             
-
-        self.xr = self.xtest
-
-        self.phi =  matdat.get('phiq')[0:n,:]
-        self.pwm =  matdat.get('Pwmq')[0:n,:]
-        self.pgm =  matdat.get('Pgmq')[0:n,:]
+        # residual pts
+        self.xr =  matdat.get('xr')[0:nres,:]
+        self.phi =  matdat.get('phiq')[0:nres,:]
+        self.pwm =  matdat.get('Pwmq')[0:nres,:]
+        self.pgm =  matdat.get('Pgmq')[0:nres,:]
 
         # non dimensional parameters
         self.T = matdat['T'].item()
@@ -61,7 +66,7 @@ class DataSet:
         self.opts['scale'] = {'T':self.T, 'L':self.L, 'DW':self.DW, 'RHO':self.RHO}
 
         # characteristic diffusion ceofficient at each point
-        self.Dphi = (self.pwm * self.DW + self.pgm * (self.DW/10)) * self.phi        
+        self.Dphi = (self.pwm * self.DW + self.pgm * (self.DW/10)) * self.phi
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
 
@@ -87,9 +92,15 @@ class Gmodel:
             r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]),1,keepdims=True)
             return 0.1*tf.exp(-0.1*r2*(self.dataset.L**2))
         
-        def ot(x,u):
-            return u* x[:, 0:1]+ ic(x)
-        
+        if opts.get('ictransofrm') == False:
+            # without output transform, ic as data loss
+            def ot(x,u):
+                return u
+        else:
+            def ot(x,u):
+                return u* x[:, 0:1]+ ic(x)
+
+
         if self.xdim == 2:
             def pde(x_r, f):
                 t = x_r[:,0:1]
@@ -135,12 +146,12 @@ class Gmodel:
         # loss function of data, difference of phi * u
         def fdatloss(nn, xdat):
             upred = nn(xdat)
-            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phi))
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
             return loss
         
         def ftestloss(nn, xtest):
             upred = nn(xtest)
-            loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phi))
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
             return loss
         
 
