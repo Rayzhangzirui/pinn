@@ -31,7 +31,7 @@ opts = {
     "lbfgs_opts":lbfgs_opt,
     }
 
-for n in [16,32,64,100,128]:
+for n in [32,64,100,128]:
     opts['model_dir'] = f'nn{n}'
     opts['num_hidden_unit'] = n
     g = Gmodel(opts)

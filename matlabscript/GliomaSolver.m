@@ -214,20 +214,20 @@ classdef GliomaSolver<handle
             [fig, ax1, ax2]  = obj.imagesc('df', uend.*phi, varargin{:});
         end
 
-        function [ls, rmax, idxin, mskin] = getrmax(obj)
+        function [rmax, idxin, mskin] = getrmax(obj)
             % get radius of solution
             tk = length(obj.tall); 
-            
-            
+
             idx = find(obj.uend.*obj.phi>0.01); % index of u value greater than threshold
             
             distix = sqrt((obj.gx-obj.ix(1)).^2+ (obj.gy-obj.ix(2)).^2+(obj.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
             rmax  = maxdis+3;
             obj.rmax = rmax;
-            ls = distix - obj.rmax; % level set function
-            mskin = ls<0;
-            idxin = find(ls<0);
+
+            lsf = distix - obj.rmax; % level set function
+            mskin = lsf<0;
+            idxin = find(lsf<0);
             fprintf('rmax = %g\n',obj.rmax);
         end
 
@@ -288,10 +288,110 @@ classdef GliomaSolver<handle
             % exact ratio
             rDe = obj.tend/obj.T * obj.dw/obj.dwc;
             rRHOe = obj.tend/obj.T * obj.rho/obj.rhoc;
-
-            
         end
        
+        function [uq, xq, tq, phiq] = genGridDataUend(obj,mskin)
+            % generate final time data from grid,
+            
+            assert(obj.dim == 2,'only in 2d');
+            
+            xq = [obj.gx(mskin) obj.gy(mskin)];
+            phiq = obj.phi(mskin);
+            uq = obj.uend(mskin);
+            tq = ones(length(uq),1) * obj.tend;
+
+            p = randperm(length(uq));
+            [uq, xq, tq, phiq] = mapfun(@(x) x(p,:),uq, xq, tq, phiq);
+
+        end
+       
+        function [uq, xq, tq, Pwmq, Pgmq, phiq] = genGridDataUall(obj,mskin)
+            % chose all time data from grid
+            assert(obj.dim == 2,'only in 2d');
+            
+            xgrid = [obj.gx(mskin) obj.gy(mskin)];
+            
+            % repeat ti in space, then reshape to 1d
+            tmp = repmat(obj.tall,size(xgrid,1),1);
+            tq = tmp(:);
+
+            tlen = length(obj.tall);
+            repeat = @(x) repmat(x, tlen, 1);
+
+            
+            xq = repeat(xgrid);
+
+            Pwmq = repeat(obj.Pwm(mskin));
+            Pgmq = repeat(obj.Pgm(mskin));
+            phiq = repeat(obj.phi(mskin));
+
+            u = zeros(length(phiq),1);
+            uq = [];
+            for i = 1:tlen
+                uslice = obj.uall(:,:,i);
+                uq = [uq;uslice(mskin)];
+            end
+
+            p = randperm(length(uq));
+            [uq, xq, tq, Pwmq, Pgmq, phiq] = mapfun(@(x) x(p,:),uq, xq, tq, Pwmq, Pgmq, phiq);
+
+        end
+        
+        function X = transformDat(obj, x, t)
+            % center, scale, combine 
+            X = [t/obj.tend (x - obj.x0)/obj.L];
+        end
+
+        function fp = genGridData(obj,varargin)
+
+            p = inputParser;
+            p.KeepUnmatched = true;
+            addParameter(p, 'seed', 1);
+            addParameter(p, 'tag', '');
+            addParameter(p, 'datdir', './'); % which directory to save
+            parse(p, varargin{:});
+            datdir = p.Results.datdir;
+
+            tag = p.Results.tag;
+            if ~isempty(tag)
+                tag = "_"+tag;
+            end
+            seed = p.Results.seed;
+            rng(seed,'twister');
+
+
+
+            [~, ~, mskin] = obj.getrmax();
+
+            % sample residual points
+            [uq, xq, tq, Pwmq, Pgmq, phiq] = obj.genGridDataUall(mskin);
+            xr = obj.transformDat(xq, tq);
+
+            % test data
+            xtest = xr;
+            utest = uq;
+            phitest = phiq;
+
+            % sample data points
+            [udat, xdat, tdat, phidat] = obj.genGridDataUend(mskin);
+            xdat = obj.transformDat(xdat, tdat);
+
+            L = obj.L;
+            T = obj.T;
+            DW = obj.DW;
+            RHO = obj.RHO;
+            
+            fp = sprintf('dat_%s_grid.mat',obj.name);
+            fp = fullfile(datdir, fp);
+            save(fp,'xdat','udat','phidat',...
+                'xtest','utest','phitest',...
+                'Pwmq', 'Pgmq', 'phiq','xr', ...
+                'L', 'T', 'DW', 'RHO');
+            fprintf('save training dat to %s\n', fp );
+        end
+
+      
+
         function fp = ReadyDat(obj, n, varargin)
             % prepare data for training
             p = inputParser;
@@ -317,24 +417,56 @@ classdef GliomaSolver<handle
                 tag = "_"+p.Results.tag;
             end
             
+            % use data from finite difference grid
             if p.Results.usegrid == true
-                [~, ~, idxin] = obj.getrmax();
-                xq = [gx(idxin) gy(idxin)]
-                tq = [gt(idxin)]
-            end
+                [~, ~, mskin] = obj.getrmax();
+                assert(obj.dim == 2,'only in 2d');
+                sz = size(obj.Pwm); % even when Pwm is 2d, 3rd dim is 1
+                [gx3d,gy3d,gt3d] = ndgrid(1:sz(1),1:sz(2),obj.tall); 
+                allmskin = repmat(mskin,1,1,length(obj.tall));
+                
+%                 xq = [obj.gx(mskin) obj.gy(mskin)];
+%                 assert(size(g.tall,1)==1)); % assume g.tall row vector
+%                 tmp = repmat(g.tall,length(xq),1);
+%                 tq = tmp(:);
+                
+                % residual points, 
+                % for residual, need x, t, Pwm, Pgm, phi, u
+                xq = [gx3d(allmskin) gy3d(allmskin)];
+                tq = gt3d(allmskin);
 
-            % sample collocation points
-            rng(seed,'twister');
-            xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0,isuniform); % sample coord, unit
-            tq = rand(n,1)*obj.tend; % sample t, unit
+                xqe = [obj.gx(mskin) obj.gy(mskin)];
+                
+                Pwmq = obj.Pwm(mskin);
+                Pgmq = obj.Pgm(mskin);
+                phiq = obj.phi(mskin);
+
+                % u at xq, for testing
+                uq = obj.uall(allmskin);
+
+                % final time solution, uqe = u(t_end, xq)
+                uqe = obj.uend(mskin);
+                tqe = ones(size(uqe))*obj.tend; % all final time
             
-            Pwmq = obj.interpf(obj.Pwm, xq, method);
-            Pgmq = obj.interpf(obj.Pgm, xq, method);
-            phiq = obj.interpf(obj.phi, xq, method);
-            uq = obj.interpu(tq, xq, method); % u(tq, xq)
-            tqe = ones(n,1)*obj.tend; % all final time
+            else
+                % use data from interpolation
+                rng(seed,'twister');
+                xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0,isuniform); % sample coord, unit
+                tq = rand(n,1)*obj.tend; % sample t, unit
 
-            uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
+                Pwmq = obj.interpf(obj.Pwm, xq, method);
+                Pgmq = obj.interpf(obj.Pgm, xq, method);
+                phiq = obj.interpf(obj.phi, xq, method);
+                
+                uq = obj.interpu(tq, xq, method); % u(tq, xq)
+                
+                xqe = xq;
+                tqe = ones(n,1)*obj.tend; % all final time
+
+                uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
+            end
+            % sample collocation points
+            
             
             if strcmpi(p.Results.noiseon, 'uqe')
                 % interp then add noise
@@ -349,8 +481,8 @@ classdef GliomaSolver<handle
                error('unknown option') 
             end
 
-            % sample
-            xqcenter = xq - obj.x0;
+            % center and scale
+            fcs = @(x) (x - obj.x0) / obj.L;
             
             if p.Results.scaletend == true
                 fprintf('scale time by tend\n')
@@ -360,12 +492,12 @@ classdef GliomaSolver<handle
                 ST = obj.T;
             end
             % single point data 
-            xdat = [tqe/ST xqcenter/obj.L];
-            phiudat = nzuqe.*phiq;
+            xdat = [tqe/ST fcs(xqe)];
+            udat = nzuqe;
 
             % testing data, all time
-            xtest = [tq/ST xqcenter/obj.L];
-            phiutest = uq.*phiq;
+            xtest = [tq/ST fcs(xq)];
+            utest = uq;
 
             L = obj.L;
             T = obj.T;
@@ -376,7 +508,9 @@ classdef GliomaSolver<handle
             
             fp = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
             fp = fullfile(datdir, fp);
-            save(fp,'xdat','phiudat','xtest','phiutest', 'L', 'T', 'DW', 'RHO', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed','uqe','xq');
+            save(fp,'xdat','udat','phidat','xtest','utest','phitest',...
+                'Pwmq', 'Pgmq', 'phiq','xr', ...
+                'L', 'T', 'DW', 'RHO','n','argsample','seed','uqe','xq');
             fprintf('save training dat to %s\n', fp );
         end
 
