@@ -1,4 +1,4 @@
-classdef GliomaSolver<handle
+classdef GliomaSolver< dynamicprops
     % model to solve glioma
     % if 2d model, all the properties are only slices
     % 
@@ -46,6 +46,8 @@ classdef GliomaSolver<handle
         T
         DW
         RHO
+        rDe
+        rRHOe
         
         end
     
@@ -272,7 +274,7 @@ classdef GliomaSolver<handle
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
-        function [rDe,rRHOe] = scale(obj, dwc, rhoc, lc)
+        function scale(obj, dwc, rhoc, lc)
             % scale the data for training
             % dwc, rhoc characteristic value with unit
             % lc = characteristic length
@@ -286,24 +288,38 @@ classdef GliomaSolver<handle
             obj.RHO = sqrt(rhoc/dwc)*lc;
             
             % exact ratio
-            rDe = obj.tend/obj.T * obj.dw/obj.dwc;
-            rRHOe = obj.tend/obj.T * obj.rho/obj.rhoc;
+            obj.rDe = obj.tend/obj.T * obj.dw/obj.dwc;
+            obj.rRHOe = obj.tend/obj.T * obj.rho/obj.rhoc;
         end
        
-        function [uq, xq, tq, phiq] = genGridDataUend(obj,mskin)
+        function [uq, xq, tq, phiq] = genGridDataUt(obj,mskin,ts)
             % generate final time data from grid,
+            if nargin < 3
+                ts = length(obj.tall);
+            end
             
             assert(obj.dim == 2,'only in 2d');
             
-            xq = [obj.gx(mskin) obj.gy(mskin)];
-            phiq = obj.phi(mskin);
-            uq = obj.uend(mskin);
-            tq = ones(length(uq),1) * obj.tend;
+            xq = [];
+            phiq = [];
+            uq = [];
+            tq = [];
+            for i = 1:length(ts)
+                tk = ts(i);
+                fprintf('sample grid data at t = %g\n',obj.tall(tk));
+                xq = [xq;[obj.gx(mskin) obj.gy(mskin)]];
+                phiq = [phiq;obj.phi(mskin)];
+                u = obj.uall(:,:,tk);
+                uq = [uq; u(mskin)];
+                tq = [tq; ones(length(uq),1) * obj.tall(tk)];
+            end
 
             p = randperm(length(uq));
             [uq, xq, tq, phiq] = mapfun(@(x) x(p,:),uq, xq, tq, phiq);
 
         end
+
+
        
         function [uq, xq, tq, Pwmq, Pgmq, phiq] = genGridDataUall(obj,mskin)
             % chose all time data from grid
@@ -348,9 +364,12 @@ classdef GliomaSolver<handle
             p.KeepUnmatched = true;
             addParameter(p, 'seed', 1);
             addParameter(p, 'tag', '');
+            addParameter(p, 'softic', false);
+            addParameter(p, 'uthresh', 0);
             addParameter(p, 'datdir', './'); % which directory to save
             parse(p, varargin{:});
             datdir = p.Results.datdir;
+            uthresh = p.Results.uthresh;
 
             tag = p.Results.tag;
             if ~isempty(tag)
@@ -359,13 +378,19 @@ classdef GliomaSolver<handle
             seed = p.Results.seed;
             rng(seed,'twister');
 
-
-
             [~, ~, mskin] = obj.getrmax();
 
             % sample residual points
             [uq, xq, tq, Pwmq, Pgmq, phiq] = obj.genGridDataUall(mskin);
             xr = obj.transformDat(xq, tq);
+
+            % only pick u greater than threshold for residual points
+            if uthresh > 0
+                f = @(x) x(uq>uthresh,:);
+                [uq, xr, Pwmq, Pgmq, phiq] = mapfun(f, uq, xr, Pwmq, Pgmq, phiq);
+            end
+
+
 
             % test data
             xtest = xr;
@@ -373,8 +398,14 @@ classdef GliomaSolver<handle
             phitest = phiq;
 
             % sample data points
-            [udat, xdat, tdat, phidat] = obj.genGridDataUend(mskin);
+            if p.Results.softic == true
+                ts = [1, length(obj.tall)];
+            else
+                ts = [length(obj.tall)];
+            end
+            [udat, xdat, tdat, phidat] = obj.genGridDataUt(mskin, ts);
             xdat = obj.transformDat(xdat, tdat);
+
 
             L = obj.L;
             T = obj.T;

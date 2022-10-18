@@ -19,9 +19,11 @@ classdef PostData<handle
           addParameter(p,'tag','',@ischar);
           addParameter(p,'dim',2,@isscalar);
           addParameter(p,'isradial',false,@islogical);
+          addParameter(p,'dat_file','',@ischar);
           parse(p,modeldir,varargin{:});
           
           obj.modeldir = p.Results.modeldir;
+          
           assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
           obj.tag = p.Results.tag;
           fs = dir(obj.modeldir);          
@@ -65,11 +67,23 @@ classdef PostData<handle
           % read data file
           if ~isempty(obj.info)
               fp = fullfile(obj.modeldir, obj.info.inv_dat_file);
+              found = false;
               if isfile(fp)
+                  found = true;
+              else
+                  fp = fullfile(parentdir(obj.modeldir), obj.info.inv_dat_file);
+                  if isfile(fp)
+                      found = true;
+                  end
+              end
+              if found
                   fprintf('read %s\n',fp);
                   obj.datinfo = load(fp);
+              else
+                  fprintf('data file not found %s\n',fp);
               end
           end
+
       end %end of constructor
 
        function [fig,sc] = PlotLoss(obj,varargin)
@@ -99,17 +113,11 @@ classdef PostData<handle
            end
        end
 
-       function x = getRelErr(obj,i,prop,exact)
-           % get relative error
-           relerr = @(x,xe) (x-xe)./xe;
-           x = relerr(obj.upred{i}.(prop), exact);
-       end
-
-       function [fig, sc] = PlotInferErr(obj, rDe, rRHOe,varargin)
+       function [fig, sc] = PlotInferErr(obj, rDe, rRHOe, varargin)
            % plot inference error
-           relerr = @(x,xe) (x-xe)./xe;
-           errD = relerr(obj.log.rD, rDe);
-           errRHO = relerr(obj.log.rRHO, rRHOe);
+           
+           errD = relerr(rDe, obj.log.rD);
+           errRHO = relerr(rRHOe, obj.log.rRHO);
 
            fig = figure;
            ts = sprintf('%s rel err\n adam rD = %0.2e, rRHO = %0.2e\n',...
