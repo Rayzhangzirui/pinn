@@ -145,7 +145,9 @@ class LossAndFlatGradient(object):
 
 
 class PINNSolver():
-    def __init__(self, model, pde,
+    def __init__(self, model, pde, 
+                fdatloss,
+                ftestloss,
                 xr = None, wr = None,
                 xdat = None, udat = None,
                 xtest = None, utest=None,
@@ -153,6 +155,8 @@ class PINNSolver():
         self.model = model
         
         self.pde = pde
+        self.fdatloss = fdatloss
+        self.ftestloss = ftestloss
 
         self.options = options
         
@@ -160,8 +164,10 @@ class PINNSolver():
 
         # set up data
         self.xr =    n2t(xr) # collocation point
+
         self.xdat =  n2t(xdat) # data point
         self.udat =  n2t(udat) # data value
+
         self.xtest = n2t(xtest) # test point
         self.utest = n2t(utest) # test value
 
@@ -220,10 +226,11 @@ class PINNSolver():
         loss_dat = 0.
         if self.xdat is not None:
             # Add phi_0 and phi_b to the loss
-            upred = self.model(self.xdat)
-            loss_dat = tf.reduce_mean(tf.square(self.udat - upred))
+            # upred = self.model(self.xdat)
+            # loss_dat = tf.math.educe_mean(tf.math.square(self.udat - upred))
+            loss_dat = self.fdatloss(self.model, self.xdat)
 
-        loss_tot = loss_res + loss_dat* self.options.get('w_dat')
+        loss_tot = loss_res + loss_dat * self.options.get('w_dat')
 
         loss = {'res':loss_res, 'data':loss_dat, 'total':loss_tot}
         return loss
@@ -249,9 +256,7 @@ class PINNSolver():
     def check_exact(self):
         """ check with exact solution if provided
         """
-        up = self.model(self.xtest)
-        mse = tf.math.reduce_mean(tf.math.square(up-self.utest))
-        return mse
+        return self.ftestloss(self.model, self.xtest)
     
     
     def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):

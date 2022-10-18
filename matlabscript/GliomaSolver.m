@@ -40,6 +40,8 @@ classdef GliomaSolver<handle
         
         % scaling
         rmax % radius of tumor region
+        dwc
+        rhoc
         L
         T
         DW
@@ -206,7 +208,13 @@ classdef GliomaSolver<handle
             [fig, ax1, ax2]  = obj.imagesc('df', uend, varargin{:});
         end
 
-        function [ls, rmax, inside] = getrmax(obj)
+        function [fig, ax1, ax2] = plotphiuend(obj,varargin)
+            uend = obj.getSlice('uend',varargin{:});
+            phi = obj.getSlice('phi',varargin{:});
+            [fig, ax1, ax2]  = obj.imagesc('df', uend.*phi, varargin{:});
+        end
+
+        function [ls, rmax, idxin, mskin] = getrmax(obj)
             % get radius of solution
             tk = length(obj.tall); 
             
@@ -218,7 +226,8 @@ classdef GliomaSolver<handle
             rmax  = maxdis+3;
             obj.rmax = rmax;
             ls = distix - obj.rmax; % level set function
-            inside = find(ls<0);
+            mskin = ls<0;
+            idxin = find(ls<0);
             fprintf('rmax = %g\n',obj.rmax);
         end
 
@@ -263,14 +272,24 @@ classdef GliomaSolver<handle
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
-        function scale(obj, dwc, rhoc, lc)
+        function [rDe,rRHOe] = scale(obj, dwc, rhoc, lc)
             % scale the data for training
             % dwc, rhoc characteristic value with unit
             % lc = characteristic length
+            obj.dwc = dwc;
+            obj.rhoc = rhoc;
             obj.L = lc;
+            obj.T = obj.L/sqrt(dwc * rhoc);
+            
+            % characteristic dc*T, rhoc*T
             obj.DW = sqrt(dwc/rhoc)/lc;
             obj.RHO = sqrt(rhoc/dwc)*lc;
-            obj.T = obj.L/sqrt(dwc * rhoc);
+            
+            % exact ratio
+            rDe = obj.tend/obj.T * obj.dw/obj.dwc;
+            rRHOe = obj.tend/obj.T * obj.rho/obj.rhoc;
+
+            
         end
        
         function fp = ReadyDat(obj, n, varargin)
@@ -279,8 +298,10 @@ classdef GliomaSolver<handle
             p.KeepUnmatched = true;
             addParameter(p, 'noiseon', 'uqe'); %none = no noise, uq noise after interp, u interp after noise
             addParameter(p, 'method', 'linear');
+            addParameter(p, 'usegrid', false); % use data from finite difference grid
             addParameter(p, 'isuniform', false);
             addParameter(p, 'seed', 1);
+            addParameter(p, 'scaletend', false);
             addParameter(p, 'tag', '');
             addParameter(p, 'datdir', './'); % which directory to save
             parse(p, varargin{:});
@@ -295,12 +316,18 @@ classdef GliomaSolver<handle
             if ~isempty(p.Results.tag)
                 tag = "_"+p.Results.tag;
             end
+            
+            if p.Results.usegrid == true
+                [~, ~, idxin] = obj.getrmax();
+                xq = [gx(idxin) gy(idxin)]
+                tq = [gt(idxin)]
+            end
 
             % sample collocation points
             rng(seed,'twister');
             xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0,isuniform); % sample coord, unit
             tq = rand(n,1)*obj.tend; % sample t, unit
-
+            
             Pwmq = obj.interpf(obj.Pwm, xq, method);
             Pgmq = obj.interpf(obj.Pgm, xq, method);
             phiq = obj.interpf(obj.phi, xq, method);
@@ -324,27 +351,35 @@ classdef GliomaSolver<handle
 
             % sample
             xqcenter = xq - obj.x0;
-
+            
+            if p.Results.scaletend == true
+                fprintf('scale time by tend\n')
+                ST = obj.tend;
+            else
+                fprintf('scale time by T\n')
+                ST = obj.T;
+            end
             % single point data 
-            xdat = [tqe/obj.T xqcenter/obj.L];
-            udat = nzuqe;
+            xdat = [tqe/ST xqcenter/obj.L];
+            phiudat = nzuqe.*phiq;
 
             % testing data, all time
-            xtest = [tq/obj.T xqcenter/obj.L];
-            utest = uq;
-            
-            
-            DW = obj.DW;
-            RHO = obj.RHO;
+            xtest = [tq/ST xqcenter/obj.L];
+            phiutest = uq.*phiq;
+
             L = obj.L;
             T = obj.T;
+            DW = obj.DW;
+            RHO = obj.RHO;
+
             argsample = varargin;
             
             fp = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
             fp = fullfile(datdir, fp);
-            save(fp,'xdat','udat','uqe','xq','xtest','utest','DW','RHO','L','T', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed');
+            save(fp,'xdat','phiudat','xtest','phiutest', 'L', 'T', 'DW', 'RHO', 'Pwmq', 'Pgmq', 'phiq','n','argsample','seed','uqe','xq');
             fprintf('save training dat to %s\n', fp );
         end
+
         
         function [ts,x,upred,upredall] = loadresults(obj, predmatfile)
             % load neural net results

@@ -30,20 +30,21 @@ class DataSet:
             n = matdat.get('xtest').shape[0]
         
         self.xtest = matdat.get('xtest')[0:n,:]
-        self.phiutest = matdat.get('phiutest')[0:n,:] #all time
+        self.utest = matdat.get('utest')[0:n,:] #all time
 
         if opts['w_dat'] == 0:
             self.xdat = None
-            self.phiudat = None # final time time
+            self.udat = None # final time time
         else:
             if opts.get('testasdat') == True:
+                print('use test data for data loss')
                 # use test data as data loss, full time
                 self.xdat = self.xtest
-                self.phiudat = self.phiutest
+                self.udat = self.utest
             else:
                 # single time inference
                 self.xdat = matdat.get('xdat')[0:n,:]
-                self.phiudat = matdat.get('phiudat')[0:n,:] # final time time
+                self.udat = matdat.get('udat')[0:n,:] # final time time
             
 
         self.xr = self.xtest
@@ -75,7 +76,10 @@ class Gmodel:
         self.optim = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
         INVERSE = opts.get('inverse')
-        param = {'rD':tf.Variable( opts['D0'], trainable=INVERSE), 'rRHO': tf.Variable(opts['RHO0'], trainable=INVERSE)}
+        train_rD = True if opts.get('train_rD') == True else False
+        train_rRHO = True if opts.get('train_rRHO') == True else False
+
+        param = {'rD':tf.Variable( opts['D0'], trainable=train_rD), 'rRHO': tf.Variable(opts['RHO0'], trainable=train_rRHO)}
 
         self.info = {}
 
@@ -128,7 +132,17 @@ class Gmodel:
                 res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
                 return res
 
-
+        # loss function of data, difference of phi * u
+        def fdatloss(nn, xdat):
+            upred = nn(xdat)
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phi))
+            return loss
+        
+        def ftestloss(nn, xtest):
+            upred = nn(xtest)
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phi))
+            return loss
+        
 
         self.model = PINN(param=param,
                 input_dim=self.dim,
@@ -136,13 +150,16 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
+
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
+                                fdatloss,
+                                ftestloss,
                                 xr = self.dataset.xr,
                                 xdat = self.dataset.xdat,
-                                udat = self.dataset.phiudat,
+                                udat = self.dataset.udat,
                                 xtest= self.dataset.xtest,
-                                utest= self.dataset.phiutest,
+                                utest= self.dataset.utest,
                                 options = opts)
     
     def solve(self):
