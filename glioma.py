@@ -94,9 +94,11 @@ class Gmodel:
         
         if opts.get('ictransofrm') == False:
             # without output transform, ic as data loss
+            print('no nn ic transformation')
             def ot(x,u):
                 return u
         else:
+            print('apply nn ic transformation')
             def ot(x,u):
                 return u* x[:, 0:1]+ ic(x)
 
