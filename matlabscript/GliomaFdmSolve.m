@@ -33,7 +33,7 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
 
     numiter = 100; % number of Cahn Hillard steps
     dt = h^4/(8*2*epsilon); % dt condition, see Glioma_ComputePFF_CahnHilliard.cpp
-    tau = 1e-7; %  see CahnHillardOperator, tau = 0.001 (some small number, needed if psi(t=0) = {0,1})
+    tau = 1e-3; %  see CahnHillardOperator, tau = 0.001 (some small number, needed if psi(t=0) = {0,1})
 
     % Euler's method in time
     for i = 1:numiter

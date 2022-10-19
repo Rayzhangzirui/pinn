@@ -120,8 +120,8 @@ classdef PostData<handle
            errRHO = relerr(rRHOe, obj.log.rRHO);
 
            fig = figure;
-           ts = sprintf('%s rel err\n adam rD = %0.2e, rRHO = %0.2e\n',...
-               obj.tag, relerr(obj.upred{1}.rD, rDe),relerr(obj.upred{1}.rRHO, rRHOe))
+           ts = sprintf('%s rel err\n rD = %0.2e, rRHO = %0.2e\n',...
+               obj.tag, relerr(rDe,obj.upred{1}.rD),relerr(rRHOe,obj.upred{1}.rRHO))
            sc(1) = plot(obj.log.it, errD,'DisplayName', 'rD',varargin{:});
            hold on;
            sc(2) = plot(obj.log.it, errRHO,'DisplayName', 'rRHO',varargin{:} );

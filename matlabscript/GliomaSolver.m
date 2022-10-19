@@ -11,7 +11,7 @@ classdef GliomaSolver< dynamicprops
         rho
         x0 % initial location
         ix 
-        dim %dimension
+        xdim %dimension
         tend % final time
         
         soldir % directory to save fdm solution
@@ -52,8 +52,8 @@ classdef GliomaSolver< dynamicprops
         end
     
     methods
-        function obj = GliomaSolver(dim, d, rho, x0, tend, zslice)
-            obj.dim = dim;
+        function obj = GliomaSolver(xdim, d, rho, x0, tend, zslice)
+            obj.xdim = xdim;
             obj.dw = d;
             obj.dg = d/10;
             obj.rho = rho; %1/day
@@ -61,27 +61,45 @@ classdef GliomaSolver< dynamicprops
             obj.x0 = x0;
             obj.zslice  = zslice;
 
-            if obj.dim == 2
+            if obj.xdim == 2
                 obj.ix = [obj.x0 1];
             else
                 obj.ix = obj.x0;
             end
 
             % if dim 2, use slice as identifier for z
-            if dim==2
+            if xdim==2
                 ztmp = zslice;
             else
                 ztmp = x0(3);
             end
             obj.name = sprintf("dim%d_dw%g_rho%g_ix%d_iy%d_iz%d_tend%d",...
-                dim, d, rho, x0(1), x0(2), ztmp, tend);
+                xdim, d, rho, x0(1), x0(2), ztmp, tend);
             fprintf('model tag %s\n',obj.name);
             
+        end
+
+
+        function spheremri(obj)
+            % mri but with 
+            assert(obj.xdim == 2);
+            n = 201;
+            R = 75;
+            mid = ceil(n/2);
+
+            sz = [n n 1];
+            [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
+
+            distix = sqrt((obj.gx-mid).^2+ (obj.gy-mid).^2);
+            obj.Pwm = double(distix<R)
+            obj.Pgm = zeros(sz);
+            obj.Pcsf = zeros(sz);
+
+            obj.df = obj.Pwm*obj.dw + obj.Pgm*obj.dg; % diffusion coefficients
         end
         
         function readmri(obj,fdir)
             % read mri data, fdir = dir to atlas
-
             gm = MRIread( [fdir 'GM.nii']);
             wm = MRIread( [fdir 'WM.nii']);
             csf = MRIread( [fdir 'CSF.nii']);
@@ -90,7 +108,7 @@ classdef GliomaSolver< dynamicprops
             obj.Pgm = gm.vol;
             obj.Pcsf = csf.vol;
 
-            if obj.dim == 2
+            if obj.xdim == 2
             %%% for 2d case, slice 3d MRI, then set zslice = 1, the third dimension is
             %%% just 1. Filter with periodic padding make all z-derivative 0. So same as 2D
                 obj.Pwm  = obj.Pwm(:,:,obj.zslice);
@@ -101,7 +119,7 @@ classdef GliomaSolver< dynamicprops
             obj.df = obj.Pwm*obj.dw + obj.Pgm*obj.dg; % diffusion coefficients
             
             sz = [1 1 1];
-            sz(1:obj.dim) = size(obj.Pwm); % even when Pwm is 2d, 3rd dim is 1
+            sz(1:obj.xdim) = size(obj.Pwm); % even when Pwm is 2d, 3rd dim is 1
             [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
         end% 
         
@@ -120,13 +138,13 @@ classdef GliomaSolver< dynamicprops
 
         function loadsol(obj, fp)
             % load result of fdm solution, uall, tall, phi
-            assert(isfile(fp), '%s not found\n',path);
+            assert(isfile(fp));
 
             dat = load(fp);
             obj.uall = dat.uall;
             obj.tall = dat.tall;
             obj.phi = dat.phi;
-            if obj.dim == 2
+            if obj.xdim == 2
                 obj.uend = obj.uall(:,:,end);
             else
                 obj.uend = obj.uall(:,:,:,end);
@@ -138,14 +156,19 @@ classdef GliomaSolver< dynamicprops
             es = isfile(fp);
         end
 
-        function solve(obj)
+        function solve(obj,redo)
+            
+            if nargin<2
+                redo = false;
+            end
+
             [fp,es] = obj.solpath;
-            if es
+            if es && redo == false
                 fprintf('load existing solution\n');
                 obj.loadsol(fp);
             else
                fprintf('solve and save pde\n');
-               [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.dim);
+               [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
                obj.savesol(fp); 
             end
 
@@ -235,7 +258,7 @@ classdef GliomaSolver< dynamicprops
 
         function fq = interpf(obj, f, X, method)
             % interpolate f(x)
-            if obj.dim == 3
+            if obj.xdim == 3
                 fq = interpn(obj.gx, obj.gy, obj.gz, f, X(:,1), X(:,2), X(:,3), method);
             else
                 fq = interpn(obj.gx, obj.gy, f, X(:,1), X(:,2), method);
@@ -247,7 +270,7 @@ classdef GliomaSolver< dynamicprops
 
             f = @(x) reshape(x,[],1);
 
-            if obj.dim == 3
+            if obj.xdim == 3
                 xg = f(obj.gx(:,1,1));
                 yg = f(obj.gy(1,:,1));
                 zg = f(obj.gz(1,1,:));
@@ -298,7 +321,7 @@ classdef GliomaSolver< dynamicprops
                 ts = length(obj.tall);
             end
             
-            assert(obj.dim == 2,'only in 2d');
+            assert(obj.xdim == 2,'only in 2d');
             
             xq = [];
             phiq = [];
@@ -323,7 +346,7 @@ classdef GliomaSolver< dynamicprops
        
         function [uq, xq, tq, Pwmq, Pgmq, phiq] = genGridDataUall(obj,mskin)
             % chose all time data from grid
-            assert(obj.dim == 2,'only in 2d');
+            assert(obj.xdim == 2,'only in 2d');
             
             xgrid = [obj.gx(mskin) obj.gy(mskin)];
             
@@ -412,7 +435,7 @@ classdef GliomaSolver< dynamicprops
             DW = obj.DW;
             RHO = obj.RHO;
             
-            fp = sprintf('dat_%s_grid.mat',obj.name);
+            fp = sprintf('dat_%s_grid%s.mat',obj.name,tag);
             fp = fullfile(datdir, fp);
             save(fp,'xdat','udat','phidat',...
                 'xtest','utest','phitest',...
@@ -451,7 +474,7 @@ classdef GliomaSolver< dynamicprops
             % use data from finite difference grid
             if p.Results.usegrid == true
                 [~, ~, mskin] = obj.getrmax();
-                assert(obj.dim == 2,'only in 2d');
+                assert(obj.xdim == 2,'only in 2d');
                 sz = size(obj.Pwm); % even when Pwm is 2d, 3rd dim is 1
                 [gx3d,gy3d,gt3d] = ndgrid(1:sz(1),1:sz(2),obj.tall); 
                 allmskin = repmat(mskin,1,1,length(obj.tall));
@@ -482,7 +505,7 @@ classdef GliomaSolver< dynamicprops
             else
                 % use data from interpolation
                 rng(seed,'twister');
-                xq = sampleDenseBall(n, obj.dim, obj.L, obj.x0,isuniform); % sample coord, unit
+                xq = sampleDenseBall(n, obj.xdim, obj.L, obj.x0,isuniform); % sample coord, unit
                 tq = rand(n,1)*obj.tend; % sample t, unit
 
                 Pwmq = obj.interpf(obj.Pwm, xq, method);
