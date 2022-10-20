@@ -203,6 +203,7 @@ classdef GliomaSolver< dynamicprops
             ax1 = axes;
             
             h1 = imagesc(ax1,dat);
+
             cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
         end
@@ -210,7 +211,7 @@ classdef GliomaSolver< dynamicprops
         function [fig,ax1, ax2, hLink] = twoimagesc(obj, bgdat, fgdat)
             
             [fig,ax1] = plotbkgd(obj, bgdat);
-            
+            ax1.Position(3) = ax1.Position(3)-0.1;
             ax2 = axes;
             h2 = imagesc(fgdat);
             cmp = colormap(ax2,'parula');
@@ -288,12 +289,15 @@ classdef GliomaSolver< dynamicprops
             % 
             bgdat = obj.getSlice(bgname);
             [fig,ax1] = plotbkgd(obj, bgdat);
+            ax1.Position(3) = ax1.Position(3)-0.1;
             ax2 = axes;
             scatter(ax2,X(:,2),X(:,1),varargin{:});
             set(ax2,'YDir','reverse')
             set(ax2,'color','none','visible','off');
             cb2 = colorbar(ax2,'Location','eastoutside');
+            
             hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
+            
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
@@ -413,8 +417,6 @@ classdef GliomaSolver< dynamicprops
                 [uq, xr, Pwmq, Pgmq, phiq] = mapfun(f, uq, xr, Pwmq, Pgmq, phiq);
             end
 
-
-
             % test data
             xtest = xr;
             utest = uq;
@@ -440,7 +442,7 @@ classdef GliomaSolver< dynamicprops
             save(fp,'xdat','udat','phidat',...
                 'xtest','utest','phitest',...
                 'Pwmq', 'Pgmq', 'phiq','xr', ...
-                'L', 'T', 'DW', 'RHO');
+                'L', 'T', 'DW', 'RHO','seed');
             fprintf('save training dat to %s\n', fp );
         end
 
@@ -452,10 +454,8 @@ classdef GliomaSolver< dynamicprops
             p.KeepUnmatched = true;
             addParameter(p, 'noiseon', 'uqe'); %none = no noise, uq noise after interp, u interp after noise
             addParameter(p, 'method', 'linear');
-            addParameter(p, 'usegrid', false); % use data from finite difference grid
             addParameter(p, 'isuniform', false);
             addParameter(p, 'seed', 1);
-            addParameter(p, 'scaletend', false);
             addParameter(p, 'tag', '');
             addParameter(p, 'datdir', './'); % which directory to save
             parse(p, varargin{:});
@@ -470,58 +470,23 @@ classdef GliomaSolver< dynamicprops
             if ~isempty(p.Results.tag)
                 tag = "_"+p.Results.tag;
             end
+
+            % use data from interpolation
+            rng(seed,'twister');
+            xq = sampleDenseBall(n, obj.xdim, obj.L, obj.x0,isuniform); % sample coord, unit
+            tq = rand(n,1)*obj.tend; % sample t, unit
+
+            Pwmq = obj.interpf(obj.Pwm, xq, method);
+            Pgmq = obj.interpf(obj.Pgm, xq, method);
+            phiq = obj.interpf(obj.phi, xq, method);
             
-            % use data from finite difference grid
-            if p.Results.usegrid == true
-                [~, ~, mskin] = obj.getrmax();
-                assert(obj.xdim == 2,'only in 2d');
-                sz = size(obj.Pwm); % even when Pwm is 2d, 3rd dim is 1
-                [gx3d,gy3d,gt3d] = ndgrid(1:sz(1),1:sz(2),obj.tall); 
-                allmskin = repmat(mskin,1,1,length(obj.tall));
-                
-%                 xq = [obj.gx(mskin) obj.gy(mskin)];
-%                 assert(size(g.tall,1)==1)); % assume g.tall row vector
-%                 tmp = repmat(g.tall,length(xq),1);
-%                 tq = tmp(:);
-                
-                % residual points, 
-                % for residual, need x, t, Pwm, Pgm, phi, u
-                xq = [gx3d(allmskin) gy3d(allmskin)];
-                tq = gt3d(allmskin);
-
-                xqe = [obj.gx(mskin) obj.gy(mskin)];
-                
-                Pwmq = obj.Pwm(mskin);
-                Pgmq = obj.Pgm(mskin);
-                phiq = obj.phi(mskin);
-
-                % u at xq, for testing
-                uq = obj.uall(allmskin);
-
-                % final time solution, uqe = u(t_end, xq)
-                uqe = obj.uend(mskin);
-                tqe = ones(size(uqe))*obj.tend; % all final time
+            uq = obj.interpu(tq, xq, method); % u(tq, xq)
             
-            else
-                % use data from interpolation
-                rng(seed,'twister');
-                xq = sampleDenseBall(n, obj.xdim, obj.L, obj.x0,isuniform); % sample coord, unit
-                tq = rand(n,1)*obj.tend; % sample t, unit
+            xqe = xq;
+            tqe = ones(n,1)*obj.tend; % all final time
 
-                Pwmq = obj.interpf(obj.Pwm, xq, method);
-                Pgmq = obj.interpf(obj.Pgm, xq, method);
-                phiq = obj.interpf(obj.phi, xq, method);
-                
-                uq = obj.interpu(tq, xq, method); % u(tq, xq)
-                
-                xqe = xq;
-                tqe = ones(n,1)*obj.tend; % all final time
+            uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
 
-                uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
-            end
-            % sample collocation points
-            
-            
             if strcmpi(p.Results.noiseon, 'uqe')
                 % interp then add noise
                 fprintf('interp then add noise\n');
@@ -535,36 +500,28 @@ classdef GliomaSolver< dynamicprops
                error('unknown option') 
             end
 
-            % center and scale
-            fcs = @(x) (x - obj.x0) / obj.L;
-            
-            if p.Results.scaletend == true
-                fprintf('scale time by tend\n')
-                ST = obj.tend;
-            else
-                fprintf('scale time by T\n')
-                ST = obj.T;
-            end
             % single point data 
-            xdat = [tqe/ST fcs(xqe)];
+            xdat = obj.transformDat(xqe, tqe);
             udat = nzuqe;
+            phidat = phiq;
 
             % testing data, all time
-            xtest = [tq/ST fcs(xq)];
+            xr = obj.transformDat(xq, tq);
+            xtest = xr;
             utest = uq;
+            phitest = phiq;
 
             L = obj.L;
             T = obj.T;
             DW = obj.DW;
             RHO = obj.RHO;
-
-            argsample = varargin;
             
             fp = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
             fp = fullfile(datdir, fp);
-            save(fp,'xdat','udat','phidat','xtest','utest','phitest',...
+            save(fp,'xdat','udat','phidat',...
+            'xtest','utest','phitest',...
                 'Pwmq', 'Pgmq', 'phiq','xr', ...
-                'L', 'T', 'DW', 'RHO','n','argsample','seed','uqe','xq');
+                'L', 'T', 'DW', 'RHO','seed');
             fprintf('save training dat to %s\n', fp );
         end
 
