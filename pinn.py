@@ -492,8 +492,11 @@ class PINNSolver():
         '''
         savedat = {}
         upredxr = self.model(self.xr)
+        residual = self.pde(self.xr, self.model)
+
         savedat['xr'] = t2n(self.xr)
         savedat['upredxr'] = t2n(upredxr)
+        savedat['res'] = t2n(residual)
         
         if self.xdat is not None:
             upredxdat = self.model(self.xdat)

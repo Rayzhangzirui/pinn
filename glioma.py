@@ -51,7 +51,11 @@ class DataSet:
                 self.xdat = matdat.get('xdat')[0:ndat,:]
                 self.udat = matdat.get('udat')[0:ndat,:] 
                 self.phidat = matdat.get('phidat')[0:ndat,:]
-            
+        
+        if opts.get('addnoise') is not None:
+            print('add noise to udat')
+            self.udat = self.udat + np.random.normal(scale = opts.get('addnoise'), size = self.udat.shape)
+
         # residual pts
         self.xr =  matdat.get('xr')[0:nres,:]
         self.phi =  matdat.get('phiq')[0:nres,:]
@@ -89,8 +93,10 @@ class Gmodel:
         self.info = {}
 
         def ic(x):
-            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]),1,keepdims=True)
-            return 0.1*tf.exp(-0.1*r2*(self.dataset.L**2))
+            L = self.dataset.L
+            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
+            return 0.1*tf.exp(-0.1*r2)
+            # return tf.exp(-0.01*r2**2)
         
         if opts.get('ictransofrm') == False:
             # without output transform, ic as data loss
@@ -104,6 +110,7 @@ class Gmodel:
 
 
         if self.xdim == 2:
+            @tf.function
             def pde(x_r, f):
                 t = x_r[:,0:1]
                 x = x_r[:,1:2]
@@ -122,6 +129,7 @@ class Gmodel:
                 res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
                 return res
         else:
+            @tf.function
             def pde(x_r, f):
                  # t,x,y normalized here
                 t = x_r[:,0:1]
