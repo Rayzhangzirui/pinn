@@ -190,8 +190,12 @@ classdef GliomaSolver< dynamicprops
         
             if datdim==4
                 f = dat(:,:,vz,tk);
-            elseif datdim == 3
-                f = dat(:,:,vz);
+            elseif datdim == 3 
+                if obj.xdim == 3
+                    f = dat(:,:,vz);
+                else
+                    f = dat(:,:,tk);
+                end
             else
                 f = dat;
             end
@@ -230,7 +234,7 @@ classdef GliomaSolver< dynamicprops
         end
 
         function [fig, ax1, ax2] = plotuend(obj,varargin)
-            uend = obj.getSlice('uend',varargin{:});
+            uend = obj.getSlice('uall',varargin{:});
             [fig, ax1, ax2]  = obj.imagesc('df', uend, varargin{:});
         end
 
@@ -248,7 +252,7 @@ classdef GliomaSolver< dynamicprops
             
             distix = sqrt((obj.gx-obj.ix(1)).^2+ (obj.gy-obj.ix(2)).^2+(obj.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
-            rmax  = maxdis+3;
+            rmax  = maxdis;
             obj.rmax = rmax;
 
             lsf = distix - obj.rmax; % level set function
@@ -455,6 +459,10 @@ classdef GliomaSolver< dynamicprops
             addParameter(p, 'noiseon', 'uqe'); %none = no noise, uq noise after interp, u interp after noise
             addParameter(p, 'method', 'linear');
             addParameter(p, 'isuniform', false);
+            addParameter(p, 'finalxr', false); % final time as res pts
+            addParameter(p, 'wsample', 0); % weight downsample
+            addParameter(p, 'wmethod', 'u'); % how to weight sample
+            addParameter(p, 'tweight', false); % weighted by time
             addParameter(p, 'seed', 1);
             addParameter(p, 'tag', '');
             addParameter(p, 'datdir', './'); % which directory to save
@@ -473,19 +481,49 @@ classdef GliomaSolver< dynamicprops
 
             % use data from interpolation
             rng(seed,'twister');
-            xq = sampleDenseBall(n, obj.xdim, obj.L, obj.x0,isuniform); % sample coord, unit
+            % sample coord, with unit, radius is rmax,
+            xq = sampleDenseBall(n, obj.xdim, obj.rmax, obj.x0,isuniform); 
             tq = rand(n,1)*obj.tend; % sample t, unit
+
+            if p.Results.tweight == true
+                fprintf('weighted t sample %g\n',n);
+                tq = datasample(linspace(0,obj.tend,2*n)', n, 'Replace',false, 'Weights', linspace(0,1,2*n));
+            end
 
             Pwmq = obj.interpf(obj.Pwm, xq, method);
             Pgmq = obj.interpf(obj.Pgm, xq, method);
             phiq = obj.interpf(obj.phi, xq, method);
-            
             uq = obj.interpu(tq, xq, method); % u(tq, xq)
             
+            % final time data
             xqe = xq;
             tqe = ones(n,1)*obj.tend; % all final time
-
             uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
+
+            % down sample
+            wn = p.Results.wsample;
+            if wn>0
+                fprintf('weighted subsuample %g\n',wn);
+                if strcmp(p.Results.wmethod,'u')
+                    fprintf('weighted by u\n');
+                    uw = uq;
+                    uwe = uqe;
+                else
+                    fprintf('weighted by u(1-u)\n');
+                    uw = uq.*(1-uq);
+                    uwe = uqe.*(1-uqe);
+                end
+                
+                idx = datasample(1:length(uq), wn, 'Replace',false, 'Weights', uw);
+                f = @(x) x(idx,:);
+                [uq, tq, xq, Pwmq, Pgmq, phiq] = mapfun(f, uq, tq, xq, Pwmq, Pgmq, phiq);
+                
+                idx_end = datasample(1:length(uqe), wn, 'Replace',false, 'Weights', uwe);
+                f = @(x) x(idx_end,:);
+                [uqe, xqe, tqe] = mapfun(f, uqe, xqe, tqe);
+            end
+
+
 
             if strcmpi(p.Results.noiseon, 'uqe')
                 % interp then add noise
@@ -510,6 +548,14 @@ classdef GliomaSolver< dynamicprops
             xtest = xr;
             utest = uq;
             phitest = phiq;
+
+            if p.Results.finalxr == true
+                fprintf('eval res also at xdat')
+                xr = [xr; xdat];
+                Pwmq = [Pwmq; Pwmq];
+                Pgmq = [Pgmq; Pgmq];
+                phiq = [phiq; phiq];
+            end
 
             L = obj.L;
             T = obj.T;
@@ -547,9 +593,6 @@ classdef GliomaSolver< dynamicprops
             legend(p,'Location','best');
             
         end
-
-
-        
     end
 end
 

@@ -1,5 +1,5 @@
-function [sol,Rarray] = polar_udat(Tarray,xdim)
-% used to generate data for polar test case?
+function [sol,Rarray] = polar_udat(Tarray,icfun,xdim)
+% used to generate data for polar test case
 T = 300;
 d = 0.13;
 rho = 0.025;

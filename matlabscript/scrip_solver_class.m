@@ -2,21 +2,21 @@
 addpath /Users/Ray/project/glioma/pinn/matlabscript
 startup
 
-DIM = 3;
+DIM = 2;
 zslice = 99; % slice for visualization
 
-tend = 150; %day
+tend = 200; %day
 Dw = 0.13; % mm^2/day
-rho= 0.05; %0.025/day
-x0 = [164 116,99];
+rho= 0.025; %0.025/day
+x0 = [164 116];
 
 g = GliomaSolver(DIM, Dw, rho, x0, tend, zslice)
 %%
 g.readmri(DIR_MRI)
-g.solve
+g.solve(true)
 g.scale(0.1, 0.02, g.rmax)
 
-%%
+
 g.plotuend
 
 %%

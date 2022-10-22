@@ -136,6 +136,24 @@ classdef PostData<handle
             export_fig(fpath,'-m3');
        end
 
+       function scatter(obj)
+           t = tiledlayout(1,2,'TileSpacing','compact');
+            
+           nexttile
+           xdat = obj.upred{1}.xdat;
+           udat = obj.upred{1}.udat;
+           scatter3(xdat(:,2),xdat(:,3),xdat(:,1),6,udat)
+           title('x_{dat}')
+
+           nexttile
+
+           xdat = obj.upred{1}.xr;
+           utest = obj.upred{1}.utest;
+           scatter3(xdat(:,2),xdat(:,3),xdat(:,1),6,utest)
+           title('x_r')
+
+       end
+
 
    end
 end

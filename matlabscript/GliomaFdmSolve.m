@@ -1,4 +1,4 @@
-function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, DIM)
+function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, xdim)
     
     h = 1; % spacial resolution, mm (caption figure 1)
     epsilon = 3; % width of diffused domain
@@ -16,7 +16,7 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
     fdx = [-1 0 1]/(2*h);
     fdy = fdx';
     fdz = reshape(fdx,1,1,3);
-    operator = @(x,f) imfilter(x,f,'circular','same'); % periodic bc
+    operator = @(x,f) imfilter(x,f,'circular','same'); % periodic bc, so that in 2d flap is actually [1,-4, 1]
 
     Dx = @(x) operator(x,fdx);
     Dy = @(x) operator(x,fdy);
@@ -53,7 +53,8 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
     
    %% Solve reaction diffusion 
     r2 = h.^2*((gx-ix(1)).^2+(gy-ix(2)).^2+(gz-ix(3)).^2); % distance squared
-    u0 = 0.1*exp(-0.1*r2); 
+    u0 = 0.1*exp(-0.1*r2);
+%     u0 = exp(-0.01*r2.^2);
 
     dt0 = 0.99*h^2/(6*max(D(:))); % CFL condition, timestep
     % Euler's method in time
@@ -86,5 +87,5 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
     end
     
     uend = u;
-    uall = cat(DIM+1,uall{:});
+    uall = cat(xdim+1,uall{:});
 end
