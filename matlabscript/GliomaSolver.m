@@ -1,4 +1,4 @@
-classdef GliomaSolver< dynamicprops
+classdef GliomaSolver< handle
     % model to solve glioma
     % if 2d model, all the properties are only slices
     % 
@@ -28,9 +28,7 @@ classdef GliomaSolver< dynamicprops
         gz
 
         % anatomy data
-        Pwm
-        Pgm
-        Pcsf    
+        atlas 
         
         % solution
         phi
@@ -79,47 +77,12 @@ classdef GliomaSolver< dynamicprops
             
         end
 
-
-        function spheremri(obj)
-            % mri but with 
-            assert(obj.xdim == 2);
-            n = 201;
-            R = 75;
-            mid = ceil(n/2);
-
-            sz = [n n 1];
-            [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
-
-            distix = sqrt((obj.gx-mid).^2+ (obj.gy-mid).^2);
-            obj.Pwm = double(distix<R)
-            obj.Pgm = zeros(sz);
-            obj.Pcsf = zeros(sz);
-
-            obj.df = obj.Pwm*obj.dw + obj.Pgm*obj.dg; % diffusion coefficients
-        end
-        
-        function readmri(obj,fdir)
+        function readmri(obj,varargin)
             % read mri data, fdir = dir to atlas
-            gm = MRIread( [fdir 'GM.nii']);
-            wm = MRIread( [fdir 'WM.nii']);
-            csf = MRIread( [fdir 'CSF.nii']);
-            
-            obj.Pwm = wm.vol;
-            obj.Pgm = gm.vol;
-            obj.Pcsf = csf.vol;
-
-            if obj.xdim == 2
-            %%% for 2d case, slice 3d MRI, then set zslice = 1, the third dimension is
-            %%% just 1. Filter with periodic padding make all z-derivative 0. So same as 2D
-                obj.Pwm  = obj.Pwm(:,:,obj.zslice);
-                obj.Pgm  = obj.Pgm(:,:,obj.zslice);
-                obj.Pcsf = obj.Pcsf(:,:,obj.zslice);
-            end
-
-            obj.df = obj.Pwm*obj.dw + obj.Pgm*obj.dg; % diffusion coefficients
-            
+%             obj.atlas = Atlas(varargin{:});
+            obj.atlas = Atlas(varargin{:});
             sz = [1 1 1];
-            sz(1:obj.xdim) = size(obj.Pwm); % even when Pwm is 2d, 3rd dim is 1
+            sz(1:obj.xdim) = size(obj.atlas.Pwm); % even when Pwm is 2d, 3rd dim is 1
             [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
         end% 
         
@@ -168,7 +131,7 @@ classdef GliomaSolver< dynamicprops
                 obj.loadsol(fp);
             else
                fprintf('solve and save pde\n');
-               [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.Pwm, obj.Pgm, obj.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
+               [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
                obj.savesol(fp); 
             end
 
@@ -201,47 +164,15 @@ classdef GliomaSolver< dynamicprops
             end
         end
 
-        function [fig,ax1] = plotbkgd(obj, dat)
-            
-            fig = figure;
-            ax1 = axes;
-            
-            h1 = imagesc(ax1,dat);
-
-            cmap = colormap(ax1,gray(20));
-            cb1 = colorbar(ax1,'Location','westoutside');
-        end
-        
-        function [fig,ax1, ax2, hLink] = twoimagesc(obj, bgdat, fgdat)
-            
-            [fig,ax1] = plotbkgd(obj, bgdat);
-            ax1.Position(3) = ax1.Position(3)-0.1;
-            ax2 = axes;
-            h2 = imagesc(fgdat);
-            cmp = colormap(ax2,'parula');
-            h2.AlphaData = double(h2.CData>1e-2); % threshold for transparency
-            maxcdata = max(h2.CData(:));
-            clim(ax2,[0,maxcdata]);
-            set(ax2,'color','none','visible','on')
-            cb2 = colorbar(ax2,'Location','eastoutside')
-            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
-            hLink.Targets(1).DataAspectRatio = [1 1 1];
-        end
-
-        function [fig, ax1, ax2] = imagesc(obj, bgname, fgdat, varargin)
-            bgdat = obj.getSlice(bgname, varargin{:});
-            [fig, ax1, ax2]  = obj.twoimagesc(bgdat, fgdat);
-        end
-
         function [fig, ax1, ax2] = plotuend(obj,varargin)
-            uend = obj.getSlice('uall',varargin{:});
-            [fig, ax1, ax2]  = obj.imagesc('df', uend, varargin{:});
+            uend = slice2d(obj.uend,varargin{:});
+            [ax1, ax2]  = obj.atlas.imagesc2('df', uend, varargin{:});
         end
 
         function [fig, ax1, ax2] = plotphiuend(obj,varargin)
-            uend = obj.getSlice('uend',varargin{:});
-            phi = obj.getSlice('phi',varargin{:});
-            [fig, ax1, ax2]  = obj.imagesc('df', uend.*phi, varargin{:});
+            uend = slice2d(obj.uend,varargin{:});
+            phi = slice2d(obj.phi,varargin{:});
+            [ax1, ax2]  = obj.atlas.imagesc2('df', uend.*phi, varargin{:});
         end
 
         function [rmax, idxin, mskin] = getrmax(obj)
@@ -285,24 +216,6 @@ classdef GliomaSolver< dynamicprops
                 yg = f(obj.gy(1,:));
                 fq = interpn(xg, yg, obj.tall, obj.uall, X(:,1), X(:,2), t, method);
             end 
-        end
-
-        function [fig,ax1,ax2,hLink] = scatter(obj,bgname,X,varargin)
-            % backgound imagesc is plotted with YDir reversed
-            % grid is ndgrid, so x coor is vertical, y coord is horizontal
-            % 
-            bgdat = obj.getSlice(bgname);
-            [fig,ax1] = plotbkgd(obj, bgdat);
-            ax1.Position(3) = ax1.Position(3)-0.1;
-            ax2 = axes;
-            scatter(ax2,X(:,2),X(:,1),varargin{:});
-            set(ax2,'YDir','reverse')
-            set(ax2,'color','none','visible','off');
-            cb2 = colorbar(ax2,'Location','eastoutside');
-            
-            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
-            
-            hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
         function scale(obj, dwc, rhoc, lc)
@@ -368,9 +281,9 @@ classdef GliomaSolver< dynamicprops
             
             xq = repeat(xgrid);
 
-            Pwmq = repeat(obj.Pwm(mskin));
-            Pgmq = repeat(obj.Pgm(mskin));
-            phiq = repeat(obj.phi(mskin));
+            Pwmq = repeat(obj.atlas.Pwm(mskin));
+            Pgmq = repeat(obj.atlas.Pgm(mskin));
+            phiq = repeat(obj.atlas.phi(mskin));
 
             u = zeros(length(phiq),1);
             uq = [];
@@ -487,8 +400,8 @@ classdef GliomaSolver< dynamicprops
                 tq = datasample(linspace(0,obj.tend,2*n)', n, 'Replace',false, 'Weights', linspace(0,1,2*n));
             end
 
-            Pwmq = obj.interpf(obj.Pwm, xq, method);
-            Pgmq = obj.interpf(obj.Pgm, xq, method);
+            Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
+            Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
             phiq = obj.interpf(obj.phi, xq, method);
             uq = obj.interpu(tq, xq, method); % u(tq, xq)
             

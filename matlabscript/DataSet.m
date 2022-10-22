@@ -9,8 +9,10 @@ classdef DataSet < dynamicprops
         end
 
         function add(obj,prop,dat)
-            % add by name value pair
-            obj.addprop(prop);
+            % add by name value pair, modify if already exist
+            if ~isprop(obj, prop)
+                obj.addprop(prop);
+            end
             obj.(prop) = dat;
         end
 
