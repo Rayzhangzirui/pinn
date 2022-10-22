@@ -157,7 +157,7 @@ classdef GliomaSolver< dynamicprops
         end
 
         function solve(obj,redo)
-            
+            % solve pde, 
             if nargin<2
                 redo = false;
             end
@@ -436,28 +436,24 @@ classdef GliomaSolver< dynamicprops
             xdat = obj.transformDat(xdat, tdat);
 
 
-            L = obj.L;
-            T = obj.T;
-            DW = obj.DW;
-            RHO = obj.RHO;
-            
-            fp = sprintf('dat_%s_grid%s.mat',obj.name,tag);
-            fp = fullfile(datdir, fp);
-            save(fp,'xdat','udat','phidat',...
-                'xtest','utest','phitest',...
-                'Pwmq', 'Pgmq', 'phiq','xr', ...
-                'L', 'T', 'DW', 'RHO','seed');
-            fprintf('save training dat to %s\n', fp );
+            dataset = DataSet(xdat,udat,phidat,...
+            xtest,utest,phitest,...
+            Pwmq, Pgmq, phiq,xr, seed);
+            dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
+            'dw','dg','rho','x0','ix','xdim','tend');
+            if p.Results.savedat
+                dataset.save(fp);
+                fprintf('save training dat to %s\n', fp );
+            end
         end
 
-      
-
-        function fp = ReadyDat(obj, n, varargin)
+        function [fp,dataset] = ReadyDat(obj, n, varargin)
             % prepare data for training
             p = inputParser;
             p.KeepUnmatched = true;
             addParameter(p, 'noiseon', 'uqe'); %none = no noise, uq noise after interp, u interp after noise
             addParameter(p, 'method', 'linear');
+            addParameter(p, 'savedat', true);
             addParameter(p, 'isuniform', false);
             addParameter(p, 'finalxr', false); % final time as res pts
             addParameter(p, 'wsample', 0); % weight downsample
@@ -475,8 +471,9 @@ classdef GliomaSolver< dynamicprops
             [status,msg,msgid] = mkdir(datdir);
             assert(status);
             method = p.Results.method;
-            if ~isempty(p.Results.tag)
-                tag = "_"+p.Results.tag;
+            tag = p.Results.tag;
+            if ~isempty(tag)
+                tag = "_"+tag;
             end
 
             % use data from interpolation
@@ -556,19 +553,19 @@ classdef GliomaSolver< dynamicprops
                 Pgmq = [Pgmq; Pgmq];
                 phiq = [phiq; phiq];
             end
-
-            L = obj.L;
-            T = obj.T;
-            DW = obj.DW;
-            RHO = obj.RHO;
             
             fp = sprintf('dat_%s_n%d%s.mat',obj.name,n,tag);
             fp = fullfile(datdir, fp);
-            save(fp,'xdat','udat','phidat',...
-            'xtest','utest','phitest',...
-                'Pwmq', 'Pgmq', 'phiq','xr', ...
-                'L', 'T', 'DW', 'RHO','seed');
-            fprintf('save training dat to %s\n', fp );
+
+            dataset = DataSet(xdat,udat,phidat,...
+                    xtest,utest,phitest,...
+                    Pwmq, Pgmq, phiq,xr, seed);
+            dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
+            'dw','dg','rho','x0','ix','xdim','tend');
+            if p.Results.savedat
+                dataset.save(fp);
+                fprintf('save training dat to %s\n', fp );
+            end
         end
 
         
