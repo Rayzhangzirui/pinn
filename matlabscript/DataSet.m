@@ -16,8 +16,9 @@ classdef DataSet < dynamicprops
 
         function addvar(obj,varargin)
             % add by variable
-            for i = 1:nargin
-                obj.add(inputname(i),varargin{i});
+            % inputname(1) return object name
+            for i = 2:length(varargin)+1
+                obj.add(inputname(i),varargin{i-1});
             end
         end
 
