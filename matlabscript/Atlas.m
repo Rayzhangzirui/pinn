@@ -63,6 +63,7 @@ classdef Atlas<DataSet
         end
         
         function [ax1, ax2] = imagesc2(obj, bgname, fgdat, varargin)
+            figure;
             bgdat = slice2d(obj.(bgname), varargin{:});
             fgdat = slice2d(fgdat, varargin{:});
             
@@ -84,9 +85,10 @@ classdef Atlas<DataSet
 
 
         function [ax1,ax2] = scatter(obj,bgname,X,varargin)
+            figure;
             % backgound imagesc is plotted with YDir reversed
             % grid is ndgrid, so x coor is vertical, y coord is horizontal
-            bgdat = slice2d(obj.(bgname), varargin{:});
+            bgdat = slice2d(obj.(bgname));
             [ax1,~] = plotbkgd(obj, bgdat);
             ax1.Position(3) = ax1.Position(3)-0.1;
             ax2 = axes;

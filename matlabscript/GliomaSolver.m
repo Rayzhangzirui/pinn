@@ -78,9 +78,12 @@ classdef GliomaSolver< handle
         end
 
         function readmri(obj,varargin)
-            % read mri data, fdir = dir to atlas
-%             obj.atlas = Atlas(varargin{:});
-            obj.atlas = Atlas(varargin{:});
+            % read mri data, fdir = dir to atla
+            if isa(varargin{1},'Atlas')
+                obj.atlas = varargin{1};
+            else
+                obj.atlas = Atlas('dw', obj.dw, 'zslice',obj.zslice, varargin{:});
+            end
             sz = [1 1 1];
             sz(1:obj.xdim) = size(obj.atlas.Pwm); % even when Pwm is 2d, 3rd dim is 1
             [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
@@ -119,20 +122,23 @@ classdef GliomaSolver< handle
             es = isfile(fp);
         end
 
-        function solve(obj,redo)
+        function solve(obj,varargin)
             % solve pde, 
-            if nargin<2
-                redo = false;
-            end
+            p.redo = false;
+            p.savesol = true;
+            p = parseargs(p, varargin{:});
+
 
             [fp,es] = obj.solpath;
-            if es && redo == false
+            if es && p.redo == false
                 fprintf('load existing solution\n');
                 obj.loadsol(fp);
             else
-               fprintf('solve and save pde\n');
-               [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
-               obj.savesol(fp); 
+                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
+                if p.savesol
+                    fprintf('save pde solution\n');
+                    obj.savesol(fp); 
+                end
             end
 
             obj.getrmax();
@@ -170,6 +176,7 @@ classdef GliomaSolver< handle
         end
 
         function [fig, ax1, ax2] = plotphiuend(obj,varargin)
+            fig = figure;
             uend = slice2d(obj.uend,varargin{:});
             phi = slice2d(obj.phi,varargin{:});
             [ax1, ax2]  = obj.atlas.imagesc2('df', uend.*phi, varargin{:});
@@ -177,13 +184,15 @@ classdef GliomaSolver< handle
 
         function [rmax, idxin, mskin] = getrmax(obj)
             % get radius of solution
-            tk = length(obj.tall); 
+            padding = 1; % padding ot max distance
+            threshold = 0.01; % threshold for tumor region
 
-            idx = find(obj.uend.*obj.phi>0.01); % index of u value greater than threshold
+            tk = length(obj.tall); 
+            idx = find(obj.uend.*obj.phi>threshold); % index of u value greater than threshold
             
             distix = sqrt((obj.gx-obj.ix(1)).^2+ (obj.gy-obj.ix(2)).^2+(obj.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
-            rmax  = maxdis;
+            rmax  = maxdis + padding;
             obj.rmax = rmax;
 
             lsf = distix - obj.rmax; % level set function
@@ -353,14 +362,45 @@ classdef GliomaSolver< handle
             xtest,utest,phitest,...
             Pwmq, Pgmq, phiq,xr, seed);
             dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
-            'dw','dg','rho','x0','ix','xdim','tend');
+            'dw','dg','rho','x0','ix','xdim','tend','zslice');
             if p.Results.savedat
                 dataset.save(fp);
                 fprintf('save training dat to %s\n', fp );
             end
         end
 
-        function [fp,dataset] = ReadyDat(obj, n, varargin)
+
+        function [xq] = xsample(obj,n, varargin)
+            p.isuniform = false;
+            p.wgrad = false;
+            p.nwratio = 0.5;
+            p = parseargs(p,varargin{:});
+
+            n_basic = n * (1-p.nwratio);
+            n_enhance = n * (p.nwratio);
+
+            xq = sampleDenseBall(n_basic, obj.xdim, obj.rmax, obj.x0, p.isuniform); 
+
+            if p.wgrad == true
+                ntmp = n_enhance*10;
+                fprintf('weighted sample by graddf %g\n', n_enhance);
+                
+                xtmp = sampleDenseBall(ntmp, obj.xdim, obj.rmax, obj.x0, true); % uniform temporary 
+                [dxdf, dydf] = gradient(obj.atlas.df.*obj.phi);
+                normgrad = dxdf.^2 + dydf.^2;
+                normgrad = imgaussfilt(normgrad, 1,'FilterDomain','spatial');
+                normgradq = obj.interpf(normgrad, xtmp, 'linear');
+
+                idx = datasample(1:ntmp, n_enhance, 'Replace',false, 'Weights', normgradq);
+                f = @(x) x(idx,:);
+                [xtmp] = mapfun(f, xtmp);
+
+                xq = [xq; xtmp];
+                xq = xq(randperm(size(xq, 1)), :);
+            end
+        end
+
+        function [fp,dataset] = ReadyDat(obj, n, argsample, varargin)
             % prepare data for training
             p = inputParser;
             p.KeepUnmatched = true;
@@ -392,7 +432,7 @@ classdef GliomaSolver< handle
             % use data from interpolation
             rng(seed,'twister');
             % sample coord, with unit, radius is rmax,
-            xq = sampleDenseBall(n, obj.xdim, obj.rmax, obj.x0,isuniform); 
+            xq = xsample(obj,n, argsample{:});
             tq = rand(n,1)*obj.tend; % sample t, unit
 
             if p.Results.tweight == true
@@ -412,26 +452,33 @@ classdef GliomaSolver< handle
 
             % down sample
             wn = p.Results.wsample;
-            if wn>0
+            if wn>0 && startsWith(p.Results.wmethod,'u');
                 fprintf('weighted subsuample %g\n',wn);
                 if strcmp(p.Results.wmethod,'u')
                     fprintf('weighted by u\n');
                     uw = uq;
                     uwe = uqe;
-                else
+                elseif strcmp(p.Results.wmethod,'u2')
                     fprintf('weighted by u(1-u)\n');
                     uw = uq.*(1-uq);
                     uwe = uqe.*(1-uqe);
+                else
+                    error('unknow method');
                 end
                 
+                % 
                 idx = datasample(1:length(uq), wn, 'Replace',false, 'Weights', uw);
                 f = @(x) x(idx,:);
                 [uq, tq, xq, Pwmq, Pgmq, phiq] = mapfun(f, uq, tq, xq, Pwmq, Pgmq, phiq);
+                
                 
                 idx_end = datasample(1:length(uqe), wn, 'Replace',false, 'Weights', uwe);
                 f = @(x) x(idx_end,:);
                 [uqe, xqe, tqe] = mapfun(f, uqe, xqe, tqe);
             end
+
+
+            
 
 
 
@@ -474,7 +521,7 @@ classdef GliomaSolver< handle
                     xtest,utest,phitest,...
                     Pwmq, Pgmq, phiq,xr, seed);
             dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
-            'dw','dg','rho','x0','ix','xdim','tend');
+            'dw','dg','rho','x0','ix','xdim','tend','zslice');
             if p.Results.savedat
                 dataset.save(fp);
                 fprintf('save training dat to %s\n', fp );
@@ -492,15 +539,14 @@ classdef GliomaSolver< handle
             upred = upredall(:,i);
         end
 
-        function p = plotline(obj)
+        function plotline(obj, dat,name)
             % 1d plot of data, mid section
-            u = obj.uend.*obj.phi;
-            [~,mid] = getBox(u, 0.01, 0);
             
-            y = u(:,mid(2));
+%             [~,mid] = getBox(dat, 0.01, 0);
+%             y = dat(:,obj.x0(2));
+            y = dat(obj.x0(1),:);
             x = 1:length(y);
-            p = plot(x,y,'k','DisplayName','u');
-            legend(p,'Location','best');
+            plot(x,y,'DisplayName',name);
             
         end
     end

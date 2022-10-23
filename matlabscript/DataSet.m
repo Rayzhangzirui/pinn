@@ -35,7 +35,7 @@ classdef DataSet < dynamicprops
             props = properties(obj);
             for i = 1:length(props)
                 pname = props{i};
-                fprintf('%s\n',pname)
+                fprintf('%s\n',pname);
             end
         end
 
@@ -53,16 +53,24 @@ classdef DataSet < dynamicprops
         function copyprop(obj, a, varargin)
             for i = 1:length(varargin)
                 pname = varargin{i};
-                val = a.(pname)
-                obj.add(pname, val)
+                val = a.(pname);
+                obj.add(pname, val);
             end
         end
 
         function load(obj, matfile)
             dat = load(matfile);
-            fields = fieldnames(dat)
+            fields = fieldnames(dat);
             for i=1:numel(fields)
-                obj.add(fields{i}, dat.(fields{i}))
+                obj.add(fields{i}, dat.(fields{i}));
+            end
+        end
+
+
+        function varargout = getvar(obj, varargin)
+            % get field, assign to variables
+            for i=1:numel(varargin)
+                varargout{i} = obj.(varargin{i});
             end
         end
 
