@@ -3,8 +3,13 @@ classdef DataSet < dynamicprops
     methods
         function obj = DataSet(varargin)
             % take arg: var, .. 
-            for i = 1:nargin
-                obj.add(inputname(i),varargin{i});
+            if nargin == 1 && isfile(varargin{1})
+                fprintf('load from file')
+                obj.load(varargin{1})
+            else 
+                for i = 1:nargin
+                    obj.add(inputname(i),varargin{i});
+                end
             end
         end
 
@@ -19,6 +24,7 @@ classdef DataSet < dynamicprops
         function addvar(obj,varargin)
             % add by variable
             % inputname(1) return object name
+            % must be called directly, not by other function
             for i = 2:length(varargin)+1
                 obj.add(inputname(i),varargin{i-1});
             end
@@ -51,6 +57,15 @@ classdef DataSet < dynamicprops
                 obj.add(pname, val)
             end
         end
+
+        function load(obj, matfile)
+            dat = load(matfile);
+            fields = fieldnames(dat)
+            for i=1:numel(fields)
+                obj.add(fields{i}, dat.(fields{i}))
+            end
+        end
+
         
     end
 end

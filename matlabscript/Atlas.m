@@ -22,6 +22,7 @@ classdef Atlas<DataSet
                 Pgm = zeros(n);
                 Pcsf = zeros(n);
             else
+                fprintf('read atlas %s\n', p.fdir);
                 gm = MRIread( [p.fdir 'GM.nii']);
                 wm = MRIread( [p.fdir 'WM.nii']);
                 csf = MRIread( [p.fdir 'CSF.nii']);
@@ -31,6 +32,7 @@ classdef Atlas<DataSet
                 Pcsf = csf.vol;
                 
                 if p.xdim == 2
+                fprintf('slice atlas z %d\n', p.zslice);
                 %%% for 2d case, slice 3d MRI, then set zslice = 1, the third dimension is
                 %%% just 1. Filter with periodic padding make all z-derivative 0. So same as 2D
                     Pwm  = Pwm(:,:,p.zslice);
@@ -44,6 +46,7 @@ classdef Atlas<DataSet
         end
 
         function setdw(obj, dw)
+            fprintf('compute diffusion field with dw = %g\n',dw);
             dg = dw/10;
             df = obj.Pwm*dw + obj.Pgm*dg; % diffusion coefficients
             obj.addvar(df,dw,dg);
@@ -53,6 +56,8 @@ classdef Atlas<DataSet
         function [ax1, h1] = plotbkgd(obj, dat)
             h1 = imagesc(dat);
             ax1 = h1.Parent;
+            maxcdata = max(h1.CData(:));
+            clim(ax1,[0,maxcdata]);
             cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
         end
@@ -74,14 +79,15 @@ classdef Atlas<DataSet
             cb2 = colorbar(ax2,'Location','eastoutside')
             hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
+            
         end
 
 
-        function [fig,ax1,ax2,hLink] = scatter(obj,bgname,X,varargin)
+        function [ax1,ax2] = scatter(obj,bgname,X,varargin)
             % backgound imagesc is plotted with YDir reversed
             % grid is ndgrid, so x coor is vertical, y coord is horizontal
             bgdat = slice2d(obj.(bgname), varargin{:});
-            [fig,ax1] = plotbkgd(obj, bgdat);
+            [ax1,~] = plotbkgd(obj, bgdat);
             ax1.Position(3) = ax1.Position(3)-0.1;
             ax2 = axes;
             scatter(ax2,X(:,2),X(:,1),varargin{:});
@@ -92,6 +98,7 @@ classdef Atlas<DataSet
             hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
             
             hLink.Targets(1).DataAspectRatio = [1 1 1];
+            
         end
  
 
