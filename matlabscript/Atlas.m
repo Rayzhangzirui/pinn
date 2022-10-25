@@ -8,6 +8,7 @@ classdef Atlas<DataSet
             p.zslice = 100;
             p.xdim = 2;
             p.dw = 0.1;
+            p.wfilt = 1;
             p = parseargs(p, varargin{:});
 
             if strcmp(p.fdir,'sphere')
@@ -39,6 +40,12 @@ classdef Atlas<DataSet
                     Pgm  = Pgm(:,:,p.zslice);
                     Pcsf = Pcsf(:,:,p.zslice);
                 end
+            end
+
+            if p.wfilt > 0
+                fprintf('gauss filter sig = %d\n', p.wfilt);
+                f = @(x) imgaussfilt(x, p.wfilt,'FilterDomain','spatial');
+                [Pcsf, Pwm, Pgm] = mapfun(f, Pcsf, Pwm, Pgm);
             end
 
             obj@DataSet(Pwm, Pgm, Pcsf)

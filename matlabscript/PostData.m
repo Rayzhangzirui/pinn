@@ -178,6 +178,7 @@ classdef PostData<dynamicprops
 		end
 
 		function scatterupred(obj)
+            % prediction error
             ndat = obj.info.n_dat_pts;
 
             xdat = obj.upred{1}.xdat(1:ndat,:);
@@ -185,9 +186,13 @@ classdef PostData<dynamicprops
 
 			udat = obj.trainDataSet.udat(1:ndat);
 			phidat = obj.trainDataSet.phidat(1:ndat);
-
+            
+            umax = min(max(udat),1);
+                
 			% plot pred u
 			[ax1,ax2] = obj.scatter(xdat, upredxdat.*phidat, '\phi u_{pred}');
+            clim(ax2, [0, umax]);
+            
 			fname = 'fig_upredxdat.jpg';
 			if obj.savefig
 				export_fig(fullfile(obj.modeldir,fname),'-m3');
@@ -195,13 +200,14 @@ classdef PostData<dynamicprops
 
 			% plot data u
 			[ax1,ax2] = obj.scatter(xdat, udat.*phidat, '\phi u_{dat}');
+            clim(ax2, [0, umax]);
 			fname = 'fig_udat.jpg';
 			if obj.savefig
 				export_fig(fullfile(obj.modeldir,fname),'-m3');
 			end
 
 			% plot error u
-			err = abs( udat - upredxdat ).*phidat;
+			err = (upredxdat - udat ).*phidat;
 			[ax1,ax2] = obj.scatter(xdat, err, '\phi|u_{pred}-u_{dat}|');
 
 			fname = 'fig_uprederr.jpg';
@@ -211,6 +217,8 @@ classdef PostData<dynamicprops
 		end
 
 		function [ax1,ax2] = scatterres(obj)
+            % scatter plot of residual 
+            % note: not a good way of visualization, different t
 			absres = abs(obj.upred{1}.res);
         
 			nres = obj.info.n_res_pts;
@@ -228,6 +236,7 @@ classdef PostData<dynamicprops
 
 
 		function forward(obj)
+            % forward FDM solve using inferred parameter
 			rD = obj.upred{1}.rD;
 			rRHO = obj.upred{1}.rRHO;
 
@@ -247,6 +256,7 @@ classdef PostData<dynamicprops
 		end
 
 		function fwderr(obj)
+            % error of fwd solution using infered param
 			[ax1,ax2] = obj.atlas.imagesc2('df', obj.fwdmodel.uend.*obj.fwdmodel.phi);
 			title(ax1,'\phi u_{fdm,pred}');
 			if obj.savefig

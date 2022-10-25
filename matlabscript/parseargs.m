@@ -68,7 +68,8 @@ while remaining>=2
         X = setfield(X,fieldname,newvalue); %#ok
         modified(fieldind) = 1;
     else
-        error(['Not a valid field name: ' fieldname]);
+        % allow not parsed
+        % error(['Not a valid field name: ' fieldname]);
     end
     remaining = remaining - 2;
     count = count + 2;
