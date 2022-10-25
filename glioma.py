@@ -25,7 +25,7 @@ class DataSet:
         
         matdat = loadmat(inv_dat_file)
         
-
+        
         ntest = opts.get("n_test_pts", matdat.get('xtest').shape[0])  
         ndat =  opts.get("n_dat_pts",  matdat.get('xdat').shape[0]) 
         nres =  opts.get("n_res_pts",  matdat.get('xr').shape[0])
@@ -36,21 +36,18 @@ class DataSet:
         self.phitest = matdat.get('phitest')[0:ntest,:]
 
         # data loss
-        if opts['w_dat'] == 0:
-            self.xdat = None
-            self.udat = None # final time time
+    
+        if opts.get('testasdat') == True:
+            print('use test data for data loss')
+            # use test data as data loss, full time
+            self.xdat = self.xtest
+            self.udat = self.utest
+            self.phidat = self.phitest
         else:
-            if opts.get('testasdat') == True:
-                print('use test data for data loss')
-                # use test data as data loss, full time
-                self.xdat = self.xtest
-                self.udat = self.utest
-                self.phidat = self.phitest
-            else:
-                # single time inference
-                self.xdat = matdat.get('xdat')[0:ndat,:]
-                self.udat = matdat.get('udat')[0:ndat,:] 
-                self.phidat = matdat.get('phidat')[0:ndat,:]
+            # single time inference
+            self.xdat = matdat.get('xdat')[0:ndat,:]
+            self.udat = matdat.get('udat')[0:ndat,:] 
+            self.phidat = matdat.get('phidat')[0:ndat,:]
         
         if opts.get('addnoise') is not None:
             print('add noise to udat')
@@ -67,6 +64,8 @@ class DataSet:
         self.L = matdat['L'].item()
         self.DW = matdat['DW'].item() #characteristic DW
         self.RHO = matdat['RHO'].item() #characteristic RHO
+        self.rDe = matdat['rDe'].item() # exact ratio
+        self.rRHOe = matdat['rRHOe'].item()
         self.opts['scale'] = {'T':self.T, 'L':self.L, 'DW':self.DW, 'RHO':self.RHO}
 
         # characteristic diffusion ceofficient at each point
@@ -85,10 +84,13 @@ class Gmodel:
         self.optim = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
         INVERSE = opts.get('inverse')
-        train_rD = True if opts.get('train_rD') == True else False
-        train_rRHO = True if opts.get('train_rRHO') == True else False
+        if opts.get('trainD') == False:
+            opts['D0'] = self.dataset.rDe
 
-        param = {'rD':tf.Variable( opts['D0'], trainable=train_rD), 'rRHO': tf.Variable(opts['RHO0'], trainable=train_rRHO)}
+        if opts.get('trainRHO') == False:
+            opts['RHO0'] = self.dataset.rRHOe
+
+        param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD')), 'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'))}
 
         self.info = {}
 

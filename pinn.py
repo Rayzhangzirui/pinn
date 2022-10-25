@@ -185,7 +185,7 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
 
         # set up log
-        os.makedirs(options['model_dir'], exist_ok=True)
+        os.makedirs(options['model_dir'], exist_ok=False)
         
         logfile = os.path.join(options['model_dir'],'solver.log')
 
@@ -223,14 +223,15 @@ class PINNSolver():
         loss_res = tf.reduce_mean(r2)
         
         # Initialize loss
-        loss_dat = 0.
-        if self.xdat is not None:
+        loss_dat = 0.0
+        w_dat = self.options.get('w_dat')
+        if w_dat > 1e-6:
             # Add phi_0 and phi_b to the loss
             # upred = self.model(self.xdat)
             # loss_dat = tf.math.educe_mean(tf.math.square(self.udat - upred))
             loss_dat = self.fdatloss(self.model, self.xdat)
 
-        loss_tot = loss_res + loss_dat * self.options.get('w_dat')
+        loss_tot = loss_res + loss_dat * w_dat
 
         loss = {'res':loss_res, 'data':loss_dat, 'total':loss_tot}
         return loss
