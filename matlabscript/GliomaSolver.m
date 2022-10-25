@@ -79,7 +79,7 @@ classdef GliomaSolver< handle
 
         function readmri(obj,varargin)
             % read mri data, fdir = dir to atla
-            if isa(varargin{1},'Atlas')
+            if length(varargin)==1 &&isa(varargin{1},'Atlas')
                 obj.atlas = varargin{1};
             else
                 obj.atlas = Atlas('dw', obj.dw, 'zslice',obj.zslice, varargin{:});
@@ -311,6 +311,58 @@ classdef GliomaSolver< handle
             X = [t/obj.tend (x - obj.x0)/obj.L];
         end
 
+
+        function [fp,dataset] = scattergrid(obj, xrArg, varargin)
+            % sample scatter for xr, 
+            % sample xdat on grid,
+            p.savedat = true;
+            p.seed = 1;
+            p.tag = 'scattergrid';
+            p.datdir = './';
+            p = parseargs(p, varargin{:});
+
+            seed = p.seed;
+            rng(seed,'twister');
+
+            % sample xr scattered
+            xq = obj.xsample(xrArg{:});
+            tq = rand(length(xq),1)*obj.tend; % sample t, unit
+            xr = obj.transformDat(xq, tq);
+
+            method = 'linear';
+            Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
+            Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
+            phiq = obj.interpf(obj.phi, xq, method);
+            uq = obj.interpu(tq, xq, method); % u(tq, xq)
+
+            % sample xdat from grid
+            [~, ~, mskin] = obj.getrmax();
+            [udat, xdat, tdat, phidat] = obj.genGridDataUt(mskin, length(obj.tall));
+            xdat = obj.transformDat(xdat, tdat);
+
+            % test data
+            xtest = xr;
+            utest = uq;
+            phitest = phiq;
+            
+            dataset = TrainDataSet;
+
+            dataset.addvar(xdat,udat,phidat,...
+            xtest,utest,phitest,...
+            Pwmq, Pgmq, phiq,xr, seed);
+            dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
+            'dw','dg','rho','x0','ix','xdim','tend','zslice');
+
+            fp = sprintf('dat_%s_%s.mat',obj.name,p.tag);
+            fp = fullfile(p.datdir, fp);
+
+            if p.savedat
+                dataset.save(fp);
+                fprintf('save training dat to %s\n', fp );
+            end
+
+        end
+
         function fp = genGridData(obj,varargin)
 
             p = inputParser;
@@ -363,6 +415,7 @@ classdef GliomaSolver< handle
             Pwmq, Pgmq, phiq,xr, seed);
             dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
             'dw','dg','rho','x0','ix','xdim','tend','zslice');
+            
             if p.Results.savedat
                 dataset.save(fp);
                 fprintf('save training dat to %s\n', fp );
@@ -370,16 +423,17 @@ classdef GliomaSolver< handle
         end
 
 
-        function [xq] = xsample(obj,n, varargin)
+        function [xq] = xsample(obj, n, varargin)
             p.isuniform = false;
             p.wgrad = false;
-            p.nwratio = 0.5;
+            p.nwratio = 0.0;
             p = parseargs(p,varargin{:});
 
             n_basic = n * (1-p.nwratio);
             n_enhance = n * (p.nwratio);
 
             xq = sampleDenseBall(n_basic, obj.xdim, obj.rmax, obj.x0, p.isuniform); 
+            fprintf('dense sample  %g\n', n_basic);
 
             if p.wgrad == true
                 ntmp = n_enhance*10;

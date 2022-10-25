@@ -250,7 +250,7 @@ classdef PostData<dynamicprops
 			[ax1,ax2] = obj.atlas.imagesc2('df', obj.fwdmodel.uend.*obj.fwdmodel.phi);
 			title(ax1,'\phi u_{fdm,pred}');
 			if obj.savefig
-				export_fig(fullfile(obj.modeldir,'fig_upred_fdm.jpg'),'-m3')
+				export_fig(fullfile(obj.modeldir,'fig_fdm_upred.jpg'),'-m3')
 			end
 			
 
@@ -258,7 +258,7 @@ classdef PostData<dynamicprops
 			[ax1,ax2] = obj.atlas.imagesc2('df', err);
 			title(ax1,'\phi |u_{fdm,pred} - u_{end}|');
 			if obj.savefig
-				export_fig(fullfile(obj.modeldir,'fig_upred_fdm.jpg'),'-m3')
+				export_fig(fullfile(obj.modeldir,'fig_fdm_err.jpg'),'-m3')
 			end
 
 		end
