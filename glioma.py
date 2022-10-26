@@ -81,7 +81,12 @@ class Gmodel:
         self.xdim = self.dataset.xdim
         self.opts = opts
 
-        self.optim = tf.keras.optimizers.Adam(learning_rate=1e-3)
+        if opts.get('optimizer') == 'adamax':
+            self.optim = tf.keras.optimizers.Adamax()
+        elif opts.get('optimizer') == 'rmsprop':
+            self.optim = tf.keras.optimizers.RMSprop()
+        else:
+            self.optim = tf.keras.optimizers.Adam()
 
         INVERSE = opts.get('inverse')
         if opts.get('trainD') == False:
@@ -115,6 +120,7 @@ class Gmodel:
             @tf.function
             def pde(x_r, f):
                 t = x_r[:,0:1]
+                # t = tf.random.uniform([x_r.shape[0],1])
                 x = x_r[:,1:2]
                 y = x_r[:,2:3]
                 xr = tf.concat([t,x,y], axis=1)

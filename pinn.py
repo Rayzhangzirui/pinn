@@ -163,13 +163,13 @@ class PINNSolver():
         self.info = {} #empty dictionary to store information
 
         # set up data
-        self.xr =    n2t(xr) # collocation point
+        self.xr =    (xr).astype(np.float32) # collocation point
 
-        self.xdat =  n2t(xdat) # data point
-        self.udat =  n2t(udat) # data value
+        self.xdat =  (xdat).astype(np.float32) # data point
+        self.udat =  (udat).astype(np.float32) # data value
 
-        self.xtest = n2t(xtest) # test point
-        self.utest = n2t(utest) # test value
+        self.xtest = (xtest).astype(np.float32) # test point
+        self.utest = (utest).astype(np.float32) # test value
 
          # weight of residual
         if wr is None:
@@ -185,7 +185,7 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
 
         # set up log
-        os.makedirs(options['model_dir'], exist_ok=False)
+        os.makedirs(options['model_dir'], exist_ok=True)
         
         logfile = os.path.join(options['model_dir'],'solver.log')
 
@@ -281,6 +281,11 @@ class PINNSolver():
             self.current_loss = loss
             self.callback()
             
+            # change t
+            if self.options.get('randomt') == True and i % 10 == 0:
+                self.xr[:,0:1] = np.random.uniform(size=(self.xr.shape[0],1))
+
+
             # early stopping, 
             if self.current_loss['total'].numpy() < best_loss:
                 best_loss = self.current_loss['total']
@@ -492,12 +497,14 @@ class PINNSolver():
         ''' save prediction of u using xr, xtest, xdat
         '''
         savedat = {}
-        upredxr = self.model(self.xr)
-        residual = self.pde(self.xr, self.model)
 
+        upredxr = self.model(self.xr)
         savedat['xr'] = t2n(self.xr)
         savedat['upredxr'] = t2n(upredxr)
-        savedat['res'] = t2n(residual)
+
+        resxr = self.pde(self.xr, self.model)
+        savedat['resxr'] = t2n(resxr)
+        
         
         if self.xdat is not None:
             upredxdat = self.model(self.xdat)
@@ -505,6 +512,11 @@ class PINNSolver():
             savedat['udat'] = t2n(self.udat)
             savedat['upredxdat'] = t2n(upredxdat)
 
+            # warning: this is only valid if xdat and xr have same spatial points
+            resxdat = self.pde(self.xdat, self.model)
+            savedat['resxdat'] = t2n(resxdat)
+        
+        # can not evaluate residual at xtest, need Pwm Pwg
         if self.xtest is not None:
             upredxtest = self.model(self.xtest)
             savedat['xtest'] = t2n(self.xtest)

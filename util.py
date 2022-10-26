@@ -77,6 +77,8 @@ def n2t(x):
 def t2n(x):
     if x is None:
         return None
+    if isinstance(x, np.ndarray):
+        return x
     return x.numpy()
 
 def read_mri_dat(n,inv_dat_file,dim):
