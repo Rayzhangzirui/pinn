@@ -548,9 +548,11 @@ class PINNSolver():
             savedat['udat'] = t2n(self.udat)
             savedat['upredxdat'] = t2n(upredxdat)
 
-            # warning: this is only valid if xdat and xr have same spatial points
-            resxdat = self.pde(self.xdat, self.model)
-            savedat['resxdat'] = t2n(resxdat)
+            # if self.xdat.shape[0] == self.Dphi.shape[0]:
+                # print('compute residual on xdat')
+                # warning: this is only valid if xdat and xr have same spatial points
+                # resxdat = self.pde(self.xdat, self.model)
+                # savedat['resxdat'] = t2n(resxdat)
 
         # can not evaluate residual at xtest, need Pwm Pwg
         if self.xtest is not None:
