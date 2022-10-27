@@ -282,8 +282,16 @@ class PINNSolver():
             self.callback()
             
             # change t
-            if self.options.get('randomt') == True and i % 10 == 0:
-                self.xr[:,0:1] = np.random.uniform(size=(self.xr.shape[0],1))
+            if self.options.get('randomt') == True and i % 100 == 0:
+                nrow = self.xr.shape[0]
+                self.xr[:,0:1] = np.random.uniform(size=(nrow,1))
+            
+            if self.options.get('randomtfinal') == True and i % 10 == 0:
+                self.xr[:,0:1] = 1.0
+                nrow = self.xr.shape[0]
+                half = nrow//2
+                idx = np.random.choice(nrow, size=half,replace=False)
+                self.xr[idx,0:1] = np.random.uniform(size=(half,1))
 
 
             # early stopping, 
@@ -493,6 +501,34 @@ class PINNSolver():
         np.savetxt(fpath, hist, fmt, header = self.header, comments = '')
         print(f'save training hist to {fpath}')
 
+    def predtx(self, suffix):
+        # evalute at residual points. not data points. 
+        # need Pwm, Pgm , phi etc
+        savedat = {}
+        upredts = [] # prediction at different t
+        rests = [] # residual at different t
+        
+        predfile = os.path.join(self.options['model_dir'],f'upred_{suffix}.mat')
+        ts = np.linspace(0, 1.0, 11)
+        for t in ts:
+            xr = self.xr
+            xr[:,0] = t
+
+            upredtxr = self.model(xr)
+            restxr = self.pde(xr, self.model)
+            
+            upredts.append(t2n(upredtxr))
+            rests.append(t2n(restxr))
+    
+        savedat['upredts'] = np.concatenate([*upredts],axis=1)
+        savedat['rests'] = np.concatenate([*rests],axis=1)
+        savedat['xr'] = xr
+        savedat['ts'] = ts
+        print(f'save upred at different t to {predfile}')
+        savemat(predfile,savedat)
+        
+                
+
     def save_upred(self,suffix):
         ''' save prediction of u using xr, xtest, xdat
         '''
@@ -515,7 +551,7 @@ class PINNSolver():
             # warning: this is only valid if xdat and xr have same spatial points
             resxdat = self.pde(self.xdat, self.model)
             savedat['resxdat'] = t2n(resxdat)
-        
+
         # can not evaluate residual at xtest, need Pwm Pwg
         if self.xtest is not None:
             upredxtest = self.model(self.xtest)

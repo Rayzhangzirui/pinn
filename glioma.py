@@ -88,7 +88,7 @@ class Gmodel:
         else:
             self.optim = tf.keras.optimizers.Adam()
 
-        INVERSE = opts.get('inverse')
+        
         if opts.get('trainD') == False:
             opts['D0'] = self.dataset.rDe
 
@@ -120,7 +120,6 @@ class Gmodel:
             @tf.function
             def pde(x_r, f):
                 t = x_r[:,0:1]
-                # t = tf.random.uniform([x_r.shape[0],1])
                 x = x_r[:,1:2]
                 y = x_r[:,2:3]
                 xr = tf.concat([t,x,y], axis=1)
@@ -192,7 +191,8 @@ class Gmodel:
                                 options = opts)
     
     def solve(self):
-        self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"],patience = self.opts["patience"])
+        if self.opts["num_init_train"] > 0:
+            self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"],patience = self.opts["patience"])
 
         if self.opts['lbfgs_opts'] is not None:
             results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])
