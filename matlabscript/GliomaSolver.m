@@ -129,13 +129,13 @@ classdef GliomaSolver< handle
             p.savesol = true;
             p = parseargs(p, varargin{:});
 
-
             [fp,es] = obj.solpath;
             if es && p.redo == false
                 fprintf('load existing solution\n');
                 obj.loadsol(fp);
             else
-                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf, obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
+                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf,...
+                    obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
                 if p.savesol
                     fprintf('save pde solution\n');
                     obj.savesol(fp); 
@@ -232,6 +232,27 @@ classdef GliomaSolver< handle
             end 
         end
 
+        function uq = interpgrid(obj, tq, method)
+            % interpolate u(x,t)
+
+            f = @(x) reshape(x,[],1);
+            extrap = 'none';
+            if obj.xdim == 3
+                xg = f(obj.gx(:,1,1));
+                yg = f(obj.gy(1,:,1));
+                zg = f(obj.gz(1,1,:));
+                tg = f(obj.tall);
+                F = griddedInterpolant({xg, yg, zg, tg}, obj.uall, method,extrap);
+                uq = F({xg,yg,zg,tq});
+            else
+                xg = f(obj.gx(:,1));
+                yg = f(obj.gy(1,:));
+                tg = f(obj.tall);
+                F = griddedInterpolant({xg, yg, tg}, obj.uall, method,extrap);
+                uq = F({xg,yg,tq});
+            end 
+        end
+
         function scale(obj, dwc, rhoc, lc)
             % scale the data for training
             % dwc, rhoc characteristic value with unit
@@ -248,6 +269,7 @@ classdef GliomaSolver< handle
             % exact ratio
             obj.rDe = obj.tend/obj.T * obj.dw/obj.dwc;
             obj.rRHOe = obj.tend/obj.T * obj.rho/obj.rhoc;
+            fprintf('T = %g, rDe = %g, rRHOe = %g\n', obj.T, obj.rDe, obj.rRHOe);
         end
         
 
@@ -279,6 +301,18 @@ classdef GliomaSolver< handle
         end
 
 
+        function [uq, xq, tq, Pwmq, Pgmq, phiq] = genGridDataUend(obj,mskin)
+            % final time grid data
+            assert(obj.xdim == 2,'only in 2d');
+            xgrid = [obj.gx(mskin) obj.gy(mskin)];            
+            xq = xgrid;
+            Pwmq = obj.atlas.Pwm(mskin);
+            Pgmq = obj.atlas.Pgm(mskin);
+            phiq = obj.phi(mskin);
+            uq = obj.uend(mskin);
+            tq = obj.tend * ones(size(uq));
+
+        end
        
         function [uq, xq, tq, Pwmq, Pgmq, phiq] = genGridDataUall(obj,mskin)
             % chose all time data from grid
@@ -298,7 +332,7 @@ classdef GliomaSolver< handle
 
             Pwmq = repeat(obj.atlas.Pwm(mskin));
             Pgmq = repeat(obj.atlas.Pgm(mskin));
-            phiq = repeat(obj.atlas.phi(mskin));
+            phiq = repeat(obj.phi(mskin));
 
             u = zeros(length(phiq),1);
             uq = [];
@@ -317,55 +351,83 @@ classdef GliomaSolver< handle
             X = [t/obj.tend (x - obj.x0)/obj.L];
         end
 
-    
-        function [Pwmq, Pgmq, phiq, uq] = interpx(obj, xq, tq, method)
-            Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
-            Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
-            phiq = obj.interpf(obj.phi, xq, method);
-            uq = obj.interpu(tq, xq, method); % u(tq, xq)
-        end
 
 
-        function [Pwmq,Pgmq,phiq,uq,X] = genScatterData(obj, varargin)
+
+        function [Pwmq,Pgmq,phiq,uq,xq,tq,uqend,tqend] = genScatterData(obj, varargin)
             % generate scatter data set
-            p.finalt = true;
-            p.n = 10000;
-            p = parseargs(p, varargin{:});
-
-            xq = obj.xsample(varargin{:});
             
-            if p.finalt
-                fprintf('sample %g final time\n',p.n)
-                tq = ones(p.n,1)*obj.tend; % all final time
-            else
-                fprintf('sample %g uniform time\n',p.n)
-                tq = rand(p.n,1)*obj.tend; % sample t, unit
+            p.n = 10000;
+            p.finalt = false;
+            p.usegrid = false; % use grid data
+            p = parseargs(p, varargin{:});
+            
+            if p.usegrid
+                % use grid data
+                [~, ~, mskin] = obj.getrmax();
+                [uq, xq, tq, Pwmq, Pgmq, phiq] = genGridDataUend(obj,mskin);
+                [uqend, tqend] = deal(uq, tq);
+                return
             end
 
-            method = 'linear';
-            [Pwmq,Pgmq,phiq,uq] = obj.interpx(xq, tq, method);
 
-            X = obj.transformDat(xq, tq);
+            % generate x sample in circle, then interpolate
+            xq = obj.xsample(varargin{:});
+            
+            method = 'linear';
+
+            tqend = ones(p.n,1)*obj.tend; % all final time
+            if p.finalt
+                % if final time, don't output tq and interpolate uq
+                tq = nan;
+                uq = nan;
+            else
+                % if not final time, generate tq and iterpolate uq
+                tq = rand(p.n,1)*obj.tend; % sample t, unit
+                uq = obj.interpu(tq, xq, method); % u(tq, xq)
+            end
+            
+            % useful for xdat and xtest
+            phiq = obj.interpf(obj.phi, xq, method);
+            uqend = obj.interpf(obj.uend, xq, method);
+
+            % only useful of xr
+            % interpolate anyway, might not be useful for testing data
+            Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
+            Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
+
         end
 
-        function [fp,dataset] = scatterSample(obj, xrArg, xdatArg, xtestArg,varargin)
+        function [fp,dataset] = scatterSample(obj, xrArg, xdatArg, xtestArg, varargin)
             % sample scatter for xr, 
             % sample xdat on grid,
             p.savedat = true;
             p.seed = 1;
             p.tag = 'scattersample';
+            p.samex = true;  % xdat same as xr
             p.datdir = './';
             p = parseargs(p, varargin{:});
             seed = p.seed;
             rng(seed,'twister');
-
-            % sample xr scattered
-            [Pwmq,Pgmq,phiq,uq,xr] = obj.genScatterData(xrArg{:});
-
-            [~,~,phidat,udat,xdat] = obj.genScatterData(xdatArg{:});
-
-            [~,~,phitest,utest,xtest] = obj.genScatterData(xtestArg{:});
             
+            % sample xr scattered
+            [Pwmq,Pgmq,phiq,uq,xq,tq, uqend, tqend] = obj.genScatterData(xrArg{:});
+            xr = obj.transformDat(xq, tq);
+            
+            if p.samex
+                fprintf('space xdat same as xr\n');
+                [phidat, udat, xdat, tdat] = deal(phiq, uqend, xq, tqend);
+            else
+                fprintf('space xdat different from xr\n');
+                [~,~,phidat,~, xdat, ~, udat, tdat] = obj.genScatterData(xdatArg{:});
+            end
+
+            xdat = obj.transformDat(xdat, tdat);
+
+            [~,~,phitest,utest,xtest,ttest,~,~] = obj.genScatterData(xtestArg{:});
+            xtest = obj.transformDat(xtest, ttest);
+            
+
             dataset = TrainDataSet;
 
             dataset.addvar(xdat,udat,phidat,...
@@ -450,19 +512,20 @@ classdef GliomaSolver< handle
             p.uniformx = false;
             p.wgrad = false;
             p.nwratio = 0.0;
+            p.radius = obj.rmax;
             p = parseargs(p,varargin{:});
 
             n_basic = p.n * (1-p.nwratio);
             n_enhance = p.n * (p.nwratio);
 
-            xq = sampleDenseBall(n_basic, obj.xdim, obj.rmax, obj.x0, p.uniformx); 
-            fprintf('dense sample %g, uniformx = %g\n', n_basic, p.uniformx);
+            xq = sampleDenseBall(n_basic, obj.xdim, p.radius, obj.x0, p.uniformx); 
+            fprintf('dense sample %g, radius %g, uniformx = %g\n', n_basic, p.radius, p.uniformx);
 
             if p.wgrad == true
                 ntmp = n_enhance*10;
                 fprintf('weighted sample by graddf %g\n', n_enhance);
                 
-                xtmp = sampleDenseBall(ntmp, obj.xdim, obj.rmax, obj.x0, true); % uniform temporary 
+                xtmp = sampleDenseBall(ntmp, obj.xdim, p.radius, obj.x0, true); % uniform temporary 
                 [dxdf, dydf] = gradient(obj.atlas.df.*obj.phi);
                 normgrad = dxdf.^2 + dydf.^2;
                 normgrad = imgaussfilt(normgrad, 1,'FilterDomain','spatial');
@@ -628,6 +691,3 @@ classdef GliomaSolver< handle
         end
     end
 end
-
-
-

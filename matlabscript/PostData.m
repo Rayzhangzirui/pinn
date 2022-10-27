@@ -63,17 +63,8 @@ classdef PostData<dynamicprops
 			  end
 
 			  if startsWith(fs(i).name,'upred') && endsWith(fs(i).name,'mat')
-				dat = load(path);
-				
-				fn = fieldnames(dat);
-				for k=1:numel(fn)
-					if( isnumeric(dat.(fn{k})) )
-						dat.(fn{k}) = double(dat.(fn{k}));
-					end
-				end
-
-				obj.upred{end+1} = dat;
-				obj.upred{end}.file = path;
+				obj.upred{end+1} = DataSet(path);
+				obj.upred{end}.addvar(path);
 			  end
 		  end
 			
@@ -123,12 +114,18 @@ classdef PostData<dynamicprops
 		   % remove scaling of (t,x)
 		   scale = [T ones(1,xdim)*L];
 		   for i = 1:length(obj.upred)
-			   if isfield(obj.upred{i},"xdat")
+			   if isprop(obj.upred{i},"xdat")
 				   obj.upred{i}.xdat = obj.upred{i}.xdat .*scale + [0 x0];
-			   end
-			   obj.upred{i}.xr = obj.upred{i}.xr .*scale + [0 x0];
+               end
+
+               if isprop(obj.upred{i},"xr")
+			        obj.upred{i}.xr = obj.upred{i}.xr .*scale + [0 x0];
+               end
 		   end
 	   end
+
+
+
 
 	   function [fig, sc] = PlotInferErr(obj, varargin)
 		   % plot inference error
@@ -219,7 +216,7 @@ classdef PostData<dynamicprops
 		function [ax1,ax2] = scatterres(obj)
             % scatter plot of residual 
             % note: not a good way of visualization, different t
-			absres = abs(obj.upred{1}.res);
+			absres = abs(obj.upred{1}.resxdat);
         
 			nres = obj.info.n_res_pts;
 			phi = obj.trainDataSet.phiq(1:nres);
@@ -232,10 +229,13 @@ classdef PostData<dynamicprops
 			if obj.savefig
 				export_fig(fullfile(obj.modeldir,fname),'-m3');
 			end
-		end
+        end
 
 
-		function forward(obj)
+        
+
+
+		function forward(obj,varargin)
             % forward FDM solve using inferred parameter
 			rD = obj.upred{1}.rD;
 			rRHO = obj.upred{1}.rRHO;
@@ -248,7 +248,7 @@ classdef PostData<dynamicprops
 			
 			obj.fwdmodel = GliomaSolver(xdim,  dw2, rho2 ,x0, 1, zslice);
 			obj.fwdmodel.readmri(obj.atlas);
-			obj.fwdmodel.solve('redo',true,'savesol',false);
+			obj.fwdmodel.solve(varargin{:});
 
 			obj.fwdmodele = GliomaSolver(xdim,  dw, rho ,x0, tend, zslice);
 			obj.fwdmodele.readmri(obj.atlas);
@@ -271,8 +271,64 @@ classdef PostData<dynamicprops
 				export_fig(fullfile(obj.modeldir,'fig_fdm_err.jpg'),'-m3')
 			end
 
-		end
+        end
+
+        function contoursc(obj, level)
+            [ax1, ax2] = obj.atlas.contoursc(obj.upred{1}.xdat, obj.upred{1}.upredxdat, level );
+            
+            ax3 = axes;
+            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend,level,'r','LineWidth',2);
+            
+            set(ax3,'YDir','reverse')
+            set(ax3,'color','none','visible','on')
+            
+            hLink = linkprop([ax3,ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
+        end
 
 
+        function contourfwd(obj, level)
+            [ax1,h1] = obj.atlas.plotbkgd(obj.atlas.df);
+            ax1.Position(3) = ax1.Position(3)-0.1;
+            
+            ax2 = axes;
+            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodel.uend,level,'b','LineWidth',2);
+
+            ax3 = axes;
+            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend,level,'r','LineWidth',2);
+            
+            set([ax2,ax3],'YDir','reverse')
+            set([ax2,ax3],'color','none','visible','on')
+            
+            hLink = linkprop([ax3, ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
+        end
+
+
+        function contourt(obj, level, i)
+            u = obj.upred{3}.upredts(:,i);
+            [ax1, ax2] = obj.atlas.contoursc(obj.upred{3}.xdat, u, level );
+            
+            % interpolate solution at time from PINN
+            tq = obj.upred{3}.ts * obj.trainDataSet.tend;
+            ugrid = obj.fwdmodele.interpgrid(tq,'linear');
+
+            ax3 = axes;
+            contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i),level,'r','LineWidth',2);
+            
+            set([ax2,ax3],'YDir','reverse')
+            set([ax2,ax3],'color','none','visible','on')
+            
+            hLink = linkprop([ax3, ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
+            
+            levelstr = sprintf('%g ',level);
+            title(ax1, sprintf('contour %s, t = %g',levelstr, tq(i)));
+
+
+
+
+
+        end
    end
 end

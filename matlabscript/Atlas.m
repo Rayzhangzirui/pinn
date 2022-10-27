@@ -47,9 +47,16 @@ classdef Atlas<DataSet
                 f = @(x) imgaussfilt(x, p.wfilt,'FilterDomain','spatial');
                 [Pcsf, Pwm, Pgm] = mapfun(f, Pcsf, Pwm, Pgm);
             end
+            
 
-            obj@DataSet(Pwm, Pgm, Pcsf)
+            sz = [1 1 1];
+            sz(1:p.xdim) = size(Pwm); % even when Pwm is 2d, 3rd dim is 1
+            [gx,gy,gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
+
+            obj@DataSet(Pwm, Pgm, Pcsf, gx, gy, gz);
             obj.setdw(p.dw)
+
+            
         end
 
         function setdw(obj, dw)
@@ -88,6 +95,31 @@ classdef Atlas<DataSet
             hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
             
+        end
+
+        function [ax1, ax2] = contour(obj, bgname, fgdat, level, varargin)
+            figure;
+            bgdat = slice2d(obj.(bgname), varargin{:});
+            fgdat = slice2d(fgdat, varargin{:});
+            
+            [ax1,h1] = plotbkgd(obj, bgdat);
+            ax1.Position(3) = ax1.Position(3)-0.1;
+            
+            ax2 = axes;
+            h2 = contour(obj.gy, obj.gx, fgdat, level,'b','LineWidth',2);
+            set(ax2,'YDir','reverse')
+            set(ax2,'color','none','visible','on')
+            cb2 = colorbar(ax2,'Location','eastoutside')
+            hLink = linkprop([ax1,ax2],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
+        end
+
+        function [ax1, ax2] = contoursc(obj, X, u, level)
+            X = double(X);
+            u = double(u);
+            F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
+            uq = F(obj.gx, obj.gy);
+            [ax1, ax2]  = obj.contour('df',uq, level);
         end
 
 
