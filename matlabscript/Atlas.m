@@ -97,7 +97,7 @@ classdef Atlas<DataSet
             
         end
 
-        function [ax1, ax2] = contour(obj, bgname, fgdat, level, varargin)
+        function [ax1, ax2, c] = contour(obj, bgname, fgdat, level, varargin)
             figure;
             bgdat = slice2d(obj.(bgname), varargin{:});
             fgdat = slice2d(fgdat, varargin{:});
@@ -106,7 +106,7 @@ classdef Atlas<DataSet
             ax1.Position(3) = ax1.Position(3)-0.1;
             
             ax2 = axes;
-            h2 = contour(obj.gy, obj.gx, fgdat, level,'b','LineWidth',2);
+            [~,c] = contour(obj.gy, obj.gx, fgdat, level,'b','LineWidth',2);
             set(ax2,'YDir','reverse')
             set(ax2,'color','none','visible','on')
             cb2 = colorbar(ax2,'Location','eastoutside')
@@ -114,24 +114,34 @@ classdef Atlas<DataSet
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
-        function [ax1, ax2] = contoursc(obj, X, u, level)
+        function [ax1, ax2, c] = contoursc(obj, X, u, level)
+            % contour from scattered, extrapolate to grid
             X = double(X);
             u = double(u);
             F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
             uq = F(obj.gx, obj.gy);
-            [ax1, ax2]  = obj.contour('df',uq, level);
+            [ax1, ax2, c] = obj.contour('df',uq, level);
+        end
+
+        function [ax1, ax2] = imagescScatter(obj, X, u)
+            % contour from scattered, extrapolate to grid
+            X = double(X);
+            u = double(u);
+            F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
+            uq = F(obj.gx, obj.gy);
+            [ax1, ax2] = obj.imagesc2('df', uq);
         end
 
 
         function [ax1,ax2] = scatter(obj,bgname,X,varargin)
-            figure;
             % backgound imagesc is plotted with YDir reversed
             % grid is ndgrid, so x coor is vertical, y coord is horizontal
+            figure;
             bgdat = slice2d(obj.(bgname));
             [ax1,~] = plotbkgd(obj, bgdat);
             ax1.Position(3) = ax1.Position(3)-0.1;
             ax2 = axes;
-            scatter(ax2,X(:,2),X(:,1),varargin{:});
+            scatter(ax2,X(:,end),X(:,end-1),varargin{:});
             set(ax2,'YDir','reverse')
             set(ax2,'color','none','visible','off');
             cb2 = colorbar(ax2,'Location','eastoutside');

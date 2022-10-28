@@ -9,7 +9,7 @@ classdef PostData<dynamicprops
 	  info  % information of model
 	  trainDataSet % info or training data
 	  history
-	  savefig
+	  yessave
 	  atlas
 	  fwdmodel
 	  fwdmodele
@@ -19,14 +19,14 @@ classdef PostData<dynamicprops
 	  function obj = PostData(modeldir,varargin)
 		  p = inputParser;
 		  addRequired(p,'modeldir',@ischar);
-		  addParameter(p,'savefig',true,@isbool);
+		  addParameter(p,'yessave',true,@isbool);
 		  addParameter(p,'udat','',@ischar);
 		  addParameter(p,'tag','',@ischar);
 		  addParameter(p,'dim',2,@isscalar);
 		  addParameter(p,'isradial',false,@islogical);
 		  addParameter(p,'dat_file','',@ischar);
 		  parse(p,modeldir,varargin{:});
-		  obj.savefig = p.Results.savefig;
+		  obj.yessave = p.Results.yessave;
 		  obj.modeldir = p.Results.modeldir;
 		  
 		  assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
@@ -173,6 +173,14 @@ classdef PostData<dynamicprops
 			'filled','MarkerFaceAlpha',0.5);
 			title(ax1,tag);
 		end
+        
+        function savefig(obj,fname)
+            if obj.yessave
+				fp = fullfile(obj.modeldir,fname);
+				fprintf('save %s\n',fp);
+				export_fig(fp,'-m3');
+            end
+        end
 
 		function scatterupred(obj)
             % prediction error
@@ -191,26 +199,21 @@ classdef PostData<dynamicprops
             clim(ax2, [0, umax]);
             
 			fname = 'fig_upredxdat.jpg';
-			if obj.savefig
-				export_fig(fullfile(obj.modeldir,fname),'-m3');
-			end
+			obj.savefig(fname);
+			
 
 			% plot data u
 			[ax1,ax2] = obj.scatter(xdat, udat.*phidat, '\phi u_{dat}');
             clim(ax2, [0, umax]);
 			fname = 'fig_udat.jpg';
-			if obj.savefig
-				export_fig(fullfile(obj.modeldir,fname),'-m3');
-			end
+			obj.savefig(fname);
 
 			% plot error u
 			err = (upredxdat - udat ).*phidat;
 			[ax1,ax2] = obj.scatter(xdat, err, '\phi|u_{pred}-u_{dat}|');
 
 			fname = 'fig_uprederr.jpg';
-			if obj.savefig
-				export_fig(fullfile(obj.modeldir,fname),'-m3');
-			end
+			obj.savefig(fname);
 		end
 
 		function [ax1,ax2] = scatterres(obj)
@@ -226,16 +229,14 @@ classdef PostData<dynamicprops
 
 			[ax1,ax2] = obj.scatter(xr, absres.*phi, '\phi|res|');
 			fname = 'fig_res.jpg';
-			if obj.savefig
-				export_fig(fullfile(obj.modeldir,fname),'-m3');
-			end
+			obj.savefig(fname);
         end
 
 
         
 
 
-		function forward(obj,varargin)
+        function forward(obj, varargin)
             % forward FDM solve using inferred parameter
 			rD = obj.upred{1}.rD;
 			rRHO = obj.upred{1}.rRHO;
@@ -245,12 +246,19 @@ classdef PostData<dynamicprops
 			dw2 = rD * obj.trainDataSet.DW * obj.trainDataSet.L^2;
 			rho2 = rRHO * obj.trainDataSet.RHO;
 			[xdim,x0,zslice,dw,rho,tend] = obj.trainDataSet.getvar('xdim','x0','zslice','dw','rho','tend');
-			
-			obj.fwdmodel = GliomaSolver(xdim,  dw2, rho2 ,x0, 1, zslice);
+
+            p.tend = tend;
+            p = parseargs(p, varargin{:});
+            fprintf('run forward with tend = %g\n', p.tend);
+
+
+            % forward using infered paramter
+			obj.fwdmodel = GliomaSolver(xdim,  dw2, rho2 ,x0, p.tend/tend, zslice);
 			obj.fwdmodel.readmri(obj.atlas);
 			obj.fwdmodel.solve(varargin{:});
-
-			obj.fwdmodele = GliomaSolver(xdim,  dw, rho ,x0, tend, zslice);
+    
+            % forward using exact paramter
+			obj.fwdmodele = GliomaSolver(xdim,  dw, rho ,x0, p.tend, zslice);
 			obj.fwdmodele.readmri(obj.atlas);
 			obj.fwdmodele.solve('savesol',false);
 		end
@@ -259,25 +267,22 @@ classdef PostData<dynamicprops
             % error of fwd solution using infered param
 			[ax1,ax2] = obj.atlas.imagesc2('df', obj.fwdmodel.uend.*obj.fwdmodel.phi);
 			title(ax1,'\phi u_{fdm,pred}');
-			if obj.savefig
-				export_fig(fullfile(obj.modeldir,'fig_fdm_upred.jpg'),'-m3')
-			end
+			obj.savefig('fig_fdm_upred.jpg');
 			
 
 			err =  abs(obj.fwdmodel.uend - obj.fwdmodele.uend).*obj.fwdmodel.phi;
 			[ax1,ax2] = obj.atlas.imagesc2('df', err);
 			title(ax1,'\phi |u_{fdm,pred} - u_{end}|');
-			if obj.savefig
-				export_fig(fullfile(obj.modeldir,'fig_fdm_err.jpg'),'-m3')
-			end
+			obj.savefig('fig_fdm_err.jpg');
+			
 
         end
 
-        function contoursc(obj, level)
+        function [ax1, ax2] = contourfdm(obj, level)
             [ax1, ax2] = obj.atlas.contoursc(obj.upred{1}.xdat, obj.upred{1}.upredxdat, level );
             
             ax3 = axes;
-            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend,level,'r','LineWidth',2);
+            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend, level, 'y','LineWidth',2);
             
             set(ax3,'YDir','reverse')
             set(ax3,'color','none','visible','on')
@@ -307,15 +312,15 @@ classdef PostData<dynamicprops
 
         function contourt(obj, level, i)
             u = obj.upred{3}.upredts(:,i);
-            [ax1, ax2] = obj.atlas.contoursc(obj.upred{3}.xdat, u, level );
-            
+            [ax1, ax2, c1] = obj.atlas.contoursc(obj.upred{3}.xr, u, level );
+            c1.LineColor = "#EDB120"; % yellow
             % interpolate solution at time from PINN
             tq = obj.upred{3}.ts * obj.trainDataSet.tend;
             ugrid = obj.fwdmodele.interpgrid(tq,'linear');
 
             ax3 = axes;
-            contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i),level,'r','LineWidth',2);
-            
+            [~,c2] = contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i),level,'r','LineWidth',2);
+            c2.LineColor = "#D95319"; % red
             set([ax2,ax3],'YDir','reverse')
             set([ax2,ax3],'color','none','visible','on')
             
@@ -324,11 +329,20 @@ classdef PostData<dynamicprops
             
             levelstr = sprintf('%g ',level);
             title(ax1, sprintf('contour %s, t = %g',levelstr, tq(i)));
+			fname = sprintf('fig_contourt_t%g.jpg',tq(i));
+			obj.savefig(fname);
+
+        end
 
 
-
-
-
+        function residualscatter(obj, i)
+            tq = obj.upred{3}.ts * obj.trainDataSet.tend;
+            maxres = max(obj.upred{3}.rests(:));
+            minres = min(obj.upred{3}.rests(:));
+            [ax1,ax2]=obj.atlas.scatter('df', obj.upred{3}.xr, 6, obj.upred{3}.rests(:,i));
+%             clim([minres maxres]);
+            disp([minres maxres]);
+            title(ax1, sprintf('residual t = %g',tq(i)));
         end
    end
 end

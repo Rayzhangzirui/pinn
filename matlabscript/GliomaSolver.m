@@ -356,6 +356,8 @@ classdef GliomaSolver< handle
 
         function [Pwmq,Pgmq,phiq,uq,xq,tq,uqend,tqend] = genScatterData(obj, varargin)
             % generate scatter data set
+            % (1) sample xq and tq, if finalt, set tq = 1
+            % (2) based on (xq,tq), interpolate Pwm, Pm, phi, uend. might add noise
             
             p.n = 10000;
             p.finalt = false;
@@ -378,7 +380,7 @@ classdef GliomaSolver< handle
 
             tqend = ones(p.n,1)*obj.tend; % all final time
             if p.finalt
-                % if final time, don't output tq and interpolate uq
+                % if final time, don't output tq and don't interpolate uq
                 tq = nan;
                 uq = nan;
             else
@@ -386,12 +388,14 @@ classdef GliomaSolver< handle
                 tq = rand(p.n,1)*obj.tend; % sample t, unit
                 uq = obj.interpu(tq, xq, method); % u(tq, xq)
             end
+
             
             % useful for xdat and xtest
+            nzuend = addNoise(obj.uend, varargin{:});
             phiq = obj.interpf(obj.phi, xq, method);
-            uqend = obj.interpf(obj.uend, xq, method);
+            uqend = obj.interpf(nzuend, xq, method);
 
-            % only useful of xr
+            % Pwmq and Pgmq only useful of xr
             % interpolate anyway, might not be useful for testing data
             Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
             Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
@@ -432,7 +436,9 @@ classdef GliomaSolver< handle
 
             dataset.addvar(xdat,udat,phidat,...
             xtest,utest,phitest,...
-            Pwmq, Pgmq, phiq, xr, uq, seed);
+            Pwmq, Pgmq, phiq, xr, uq, seed,...
+            xrArg, xdatArg, xtestArg);
+
             dataset.copyprop(obj, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
             'dw','dg','rho','x0','ix','xdim','tend','zslice');
 
