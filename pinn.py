@@ -201,11 +201,15 @@ class PINNSolver():
         # set up check point
         self.checkpoint = tf.train.Checkpoint(model)
         self.manager = tf.train.CheckpointManager(self.checkpoint, directory=os.path.join(options['model_dir'],'ckpt'), max_to_keep=4)
+        
         if (not self.manager.latest_checkpoint) and options.get('dicard_ckpt')==False:
             print("Don't restore")
         else:
             if options.get('restore') is not None:
-                ckptpath = options.get('restore')
+                if isinstance(options.get('restore'),int):
+                    ckptpath = self.manager.checkpoints[options.get('restore')]
+                else:
+                    ckptpath = options.get('restore')
                 # assert os.path.exists(ckptpath), f'{ckptpath} not exist'
             else:
                 ckptpath = self.manager.latest_checkpoint

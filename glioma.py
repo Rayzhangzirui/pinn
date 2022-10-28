@@ -177,7 +177,7 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-
+        
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
                                 fdatloss,
