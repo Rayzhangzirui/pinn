@@ -120,7 +120,10 @@ classdef Atlas<DataSet
             u = double(u);
             F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
             uq = F(obj.gx, obj.gy);
+            uq(isnan(uq)) = 0;
+
             [ax1, ax2, c] = obj.contour('df',uq, level);
+            
         end
 
         function [ax1, ax2] = imagescScatter(obj, X, u)

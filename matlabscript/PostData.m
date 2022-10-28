@@ -65,7 +65,8 @@ classdef PostData<dynamicprops
 			  if startsWith(fs(i).name,'upred') && endsWith(fs(i).name,'mat')
 				obj.upred{end+1} = DataSet(path);
 				obj.upred{end}.addvar(path);
-			  end
+              end
+
 		  end
 			
 		  % read data file
@@ -310,16 +311,24 @@ classdef PostData<dynamicprops
         end
 
 
-        function contourt(obj, level, i)
-            u = obj.upred{3}.upredts(:,i);
-            [ax1, ax2, c1] = obj.atlas.contoursc(obj.upred{3}.xr, u, level );
+        function contourt(obj, k, level, i)
+            u = obj.upred{k}.upredts(:,i);
+            [~,fname,~] =  fileparts(obj.upred{k}.path);
+            parts = split(fname,'_');
+            optimizer  = parts{end};
+
+            phiq = obj.trainDataSet.phiq;
+
+            [ax1, ax2, c1] = obj.atlas.contoursc(obj.upred{k}.xr, u.*phiq, level );
             c1.LineColor = "#EDB120"; % yellow
             % interpolate solution at time from PINN
-            tq = obj.upred{3}.ts * obj.trainDataSet.tend;
+            tq = obj.upred{k}.ts * obj.trainDataSet.tend;
             ugrid = obj.fwdmodele.interpgrid(tq,'linear');
 
+            phigrid = obj.fwdmodele.phi;
+            
             ax3 = axes;
-            [~,c2] = contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i),level,'r','LineWidth',2);
+            [~,c2] = contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i).* phigrid , level,'r','LineWidth',2);
             c2.LineColor = "#D95319"; % red
             set([ax2,ax3],'YDir','reverse')
             set([ax2,ax3],'color','none','visible','on')
@@ -328,10 +337,18 @@ classdef PostData<dynamicprops
             hLink.Targets(1).DataAspectRatio = [1 1 1];
             
             levelstr = sprintf('%g ',level);
-            title(ax1, sprintf('contour %s, t = %g',levelstr, tq(i)));
-			fname = sprintf('fig_contourt_t%g.jpg',tq(i));
+            title(ax1, sprintf('%s, contour %s, t = %g',optimizer, levelstr, tq(i)));
+			fname = sprintf('fig_contourt_%s_t%g.jpg',optimizer, tq(i));
 			obj.savefig(fname);
 
+        end
+
+        function contourts(obj, level, ts)
+            for k = 3:4
+                for ti = ts
+                    obj.contourt(k, level, ti);
+                end
+            end
         end
 
 

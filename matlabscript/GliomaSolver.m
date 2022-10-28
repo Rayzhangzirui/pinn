@@ -251,6 +251,7 @@ classdef GliomaSolver< handle
                 F = griddedInterpolant({xg, yg, tg}, obj.uall, method,extrap);
                 uq = F({xg,yg,tq});
             end 
+            uq(isnan(uq)) = 0;
         end
 
         function scale(obj, dwc, rhoc, lc)
