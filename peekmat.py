@@ -9,5 +9,6 @@ if __name__ == "__main__":
     for k,v in matdat.items():
         if isinstance(v, np.ndarray):
             print(f'{k} {v.shape}')
+            print(f'{v}')
 
     

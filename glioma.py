@@ -88,11 +88,9 @@ class Gmodel:
         else:
             self.optim = tf.keras.optimizers.Adam()
 
-        
-        if opts.get('trainD') == False:
+        if opts.get('exactfwd') == True:
+            print('use exat parameter from dataset')
             opts['D0'] = self.dataset.rDe
-
-        if opts.get('trainRHO') == False:
             opts['RHO0'] = self.dataset.rRHOe
 
         param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD')), 'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'))}
@@ -174,6 +172,7 @@ class Gmodel:
 
         self.model = PINN(param=param,
                 input_dim=self.dim,
+                activation = opts['activation'],
                 num_hidden_layers=opts["num_hidden_layer"], 
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)

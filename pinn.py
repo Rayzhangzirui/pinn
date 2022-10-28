@@ -282,9 +282,10 @@ class PINNSolver():
             self.callback()
             
             # change t
-            if self.options.get('randomt') == True and i % 100 == 0:
+            if self.options.get('randomt') > 0 and i % 100 == 0:
+                tend = self.options.get('randomt')
                 nrow = self.xr.shape[0]
-                self.xr[:,0:1] = np.random.uniform(size=(nrow,1))
+                self.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
             
             if self.options.get('randomtfinal') == True and i % 10 == 0:
                 self.xr[:,0:1] = 1.0
@@ -501,7 +502,7 @@ class PINNSolver():
         np.savetxt(fpath, hist, fmt, header = self.header, comments = '')
         print(f'save training hist to {fpath}')
 
-    def predtx(self, suffix):
+    def predtx(self, suffix, tend = 1.0):
         # evalute at residual points. not data points. 
         # need Pwm, Pgm , phi etc
         savedat = {}
@@ -509,7 +510,8 @@ class PINNSolver():
         rests = [] # residual at different t
         
         predfile = os.path.join(self.options['model_dir'],f'upred_{suffix}.mat')
-        ts = np.linspace(0, 1.0, 11)
+        n = int(tend/0.1) + 1
+        ts = np.linspace(0, tend, n)
         for t in ts:
             xr = self.xr
             xr[:,0] = t
