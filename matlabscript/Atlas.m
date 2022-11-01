@@ -9,21 +9,22 @@ classdef Atlas<DataSet
             p.xdim = 2;
             p.dw = 0.1;
             p.wfilt = 1;
+            p.R = 50;
             p = parseargs(p, varargin{:});
 
             if strcmp(p.fdir,'sphere')
-                fprintf('use 2d sphere \n');
-                n = 201;
-                R = 75;
-                mid = ceil(n/2);
-                [gx,gy] = ndgrid(1:n,1:n); 
+                p.wfilt = 0; % no smoothing
+                bd = ceil(p.R*1.1); % diffused domain
+                fprintf('use 2d sphere with radius %g, box %g \n',p.R, bd);
+                mid = 0;
+                [gx,gy,gz] = ndgrid(-bd:bd,-bd:bd,1:1); 
     
                 distix = sqrt((gx-mid).^2+ (gy-mid).^2);
-                Pwm = double(distix<R);
-                Pgm = zeros(n);
-                Pcsf = zeros(n);
+                Pwm = double(distix<p.R);
+                Pgm = zeros(size(Pwm));
+                Pcsf = zeros(size(Pwm));
             else
-                fprintf('read atlas %s\n', p.fdir);
+                fprintf('read atlas %s, slice %g\n', p.fdir, p.zslice);
                 gm = MRIread( [p.fdir 'GM.nii']);
                 wm = MRIread( [p.fdir 'WM.nii']);
                 csf = MRIread( [p.fdir 'CSF.nii']);
@@ -40,6 +41,10 @@ classdef Atlas<DataSet
                     Pgm  = Pgm(:,:,p.zslice);
                     Pcsf = Pcsf(:,:,p.zslice);
                 end
+
+                sz = [1 1 1];
+                sz(1:p.xdim) = size(Pwm); % even when Pwm is 2d, 3rd dim is 1
+                [gx,gy,gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
             end
 
             if p.wfilt > 0
@@ -48,11 +53,6 @@ classdef Atlas<DataSet
                 [Pcsf, Pwm, Pgm] = mapfun(f, Pcsf, Pwm, Pgm);
             end
             
-
-            sz = [1 1 1];
-            sz(1:p.xdim) = size(Pwm); % even when Pwm is 2d, 3rd dim is 1
-            [gx,gy,gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
-
             obj@DataSet(Pwm, Pgm, Pcsf, gx, gy, gz);
             obj.setdw(p.dw)
 
@@ -68,26 +68,28 @@ classdef Atlas<DataSet
 
 
         function [ax1, h1] = plotbkgd(obj, dat)
-            h1 = imagesc(dat);
+            h1 = imagesc(obj.gx(1,1),obj.gy(1,1),dat);
             ax1 = h1.Parent;
             maxcdata = max(h1.CData(:));
-            clim(ax1,[0,maxcdata]);
+            mincdata = min(h1.CData(:));
+            clim(ax1,[mincdata,maxcdata]);
             cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
         end
         
-        function [ax1, ax2] = imagesc2(obj, bgname, fgdat, varargin)
-            figure;
-            bgdat = slice2d(obj.(bgname), varargin{:});
+        function [ax1, ax2] = imagescfg(obj, fgdat, varargin)
+            p.bgname = 'df';
+            p = parseargs(p, varargin{:});
+            bgdat = slice2d(obj.(p.bgname), varargin{:});
             fgdat = slice2d(fgdat, varargin{:});
             
             [ax1,h1] = plotbkgd(obj, bgdat);
             ax1.Position(3) = ax1.Position(3)-0.1;
             
             ax2 = axes;
-            h2 = imagesc(fgdat);
+            h2 = imagesc(obj.gx(1),obj.gy(1),fgdat);
             cmp = colormap(ax2,'parula');
-            h2.AlphaData = double(h2.CData>1e-2); % threshold for transparency
+            h2.AlphaData = double(h2.CData>1e-3); % threshold for transparency
             maxcdata = max(h2.CData(:));
             clim(ax2,[0,maxcdata]);
             set(ax2,'color','none','visible','on')
@@ -114,7 +116,7 @@ classdef Atlas<DataSet
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
 
-        function [ax1, ax2, c] = contoursc(obj, X, u, level)
+        function [ax1, ax2, c, uq] = contoursc(obj, X, u, level)
             % contour from scattered, extrapolate to grid
             X = double(X);
             u = double(u);

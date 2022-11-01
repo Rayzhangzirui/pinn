@@ -1,5 +1,11 @@
-function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, xdim)
+function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix, varargin)
     
+    p.u0 = @(r) 0.1*exp(-0.1*r.^2);
+    p.xdim = 2;
+    p = parseargs(p, varargin{:});
+    
+
+
     h = 1; % spacial resolution, mm (caption figure 1)
     epsilon = 3; % width of diffused domain
     Dg = Dw/10;
@@ -52,8 +58,8 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
     
     
    %% Solve reaction diffusion 
-    r2 = h.^2*((gx-ix(1)).^2+(gy-ix(2)).^2+(gz-ix(3)).^2); % distance squared
-    u0 = 0.1*exp(-0.1*r2);
+    r = sqrt(h.^2*((gx-ix(1)).^2+(gy-ix(2)).^2+(gz-ix(3)).^2)); % distance
+    u0 = p.u0(r);
 %     u0 = exp(-0.01*r2.^2);
 
     dt0 = 0.99*h^2/(6*max(D(:))); % CFL condition, timestep
@@ -87,5 +93,5 @@ function [phi,uall,tall,u] = GliomaFdmSolve(Pwm, Pgm, Pcsf, Dw, rho, tfinal, ix,
     end
     
     uend = u;
-    uall = cat(xdim+1,uall{:});
+    uall = cat(p.xdim+1,uall{:});
 end

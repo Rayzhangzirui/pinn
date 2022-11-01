@@ -1,4 +1,4 @@
-classdef GliomaSolver< handle
+classdef GliomaSolver< dynamicprops
     % model to solve glioma
     % if 2d model, all the properties are only slices
     % 
@@ -36,6 +36,9 @@ classdef GliomaSolver< handle
         tall
         uend
         
+        % polar solution
+        polarsol
+        
         % scaling
         rmax % radius of tumor region
         dwc
@@ -51,6 +54,7 @@ classdef GliomaSolver< handle
     
     methods
         function obj = GliomaSolver(xdim, d, rho, x0, tend, zslice)
+            % set up parameters
             obj.xdim = xdim;
             obj.dw = d;
             obj.dg = d/10;
@@ -84,11 +88,8 @@ classdef GliomaSolver< handle
             else
                 obj.atlas = Atlas('dw', obj.dw, 'zslice',obj.zslice, varargin{:});
             end
-
-            sz = [1 1 1];
-            sz(1:obj.xdim) = size(obj.atlas.Pwm); % even when Pwm is 2d, 3rd dim is 1
-            [obj.gx,obj.gy,obj.gz] = ndgrid(1:sz(1),1:sz(2),1:sz(3)); 
-        end% 
+            [obj.gx,obj.gy,obj.gz] = deal(obj.atlas.gx, obj.atlas.gy, obj.atlas.gz); 
+        end 
         
         function savesol(obj,fp)
             % save solution to mat file
@@ -135,15 +136,55 @@ classdef GliomaSolver< handle
                 obj.loadsol(fp);
             else
                 [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf,...
-                    obj.dw, obj.rho, obj.tend, obj.ix, obj.xdim);
+                    obj.dw, obj.rho, obj.tend, obj.ix);
+                
                 if p.savesol
                     fprintf('save pde solution\n');
                     obj.savesol(fp); 
                 end
             end
 
+            obj.atlas.add('phi',obj.phi);
+
             obj.getrmax();
+        end
+
+        function solvepolar(obj,varargin)
+            p.epsilon = 3;
+            p.bd = 50;
+            p.m = obj.xdim-1;
+            icfun = @(r) 0.1*exp(-0.1*r.^2);
+            p.h = 1;
+            p.dx = 1;
+            p.dt = obj.tend/10;
+            p.epsilon = 3;
             
+
+            p = parseargs(p, varargin{:});
+            m = obj.xdim-1;
+
+            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, obj.dw, obj.rho, p.dx, obj.tend, p.dt, icfun);
+
+            
+            obj.atlas = Atlas('fdir','sphere','R', p.bd);
+            [obj.gx,obj.gy,obj.gz] = deal(obj.atlas.gx, obj.atlas.gy, obj.atlas.gz); 
+            
+            r = sqrt(obj.gx.^2+obj.gy.^2);
+
+            % make polar solution grid solution
+            obj.tall = obj.polarsol.tgrid;
+            warning('interp polar solution to grid, assuming xdim = 2');
+            for i = 1:length(obj.tall)
+                ui = interp1(obj.polarsol.xgrid, obj.polarsol.sol(i,:), r(:) );
+                ui(isnan(ui)) = 0;
+                ui = reshape(ui, size(obj.gx));
+                obj.uall(:,:,i) = ui;
+            end
+            phi = interp1(obj.polarsol.xgrid, obj.polarsol.phi, r(:) );
+            obj.phi = reshape(phi, size(obj.gx));
+            obj.uend = obj.uall(:,:,end);
+
+            obj.getrmax()
         end
 
         function f = getSlice(obj, name, vz, tk)
@@ -172,15 +213,16 @@ classdef GliomaSolver< handle
         end
 
         function [fig, ax1, ax2] = plotuend(obj,varargin)
+            figure;
             uend = slice2d(obj.uend,varargin{:});
-            [ax1, ax2]  = obj.atlas.imagesc2('df', uend, varargin{:});
+            [ax1, ax2]  = obj.atlas.imagescfg(uend, varargin{:});
         end
 
         function [fig, ax1, ax2] = plotphiuend(obj,varargin)
             fig = figure;
             uend = slice2d(obj.uend,varargin{:});
             phi = slice2d(obj.phi,varargin{:});
-            [ax1, ax2]  = obj.atlas.imagesc2('df', uend.*phi, varargin{:});
+            [ax1, ax2]  = obj.atlas.imagescfg(uend.*phi, varargin{:});
         end
 
         function [rmax, idxin, mskin] = getrmax(obj,varargin)
@@ -217,7 +259,6 @@ classdef GliomaSolver< handle
 
         function fq = interpu(obj, t, X, method)
             % interpolate u(x,t)
-
             f = @(x) reshape(x,[],1);
 
             if obj.xdim == 3
@@ -363,6 +404,9 @@ classdef GliomaSolver< handle
             p.n = 10000;
             p.finalt = false;
             p.usegrid = false; % use grid data
+            p.method = 'linear';
+            p.alltime = false;
+            p.usepolar = false;
             p = parseargs(p, varargin{:});
             
             if p.usegrid
@@ -373,33 +417,40 @@ classdef GliomaSolver< handle
                 return
             end
 
-
             % generate x sample in circle, then interpolate
             xq = obj.xsample(varargin{:});
             
-            method = 'linear';
 
             tqend = ones(p.n,1)*obj.tend; % all final time
-            if p.finalt
-                % if final time, don't output tq and don't interpolate uq
-                tq = nan;
-                uq = nan;
-            else
-                % if not final time, generate tq and iterpolate uq
-                tq = rand(p.n,1)*obj.tend; % sample t, unit
-                uq = obj.interpu(tq, xq, method); % u(tq, xq)
-            end
-
+            tq = rand(p.n,1)*obj.tend; % sample t, unit
             
+            
+            if p.usepolar
+                fprintf('interpolate polar solution');
+                rq = x2r(xq);
+                xgrid  = obj.polarsol.xgrid;
+                tgrid  = reshape(obj.polarsol.tgrid,[],1);
+                phiq = interp1(xgrid, obj.polarsol.phi, rq );
+                uqend = interp1(xgrid, obj.polarsol.sol(end,:), rq );
+                Pwmq = ones(size(rq));
+                Pgmq = zeros(size(rq));
+
+                uq = interpn(tgrid, xgrid, obj.polarsol.sol, tq, rq, p.method); % u(tq, xq), % for testing
+                return
+            end
+            
+            
+            uq = obj.interpu(tq, xq, p.method); % u(tq, xq), mainly for testing
+
             % useful for xdat and xtest
             nzuend = addNoise(obj.uend, varargin{:});
-            phiq = obj.interpf(obj.phi, xq, method);
-            uqend = obj.interpf(nzuend, xq, method);
+            phiq = obj.interpf(obj.phi, xq, p.method);
+            uqend = obj.interpf(nzuend, xq, p.method);
 
             % Pwmq and Pgmq only useful of xr
             % interpolate anyway, might not be useful for testing data
-            Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
-            Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
+            Pwmq = obj.interpf(obj.atlas.Pwm, xq, p.method);
+            Pgmq = obj.interpf(obj.atlas.Pgm, xq, p.method);
 
         end
 
@@ -408,7 +459,7 @@ classdef GliomaSolver< handle
             % sample xdat on grid,
             p.savedat = true;
             p.seed = 1;
-            p.tag = 'scattersample';
+            p.tag = 'sample';
             p.samex = true;  % xdat same as xr
             p.datdir = './';
             p = parseargs(p, varargin{:});

@@ -1,4 +1,4 @@
-function [sol,xgrid,tgrid] = pdepolar(ddm, EPSILON, BD, m, D, RHO, dx, tend, dt, icfun)
+function  s = pdepolar(ddm, EPSILON, BD, m, D, RHO, dx, tend, dt, icfun)
 % solve reaction diffusion pde,
 % with or without normalization
 % du/dt = grad ( D grad u) + RHO u(1-u)
@@ -15,11 +15,13 @@ if ddm
 end
 
 nx = floor(bd/dx);
-xgrid = linspace(0,bd,nx+1);
+s.xgrid = linspace(0,bd,nx+1);
 nt = floor(tend/dt);
-tgrid = linspace(0,tend,nt);
+s.tgrid = linspace(0,tend,nt+1);
+s.phi = phi(s.xgrid);
+s.sol = pdepe(m,@pdefunc,icfun,@bcfun,s.xgrid,s.tgrid);
 
-sol = pdepe(m,@pdefunc,icfun,@bcfun,xgrid,tgrid);
+
 
 
 % phase field function for diffused domain method
