@@ -18,6 +18,9 @@ classdef DataSet < dynamicprops
             if ~isprop(obj, prop)
                 obj.addprop(prop);
             end
+            if isnumeric(dat)
+                dat = double(dat);
+            end
             obj.(prop) = dat;
         end
 

@@ -19,7 +19,7 @@ classdef PostData<dynamicprops
 	  function obj = PostData(modeldir,varargin)
 		  p = inputParser;
 		  addRequired(p,'modeldir',@ischar);
-		  addParameter(p,'yessave',true,@isbool);
+		  addParameter(p,'yessave',true,@islogical);
 		  addParameter(p,'udat','',@ischar);
 		  addParameter(p,'tag','',@ischar);
 		  addParameter(p,'dim',2,@isscalar);
@@ -100,8 +100,11 @@ classdef PostData<dynamicprops
 			sc(1) = plot(obj.log.it, log10(obj.log.total),'DisplayName', 'total',varargin{:});
 			hold on;
 			
+            w_dat = obj.info.w_dat;
+            datlos  = obj.log.data * w_dat;
+
 			sc(2) = plot(obj.log.it, log10(obj.log.res),'DisplayName',   'res',varargin{:});
-			sc(3) = plot(obj.log.it, log10(obj.log.data),'DisplayName', 'data',varargin{:} );
+			sc(3) = plot(obj.log.it, log10(datlos),'DisplayName', [num2str(w_dat) 'data'],varargin{:} );
 			sc(3) = plot(obj.log.it, log10(obj.log.tmse),'DisplayName', 'test',varargin{:} );
 			grid on;
 			xlabel('steps');
@@ -175,22 +178,26 @@ classdef PostData<dynamicprops
 			title(ax1,tag);
 		end
         
-        function savefig(obj,fname)
+        function savefig(obj,fname,varargin)
             if obj.yessave
 				fp = fullfile(obj.modeldir,fname);
 				fprintf('save %s\n',fp);
-				export_fig(fp,'-m3');
+				export_fig(fp,varargin{:});
             end
         end
 
 		function scatterupred(obj)
             % prediction error
-            ndat = obj.info.n_dat_pts;
+
+            % might inpt n_dat_pts> length of xdat by mistake
+            % numpy just slice to the end
+            ndat = min(size(obj.upred{1}.xdat,1),obj.info.n_dat_pts);
 
             xdat = obj.upred{1}.xdat(1:ndat,:);
 			upredxdat = obj.upred{1}.upredxdat;
 
 			udat = obj.trainDataSet.udat(1:ndat);
+            uq = obj.trainDataSet.uq(1:ndat);
 			phidat = obj.trainDataSet.phidat(1:ndat);
             
             umax = min(max(udat),1);
@@ -215,6 +222,15 @@ classdef PostData<dynamicprops
 
 			fname = 'fig_uprederr.jpg';
 			obj.savefig(fname);
+
+
+            % plot error noise
+            warning('assuming xr and xdat same');
+			noise = (udat - uq ).*phidat;
+			[ax1,ax2] = obj.scatter(xdat, err, '\phi noise');
+
+			fname = 'fig_noise.jpg';
+			obj.savefig(fname);
 		end
 
 		function [ax1,ax2] = scatterres(obj)
@@ -234,34 +250,43 @@ classdef PostData<dynamicprops
         end
 
 
-        
-
-
         function forward(obj, varargin)
             % forward FDM solve using inferred parameter
 			rD = obj.upred{1}.rD;
 			rRHO = obj.upred{1}.rRHO;
+            
+            % get training param
+			[xdim,x0,zslice,dw,rho,tend,L,T,DW,RHO] = obj.trainDataSet.getvar('xdim','x0','zslice','dw','rho','tend','L','T','DW','RHO');
+            [dwc,rhoc] = obj.trainDataSet.getvar('dwc','rhoc');
+            
+			dw2 = rD / (tend/T) * dwc;
+			rho2 = rRHO /(tend/T) * rhoc;
 
-			xim = obj.trainDataSet.xdim;
-
-			dw2 = rD * obj.trainDataSet.DW * obj.trainDataSet.L^2;
-			rho2 = rRHO * obj.trainDataSet.RHO;
-			[xdim,x0,zslice,dw,rho,tend] = obj.trainDataSet.getvar('xdim','x0','zslice','dw','rho','tend');
-
+            
             p.tend = tend;
+            p.polar = false;
             p = parseargs(p, varargin{:});
             fprintf('run forward with tend = %g\n', p.tend);
 
-
             % forward using infered paramter
-			obj.fwdmodel = GliomaSolver(xdim,  dw2, rho2 ,x0, p.tend/tend, zslice);
-			obj.fwdmodel.readmri(obj.atlas);
-			obj.fwdmodel.solve(varargin{:});
-    
+			obj.fwdmodel = GliomaSolver(xdim,  dw2, rho2 ,x0, p.tend, zslice);
             % forward using exact paramter
 			obj.fwdmodele = GliomaSolver(xdim,  dw, rho ,x0, p.tend, zslice);
-			obj.fwdmodele.readmri(obj.atlas);
-			obj.fwdmodele.solve('savesol',false);
+
+            if p.polar
+                obj.fwdmodel.solvepolar()
+                obj.fwdmodele.solvepolar()
+            else
+			    obj.fwdmodel.readmri(obj.atlas);
+			    obj.fwdmodel.solve(varargin{:});
+
+                obj.fwdmodele.readmri(obj.atlas);
+			    obj.fwdmodele.solve('savesol',false);
+            end
+            obj.atlas = obj.fwdmodele.atlas; % copy atlas
+    
+            
+			
 		end
 
 		function fwderr(obj)
@@ -311,43 +336,75 @@ classdef PostData<dynamicprops
         end
 
 
-        function contourt(obj, k, level, i)
+        function  axs = contourt(obj, k, level, i)
             u = obj.upred{k}.upredts(:,i);
             [~,fname,~] =  fileparts(obj.upred{k}.path);
             parts = split(fname,'_');
             optimizer  = parts{end};
 
-            phiq = obj.trainDataSet.phiq;
-
-            [ax1, ax2, c1] = obj.atlas.contoursc(obj.upred{k}.xr, u.*phiq, level );
-            c1.LineColor = "#EDB120"; % yellow
             % interpolate solution at time from PINN
             tq = obj.upred{k}.ts * obj.trainDataSet.tend;
             ugrid = obj.fwdmodele.interpgrid(tq,'linear');
-
             phigrid = obj.fwdmodele.phi;
             
-            ax3 = axes;
-            [~,c2] = contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i).* phigrid , level,'r','LineWidth',2);
-            c2.LineColor = "#D95319"; % red
-            set([ax2,ax3],'YDir','reverse')
-            set([ax2,ax3],'color','none','visible','on')
             
-            hLink = linkprop([ax3, ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
+            [axbg, ~] = obj.atlas.plotbkgd(obj.atlas.df);
+%             [axs(1), axs(2)] = obj.atlas.imagescfg(ugrid(:,:,i).*phigrid);
+            %             ax3 = axes;
+%             imagesc(ax3, obj.atlas.gx(1),obj.atlas.gy(1),ugrid(:,:,i).*phigrid);
+%             [~,c2] = contour(obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i).* phigrid , level,'r','LineWidth',1);
+
+            
+            axugrid = axes;
+            [~,hContour] = contour(axugrid,obj.atlas.gx, obj.atlas.gy, ugrid(:,:,i).*phigrid, level);
+            hContour.LineColor = "#D95319"; % red
+            set(axugrid,'YDir','reverse','color','none','visible','on');
+            % hacks to make contourf transparent
+%             https://undocumentedmatlab.com/articles/customizing-contour-plots
+%             drawnow;  % this is important, to ensure that FacePrims is ready in the next line!
+%             hFills = hContour.FacePrims;  % array of TriangleStrip objects
+%             [hFills.ColorType] = deal('truecoloralpha');  % default = 'truecolor'
+%             for idx = 1 : numel(hFills)
+%                hFills(idx).ColorData(4) = 150;   % default=255
+%             end
+
+%             hContour.LineColor = "#D95319"; % red
+%             cugrid.FaceAlpha = 0;
+
+            % interpolate scattered data to grid
+            nres = obj.info.n_res_pts;
+			phiq = obj.trainDataSet.phiq(1:nres);
+            X = obj.upred{k}.xr;
+            F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
+            uq = F(obj.atlas.gx, obj.atlas.gy);
+            uq(isnan(uq)) = 0;
+
+            % plot contour line
+%             [ax1, ax2, c1] = obj.atlas.contour('df', uq, level);
+            hold on
+            [cpinn,hpinn] = contour(axugrid,obj.atlas.gx, obj.atlas.gy, uq, level);
+            clabel(cpinn,hpinn,'LabelSpacing',100000);
+            hpinn.LineColor = "#EDB120"; % yellow
+%             set(axuq,'YDir','reverse','color','none','visible','on');
+            set(axugrid,'YDir','reverse','color','none','visible','on');
+            hLink = linkprop([ axugrid axbg],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
             
             levelstr = sprintf('%g ',level);
-            title(ax1, sprintf('%s, contour %s, t = %g',optimizer, levelstr, tq(i)));
+            title(axbg, sprintf('%s, contour %s, t = %g',optimizer, levelstr, tq(i)));
 			fname = sprintf('fig_contourt_%s_t%g.jpg',optimizer, tq(i));
 			obj.savefig(fname);
+            
+            axs = [axbg, axugrid];
 
         end
 
-        function contourts(obj, level, ts)
-            for k = 3:4
-                for ti = ts
-                    obj.contourt(k, level, ti);
-                end
+        function contourts(obj, pat, level, ts)
+            % pat = pattern for file
+            paths = cellfun(@(x) x.path, obj.upred, 'UniformOutput', false);
+            k = find(contains(paths, pat));
+            for ti = ts
+                obj.contourt(k, level, ti);
             end
         end
 

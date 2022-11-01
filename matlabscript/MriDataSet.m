@@ -37,8 +37,8 @@ classdef MriDataSet<handle
             
             j = 1;
             for i = 1:length(fs)
-                parts = split(fs(i).name,{'.','_'});
-                whichmod = parts{3};
+                parts = split(fs(i).name,{'.'});
+                whichmod = parts{1};
 
                 % if isempty, read all, 
                 if ~isempty(readmods) && ~contains(whichmod,readmods)
@@ -170,11 +170,14 @@ classdef MriDataSet<handle
             obj.append('upet',u,'u quad pet');
         end
 
-        function getBox(obj)
+        function getBox(obj,segname)
+            if nargin<2
+                segname = 'seg';
+            end
             % find bounding box of tumor segmentation
-            msk = obj.get('seg')>1;
+            msk = obj.get(segname)>1;
             idx = find(msk);
-            [i,j,k] = ind2sub(size(obj.get('seg')),idx);
+            [i,j,k] = ind2sub(size(obj.get(segname)),idx);
             f = @(x) [min(x),max(x)];
             bx = f(i);
             by = f(j);
@@ -194,7 +197,7 @@ classdef MriDataSet<handle
 %             end
 %         end
       
-        function visual(obj,varargin)
+        function hax = visual(obj,varargin)
 %             https://stackoverflow.com/questions/39365970/matlab-optional-handle-argument-first-for-plot-like-functions
             % Check the number of output arguments.
             nargoutchk(0,1);
@@ -255,9 +258,9 @@ classdef MriDataSet<handle
             n = length(mods);
             if n == 0
                 % default
-                mods = {'cbv','fla','isodiff','md','seg','t1','t1c','t2'};
+                mods = obj.mods;
                 prefix = 'all';
-                n = 8;
+                n = length(mods);
                 nrow = 2;
             end
             ncol = ceil(n/nrow);
@@ -278,7 +281,7 @@ classdef MriDataSet<handle
             obj.saveplot(fname);
         end
              
-        function saveplot(obj,fname)
+        function saveplot(obj,fname,varargin)
             % Save output
             if ~obj.savefig
                 return
@@ -288,8 +291,11 @@ classdef MriDataSet<handle
                 sprintf('Output folder does not exist, creating it in: \n %s', obj.visdir)
                 mkdir(obj.visdir)
             end
+            
             ffname = sprintf('fig_%s_%s',obj.id,fname); % add patient number
-            export_fig(gcf,fullfile(obj.visdir,ffname),'-jpg','-m3')
+            fp  = fullfile(obj.visdir,ffname);
+            fprintf('save to %s',fp)
+            export_fig(gcf, fp, varargin{:})
         end
 
         
