@@ -195,7 +195,7 @@ class Gmodel:
 
         if self.opts['lbfgs_opts'] is not None:
             results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])
-
+        
         self.saveopts()
         
     def saveopts(self):

@@ -488,6 +488,8 @@ class PINNSolver():
         #     print("Saved checkpoint for step {}: {}".format(int(self.iter), save_path))
 
     def callback_train_end(self):
+        # at the end of training of each optimizer, save prediction on xr, xdat
+        # also make prediction of xr at various time
         if self.options.get('saveckpt'):
             save_path = self.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))
@@ -495,6 +497,7 @@ class PINNSolver():
             print("checkpoint not saved")
 
         self.save_upred(self.current_optimizer)
+        self.predtx(self.current_optimizer, self.options.get('randomt'))
 
     def save_history(self):
         ''' save training history as txt
@@ -509,15 +512,18 @@ class PINNSolver():
     def predtx(self, suffix, tend = 1.0):
         # evalute at residual points. not data points. 
         # need Pwm, Pgm , phi etc
+        if tend is None:
+            tend = 1.0
+
         savedat = {}
         upredts = [] # prediction at different t
         rests = [] # residual at different t
         
-        predfile = os.path.join(self.options['model_dir'],f'upred_{suffix}.mat')
+        predfile = os.path.join(self.options['model_dir'],f'upred_txr_{suffix}.mat')
         n = int(tend/0.1) + 1
         ts = np.linspace(0, tend, n)
+        xr = np.copy(self.xr)
         for t in ts:
-            xr = self.xr
             xr[:,0] = t
 
             upredtxr = self.model(xr)
