@@ -13,6 +13,7 @@ classdef PostData<dynamicprops
 	  atlas
 	  fwdmodel
 	  fwdmodele
+      setting
    end
    
    methods
@@ -29,6 +30,8 @@ classdef PostData<dynamicprops
 		  obj.yessave = p.Results.yessave;
 		  obj.modeldir = p.Results.modeldir;
 		  
+          obj.setting.argfig = {'-m3'}
+
 		  assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
 		  obj.tag = p.Results.tag;
 		  fs = dir(obj.modeldir);          
@@ -112,7 +115,16 @@ classdef PostData<dynamicprops
 			legend('Location','best');
 			title(obj.tag);
 			export_fig(fullfile(obj.modeldir,'fig_loss.jpg'),'-m3');
-	   end
+       end
+
+       function [fig,sc] = PlotLossFig(obj, varargin)
+            [fig,sc] = obj.PlotLoss(varargin{:})
+            set(findall(fig,'-property','Interpreter'),'Interpreter','latex');
+            fig.Children(1).String = {'$$\mathcal{L}_{\rm tot}$$', '$$\mathcal{L}_{\rm PDE}$$', '$$0.01\mathcal{L}_{\rm data}$$', '$$\mathcal{L}_{\rm test}$$'}
+            fig.Children(2).Title.String = '';
+            fig.Children(2).YLabel.String = '$$\log_{10} \mathcal{L} $$';
+            set(fig.Children(1),'FontSize',20);
+       end
 
 	   function unscale(obj, xdim, T, L, x0)
 		   % remove scaling of (t,x)
@@ -153,7 +165,18 @@ classdef PostData<dynamicprops
 			fpath = fullfile(obj.modeldir,'fig_relerr.jpg');
 			fprintf('rel err param saved to %s\n',fpath);
 			export_fig(fpath,'-m3');
-	   end
+       end
+
+
+       function [fig,sc] = PlotInferErrFig(obj, varargin)
+           [fig,sc] = obj.PlotInferErr();
+           set(findall(fig,'-property','Interpreter'),'Interpreter','latex')
+            fig.Children(1).String = {'$$\mu_\mathcal{D}$$', '$$\mu_{\mathcal{R}}$$'}
+            fig.Children(2).Title.String = '';
+            fig.Children(2).YLabel.String = 'relative error';
+            set(fig.Children(1),'FontSize',20);
+
+       end
 
 	   function scatterdist(obj)
 		% plot distribution of xdat 
@@ -178,28 +201,77 @@ classdef PostData<dynamicprops
 			title(ax1,tag);
 		end
         
-        function savefig(obj,fname,varargin)
+        function savefig(obj,fname)
+            fp = fullfile(obj.modeldir,fname);
+            
             if obj.yessave
-				fp = fullfile(obj.modeldir,fname);
 				fprintf('save %s\n',fp);
-				export_fig(fp,varargin{:});
+				export_fig(fp,obj.setting.argfig{:});
+            else
+                fprintf('not saved %s\n',fp);
             end
         end
+        
+        function k = whichpred(obj,fpattern)
+            % given substr in file name, get index of prediction DataSet
+            paths = cellfun(@(x) x.path, obj.upred, 'UniformOutput', false);
+            k = find(contains(paths, fpattern));
+        end
 
-		function scatterupred(obj)
-            % prediction error
+        function [xdat, upredxdat, udat, udatnn, phidat] = getplotdat(obj,fpattern)
+            % get data to plot final time solution and predictions
 
+            k = obj.whichpred(fpattern);
+            
             % might inpt n_dat_pts> length of xdat by mistake
             % numpy just slice to the end
-            ndat = min(size(obj.upred{1}.xdat,1),obj.info.n_dat_pts);
+            ndat = min(size(obj.upred{k}.xdat,1),obj.info.n_dat_pts);
 
-            xdat = obj.upred{1}.xdat(1:ndat,:);
-			upredxdat = obj.upred{1}.upredxdat;
+            xdat = obj.upred{k}.xdat(1:ndat,:); %Xdat
+			upredxdat = obj.upred{k}.upredxdat; %prediciton on Xdat
 
-			udat = obj.trainDataSet.udat(1:ndat);
-            uq = obj.trainDataSet.uq(1:ndat);
-			phidat = obj.trainDataSet.phidat(1:ndat);
+			udat = obj.trainDataSet.udat(1:ndat); % udat, might have noise
+            udatnn = obj.trainDataSet.udatnn(1:ndat); % udat on final time Xr
+            warning('assuming Xdat Xr are the same');
             
+
+			phidat = obj.trainDataSet.phidat(1:ndat);
+        end
+
+        
+        function [ax1,ax2] =imageupred(obj,fpattern)
+            % interpolate to grid then plo
+            % does not look very good
+            [xdat, upredxdat, udat, udatnn, phidat] = obj.getplotdat(fpattern);
+            [ax1,ax2] = obj.atlas.imagescScatter(xdat, udat);
+        end
+        
+        function [ax1,ax2] = PlotudatFig(obj, fpattern, withnoise)
+            % plot data at the end
+           [xdat, upredxdat, udat, udatnn, phidat] = obj.getplotdat(fpattern);
+           umax = min(max(udatnn),1);
+            
+            if withnoise
+                whichu = udat;
+            else
+                whichu = udatnn;
+            end
+
+			% plot pred u
+			[ax1,ax2] = obj.scatter(xdat, whichu.*phidat, '\phi u_{pred}');
+            clim(ax2, [0, umax]);
+            
+            delete(ax1.Title);
+            set(ax1,'xtick',[]); 
+            set(ax1,'ytick',[]);
+            cb = findall(gcf,'Type','Colorbar');
+            set(cb(1).Label,{'String','Rotation','Position'},{'u',0,[0.5 -0.01]});
+            set(cb(2).Label,{'String','Rotation','Position'},{'D',0,[0.5 -0.01]});
+        end
+
+        function scatterupred(obj, fpattern)
+            % prediction error
+            [xdat, upredxdat, udat, uq, phidat] = obj.getplotdat(fpattern);
             umax = min(max(udat),1);
                 
 			% plot pred u
@@ -227,7 +299,7 @@ classdef PostData<dynamicprops
             % plot error noise
             warning('assuming xr and xdat same');
 			noise = (udat - uq ).*phidat;
-			[ax1,ax2] = obj.scatter(xdat, err, '\phi noise');
+			[ax1,ax2] = obj.scatter(xdat, noise, '\phi noise');
 
 			fname = 'fig_noise.jpg';
 			obj.savefig(fname);
@@ -334,6 +406,7 @@ classdef PostData<dynamicprops
             hLink = linkprop([ax3, ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
         end
+        
 
 
         function  axs = contourt(obj, k, level, i)
@@ -347,7 +420,6 @@ classdef PostData<dynamicprops
             ugrid = obj.fwdmodele.interpgrid(tq,'linear');
             phigrid = obj.fwdmodele.phi;
             
-            
             [axbg, ~] = obj.atlas.plotbkgd(obj.atlas.df);
 %             [axs(1), axs(2)] = obj.atlas.imagescfg(ugrid(:,:,i).*phigrid);
             %             ax3 = axes;
@@ -356,8 +428,10 @@ classdef PostData<dynamicprops
 
             
             axugrid = axes;
-            [~,hContour] = contour(axugrid,obj.atlas.gx, obj.atlas.gy, ugrid(:,:,i).*phigrid, level);
+            [~,hContour] = contour(axugrid,obj.atlas.gy, obj.atlas.gx, ugrid(:,:,i).*phigrid, level);
+%             [~,hContour] = contour(axugrid,obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend.*phigrid, level);
             hContour.LineColor = "#D95319"; % red
+            hContour.DisplayName = 'FDM';
             set(axugrid,'YDir','reverse','color','none','visible','on');
             % hacks to make contourf transparent
 %             https://undocumentedmatlab.com/articles/customizing-contour-plots
@@ -374,29 +448,57 @@ classdef PostData<dynamicprops
             % interpolate scattered data to grid
             nres = obj.info.n_res_pts;
 			phiq = obj.trainDataSet.phiq(1:nres);
-            X = obj.upred{k}.xr;
-            F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
-            uq = F(obj.atlas.gx, obj.atlas.gy);
-            uq(isnan(uq)) = 0;
+            uq = scatter2grid(obj.upred{k}.xr(:,2:3),u.*phiq,obj.atlas.gx, obj.atlas.gy, 'linear','none');
+            
 
             % plot contour line
 %             [ax1, ax2, c1] = obj.atlas.contour('df', uq, level);
-            hold on
-            [cpinn,hpinn] = contour(axugrid,obj.atlas.gx, obj.atlas.gy, uq, level);
-            clabel(cpinn,hpinn,'LabelSpacing',100000);
+            hold on;
+            [cpinn,hpinn] = contour(axugrid,obj.atlas.gy, obj.atlas.gx, uq, level);
+%             clabel(cpinn,hpinn,'LabelSpacing',100000);
             hpinn.LineColor = "#EDB120"; % yellow
-%             set(axuq,'YDir','reverse','color','none','visible','on');
+            hpinn.DisplayName = 'PINN';
             set(axugrid,'YDir','reverse','color','none','visible','on');
-            hLink = linkprop([ axugrid axbg],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink = linkprop([axbg axugrid],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
             
             levelstr = sprintf('%g ',level);
             title(axbg, sprintf('%s, contour %s, t = %g',optimizer, levelstr, tq(i)));
 			fname = sprintf('fig_contourt_%s_t%g.jpg',optimizer, tq(i));
+            axs = [axbg, axugrid];
+            hold(axs,'off');
 			obj.savefig(fname);
             
-            axs = [axbg, axugrid];
+        end
 
+
+        function axs = contourtfig(obj, fpat, level, tk)
+            % figure for contour
+            k = obj.whichpred(fpat);
+
+            tq = obj.upred{k}.ts * obj.trainDataSet.tend;
+            t = tq(tk);
+
+            axs = obj.contourt(k,level,tk);
+
+            cb = findall(gcf,'Type','Colorbar');
+            delete(cb)
+            
+            delete(axs(1).Title)
+
+            set(axs,'xtick',[]); 
+            set(axs,'ytick',[]);
+
+            set(axs(2).Children,'LineWidth', 2);
+%             axs(2).Children(1).DisplayName = 'FDM';
+%             axs(2).Children(2).DisplayName = 'PINN';
+            
+            text(axs(1), 10, 10, sprintf('t=%g',t),'Color','w',...
+            'HorizontalAlignment', 'left', ...
+            'VerticalAlignment', 'top');
+            
+            lgd = legend('Location','northeast');
+            set(findall(lgd,'-property','Interpreter'),'Interpreter','latex')
         end
 
         function contourts(obj, pat, level, ts)

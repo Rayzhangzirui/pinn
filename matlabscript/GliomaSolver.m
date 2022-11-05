@@ -396,7 +396,7 @@ classdef GliomaSolver< dynamicprops
 
 
 
-        function [Pwmq,Pgmq,phiq,uq,xq,tq,uqend,tqend] = genScatterData(obj, varargin)
+        function [Pwmq,Pgmq,phiq,uq,xq,tq,uqend,uqnn, tqend] = genScatterData(obj, varargin)
             % generate scatter data set
             % (1) sample xq and tq, if finalt, set tq = 1
             % (2) based on (xq,tq), interpolate Pwm, Pm, phi, uend. might add noise
@@ -419,7 +419,6 @@ classdef GliomaSolver< dynamicprops
 
             % generate x sample in circle, then interpolate
             xq = obj.xsample(varargin{:});
-            
 
             tqend = ones(p.n,1)*obj.tend; % all final time
             tq = rand(p.n,1)*obj.tend; % sample t, unit
@@ -443,6 +442,7 @@ classdef GliomaSolver< dynamicprops
             uq = obj.interpu(tq, xq, p.method); % u(tq, xq), mainly for testing
 
             % useful for xdat and xtest
+            uqnn = obj.interpf(obj.uend, xq, p.method); % data no noise
             nzuend = addNoise(obj.uend, varargin{:});
             phiq = obj.interpf(obj.phi, xq, p.method);
             uqend = obj.interpf(nzuend, xq, p.method);
@@ -467,18 +467,20 @@ classdef GliomaSolver< dynamicprops
             rng(seed,'twister');
             
             % sample xr scattered
-            [Pwmq,Pgmq,phiq,uq,xq,tq, uqend, tqend] = obj.genScatterData(xrArg{:});
-            xr = obj.transformDat(xq, tq);
+%             [Pwmq,Pgmq,phiq,uq,xq,tq, uqend, udatnn, tqend] = obj.genScatterData(xrArg{:});
+            [Pwmdat,Pgmdat,phidat,uq, xdat, tq, udat, udatnn, tdat] = obj.genScatterData(xdatArg{:});
+
             
             if p.samex
-                fprintf('space xdat same as xr\n');
-                [phidat, udat, xdat, tdat] = deal(phiq, uqend, xq, tqend);
+                fprintf('space xr same as xdat\n');
+                [Pwmq, Pgmq, phiq, xq] = deal(Pwmdat, Pgmdat, phidat, xdat);
             else
-                fprintf('space xdat different from xr\n');
-                [~,~,phidat,~, xdat, ~, udat, tdat] = obj.genScatterData(xdatArg{:});
+                fprintf('space xr different from xdat\n');
+                [Pwmq,Pgmq,phiq,uq,xq,tq, ~, ~, ~] = obj.genScatterData(xrArg{:});
             end
-
+            
             xdat = obj.transformDat(xdat, tdat);
+            xr = obj.transformDat(xq, tq);
 
             [~,~,phitest,utest,xtest,ttest,~,~] = obj.genScatterData(xtestArg{:});
             xtest = obj.transformDat(xtest, ttest);
@@ -486,7 +488,7 @@ classdef GliomaSolver< dynamicprops
 
             dataset = TrainDataSet;
 
-            dataset.addvar(xdat,udat,phidat,...
+            dataset.addvar(xdat,udat,phidat,udatnn,...
             xtest,utest,phitest,...
             Pwmq, Pgmq, phiq, xr, uq, seed,...
             xrArg, xdatArg, xtestArg);

@@ -509,7 +509,7 @@ class PINNSolver():
         np.savetxt(fpath, hist, fmt, header = self.header, comments = '')
         print(f'save training hist to {fpath}')
 
-    def predtx(self, suffix, tend = 1.0):
+    def predtx(self, suffix, tend = 1.0, n = 11):
         # evalute at residual points. not data points. 
         # need Pwm, Pgm , phi etc
         if tend is None:
@@ -520,7 +520,6 @@ class PINNSolver():
         rests = [] # residual at different t
         
         predfile = os.path.join(self.options['model_dir'],f'upred_txr_{suffix}.mat')
-        n = int(tend/0.1) + 1
         ts = np.linspace(0, tend, n)
         xr = np.copy(self.xr)
         for t in ts:

@@ -79,7 +79,9 @@ classdef Atlas<DataSet
         
         function [ax1, ax2] = imagescfg(obj, fgdat, varargin)
             p.bgname = 'df';
+            p.th = 0.1;
             p = parseargs(p, varargin{:});
+            
             bgdat = slice2d(obj.(p.bgname), varargin{:});
             fgdat = slice2d(fgdat, varargin{:});
             
@@ -89,7 +91,7 @@ classdef Atlas<DataSet
             ax2 = axes;
             h2 = imagesc(obj.gx(1),obj.gy(1),fgdat);
             cmp = colormap(ax2,'parula');
-            h2.AlphaData = double(h2.CData>1e-3); % threshold for transparency
+            h2.AlphaData = double(h2.CData>p.th); % threshold for transparency
             maxcdata = max(h2.CData(:));
             clim(ax2,[0,maxcdata]);
             set(ax2,'color','none','visible','on')
@@ -128,13 +130,13 @@ classdef Atlas<DataSet
             
         end
 
-        function [ax1, ax2] = imagescScatter(obj, X, u)
+        function [ax1, ax2] = imagescScatter(obj, X, u, varargin)
             % contour from scattered, extrapolate to grid
             X = double(X);
             u = double(u);
             F = scatteredInterpolant(X(:,2), X(:,3), u, 'linear','none');
             uq = F(obj.gx, obj.gy);
-            [ax1, ax2] = obj.imagesc2('df', uq);
+            [ax1, ax2] = obj.imagescfg(uq,'bgname','df',varargin{:});
         end
 
 
