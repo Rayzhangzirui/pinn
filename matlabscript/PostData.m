@@ -108,7 +108,7 @@ classdef PostData<dynamicprops
 
 			sc(2) = plot(obj.log.it, log10(obj.log.res),'DisplayName',   'res',varargin{:});
 			sc(3) = plot(obj.log.it, log10(datlos),'DisplayName', [num2str(w_dat) 'data'],varargin{:} );
-			sc(3) = plot(obj.log.it, log10(obj.log.tmse),'DisplayName', 'test',varargin{:} );
+% 			sc(3) = plot(obj.log.it, log10(obj.log.tmse),'DisplayName', 'test',varargin{:} );
 			grid on;
 			xlabel('steps');
 			ylabel('log10(loss)');
@@ -119,8 +119,9 @@ classdef PostData<dynamicprops
 
        function [fig,sc] = PlotLossFig(obj, varargin)
             [fig,sc] = obj.PlotLoss(varargin{:})
+            set(gca,'TickLabelInterpreter','latex');
             set(findall(fig,'-property','Interpreter'),'Interpreter','latex');
-            fig.Children(1).String = {'$$\mathcal{L}_{\rm tot}$$', '$$\mathcal{L}_{\rm PDE}$$', '$$0.01\mathcal{L}_{\rm data}$$', '$$\mathcal{L}_{\rm test}$$'}
+            fig.Children(1).String = {'$$\mathcal{L}_{\rm tot}$$', '$$\mathcal{L}_{\rm PDE}$$', '$$w_{\rm data}\mathcal{L}_{\rm data}$$', '$$\mathcal{L}_{\rm test}$$'}
             fig.Children(2).Title.String = '';
             fig.Children(2).YLabel.String = '$$\log_{10} \mathcal{L} $$';
             set(fig.Children(1),'FontSize',20);
@@ -409,6 +410,7 @@ classdef PostData<dynamicprops
         
 
 
+
         function  axs = contourt(obj, k, level, i)
             u = obj.upred{k}.upredts(:,i);
             [~,fname,~] =  fileparts(obj.upred{k}.path);
@@ -472,6 +474,55 @@ classdef PostData<dynamicprops
         end
 
 
+        function  [axs] = contoursep(obj, k, level, ti)
+            u = obj.upred{k}.upredts(:,ti);
+            [~,fname,~] =  fileparts(obj.upred{k}.path);
+            parts = split(fname,'_');
+            optimizer  = parts{end};
+
+            % interpolate solution at time from PINN
+            tq = obj.upred{k}.ts * obj.trainDataSet.tend;
+            ugrid = obj.fwdmodele.interpgrid(tq,'linear');
+            phigrid = obj.fwdmodele.phi;
+            
+            [axbg, ~] = obj.atlas.plotbkgd(obj.atlas.df);
+            
+            axugrid = axes;
+            dat = contourdat(level, obj.atlas.gy(1,:), obj.atlas.gx(:,1)', ugrid(:,:,ti).*phigrid);
+
+            % interpolate scattered data to grid
+            nres = obj.info.n_res_pts;
+			phiq = obj.trainDataSet.phiq(1:nres);
+            uq = scatter2grid(obj.upred{k}.xr(:,2:3),u.*phiq,obj.atlas.gx, obj.atlas.gy, 'linear','none');
+            
+
+            % plot contour line
+%             [ax1, ax2, c1] = obj.atlas.contour('df', uq, level);
+            hold on;
+            datpinn = contourdat(level, obj.atlas.gy(1,:), obj.atlas.gx(:,1)', uq);
+            
+            
+            for j = 1:length(level)
+                hl = plot(axugrid,datpinn.x{j},datpinn.y{j},'DisplayName',sprintf('%g PINN',level(j)));
+                plot(axugrid,dat.x{j},dat.y{j},'Color',hl.Color,'LineStyle',':','DisplayName',sprintf('%g FDM',level(j)));
+            end
+
+            set(axugrid,'YDir','reverse','color','none','visible','on');
+            hLink = linkprop([axbg axugrid],{'XLim','YLim','Position','DataAspectRatio'});
+            hLink.Targets(1).DataAspectRatio = [1 1 1];
+            
+            legend('Location','northeast');
+
+            levelstr = sprintf('%g ',level);
+            title(axbg, sprintf('%s, contour %s, t = %g',optimizer, levelstr, tq(ti)));
+			fname = sprintf('fig_contourt_%s_t%g.jpg',optimizer, tq(ti));
+            axs = [axbg, axugrid];
+            hold(axs,'off');
+			obj.savefig(fname);
+            
+        end
+
+
         function axs = contourtfig(obj, fpat, level, tk)
             % figure for contour
             k = obj.whichpred(fpat);
@@ -479,7 +530,7 @@ classdef PostData<dynamicprops
             tq = obj.upred{k}.ts * obj.trainDataSet.tend;
             t = tq(tk);
 
-            axs = obj.contourt(k,level,tk);
+            [axs] = obj.contoursep(k,level,tk);
 
             cb = findall(gcf,'Type','Colorbar');
             delete(cb)
@@ -490,15 +541,12 @@ classdef PostData<dynamicprops
             set(axs,'ytick',[]);
 
             set(axs(2).Children,'LineWidth', 2);
-%             axs(2).Children(1).DisplayName = 'FDM';
-%             axs(2).Children(2).DisplayName = 'PINN';
             
             text(axs(1), 10, 10, sprintf('t=%g',t),'Color','w',...
             'HorizontalAlignment', 'left', ...
             'VerticalAlignment', 'top');
             
             lgd = legend('Location','northeast');
-            set(findall(lgd,'-property','Interpreter'),'Interpreter','latex')
         end
 
         function contourts(obj, pat, level, ts)
@@ -506,7 +554,9 @@ classdef PostData<dynamicprops
             paths = cellfun(@(x) x.path, obj.upred, 'UniformOutput', false);
             k = find(contains(paths, pat));
             for ti = ts
-                obj.contourt(k, level, ti);
+                figure;
+                obj.contoursep(k, level, ti);
+                
             end
         end
 
