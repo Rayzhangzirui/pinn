@@ -9,19 +9,23 @@ classdef Atlas<DataSet
             p.xdim = 2;
             p.dw = 0.1;
             p.wfilt = 1;
-            p.R = 50;
+            
             p = parseargs(p, varargin{:});
 
             if strcmp(p.fdir,'sphere')
-                p.wfilt = 0; % no smoothing
-                bd = ceil(p.R*1.1); % diffused domain
-                fprintf('use 2d sphere with radius %g, box %g \n',p.R, bd);
+                p.bd = 60; % boudnary
+                p.Rwm = 50; % radius of wm region
+                p.Rgm = 0; % radius of gm region, if <p.Rwm, no gm
+                p = parseargs(p, varargin{:});
+                
+                fprintf('use 2d sphere with radius %g, box %g \n',p.Rwm, p.bd);
                 mid = 0;
-                [gx,gy,gz] = ndgrid(-bd:bd,-bd:bd,1:1); 
+                xgrid = -p.bd:p.bd;
+                [gx,gy,gz] = ndgrid(xgrid,xgrid,1:1); 
     
                 distix = sqrt((gx-mid).^2+ (gy-mid).^2);
-                Pwm = double(distix<p.R);
-                Pgm = zeros(size(Pwm));
+                Pwm = double(distix<p.Rwm);
+                Pgm = double(distix>=p.Rwm).*double(distix<p.Rgm);
                 Pcsf = zeros(size(Pwm));
             else
                 fprintf('read atlas %s, slice %g\n', p.fdir, p.zslice);
@@ -68,11 +72,11 @@ classdef Atlas<DataSet
 
 
         function [ax1, h1] = plotbkgd(obj, dat)
+            ax1 = axes;
             h1 = imagesc(obj.gx(1,1),obj.gy(1,1),dat);
-            ax1 = h1.Parent;
-            maxcdata = max(h1.CData(:));
-            mincdata = min(h1.CData(:));
-            clim(ax1,[mincdata,maxcdata]);
+%             maxcdata = max(h1.CData(:));
+%             mincdata = min(h1.CData(:));
+%             clim(ax1,[mincdata,maxcdata]);
             cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
         end
@@ -160,7 +164,10 @@ classdef Atlas<DataSet
         end
  
 
-
+        function getphi(obj,varargin)
+            phi = solvePhaseField(obj.Pwm, obj.Pgm, obj.Pcsf, varargin{:});
+            obj.addvar(phi);
+        end
 
 
 

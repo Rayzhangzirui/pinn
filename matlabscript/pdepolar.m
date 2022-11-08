@@ -35,7 +35,7 @@ end
 % define pde 
 function [c,f,s] = pdefunc(x,t,u,dudx) 
 c = 1;
-f = D*phi(x)*dudx;
+f = D(x).*phi(x).*dudx;
 s = RHO*u*(1-u);
 end
 

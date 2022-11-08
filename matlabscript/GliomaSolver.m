@@ -88,6 +88,7 @@ classdef GliomaSolver< dynamicprops
             else
                 obj.atlas = Atlas('dw', obj.dw, 'zslice',obj.zslice, varargin{:});
             end
+
             [obj.gx,obj.gy,obj.gz] = deal(obj.atlas.gx, obj.atlas.gy, obj.atlas.gz); 
         end 
         
@@ -135,8 +136,10 @@ classdef GliomaSolver< dynamicprops
                 fprintf('load existing solution\n');
                 obj.loadsol(fp);
             else
-                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas.Pwm, obj.atlas.Pgm, obj.atlas.Pcsf,...
-                    obj.dw, obj.rho, obj.tend, obj.ix);
+                if ~isprop(obj.atlas,'phi')
+                    obj.atlas.getphi();
+                end
+                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas,obj.rho, obj.tend, obj.ix, varargin{:});
                 
                 if p.savesol
                     fprintf('save pde solution\n');
@@ -144,7 +147,7 @@ classdef GliomaSolver< dynamicprops
                 end
             end
 
-            obj.atlas.add('phi',obj.phi);
+
 
             obj.getrmax();
         end
@@ -153,17 +156,20 @@ classdef GliomaSolver< dynamicprops
             p.epsilon = 3;
             p.bd = 50;
             p.m = obj.xdim-1;
+            p.Rwm = p.bd;
+            p.Rgm = p.bd*2;
             icfun = @(r) 0.1*exp(-0.1*r.^2);
             p.h = 1;
             p.dx = 1;
             p.dt = obj.tend/10;
             p.epsilon = 3;
             
-
             p = parseargs(p, varargin{:});
             m = obj.xdim-1;
 
-            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, obj.dw, obj.rho, p.dx, obj.tend, p.dt, icfun);
+            dw = @(x) double(x<p.Rwm)*obj.dw + double(x>p.Rwm)*double(x<p.Rgm)*obj.dw/10;
+
+            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, dw, obj.rho, p.dx, obj.tend, p.dt, icfun);
 
             
             obj.atlas = Atlas('fdir','sphere','R', p.bd);
@@ -237,7 +243,7 @@ classdef GliomaSolver< dynamicprops
             tk = length(obj.tall); 
             idx = find(obj.uend.*obj.phi>threshold); % index of u value greater than threshold
             
-            distix = sqrt((obj.gx-obj.ix(1)).^2+ (obj.gy-obj.ix(2)).^2+(obj.gz-obj.ix(3)).^2);
+            distix = sqrt((obj.atlas.gx-obj.ix(1)).^2+ (obj.atlas.gy-obj.ix(2)).^2+(obj.atlas.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
             rmax  = maxdis + padding;
             obj.rmax = rmax;
@@ -431,6 +437,7 @@ classdef GliomaSolver< dynamicprops
                 tgrid  = reshape(obj.polarsol.tgrid,[],1);
                 phiq = interp1(xgrid, obj.polarsol.phi, rq );
                 uqend = interp1(xgrid, obj.polarsol.sol(end,:), rq );
+                uqnn = uqend;
                 Pwmq = ones(size(rq));
                 Pgmq = zeros(size(rq));
 
