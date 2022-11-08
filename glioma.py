@@ -99,7 +99,9 @@ class Gmodel:
 
         def ic(x):
             L = self.dataset.L
-            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
+            # r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
+            a = tf.constant([L,0.25*L])
+            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*a),1,keepdims=True) # this is in pixel scale, unit mm, 
             return 0.1*tf.exp(-0.1*r2)
             # return tf.exp(-0.01*r2**2)
         
