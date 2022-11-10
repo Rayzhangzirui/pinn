@@ -139,7 +139,8 @@ classdef GliomaSolver< dynamicprops
                 if ~isprop(obj.atlas,'phi')
                     obj.atlas.getphi();
                 end
-                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas,obj.rho, obj.tend, obj.ix, varargin{:});
+                
+                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas, obj.rho, obj.tend, obj.ix, varargin{:});
                 
                 if p.savesol
                     fprintf('save pde solution\n');
@@ -166,15 +167,25 @@ classdef GliomaSolver< dynamicprops
             
             p = parseargs(p, varargin{:});
             m = obj.xdim-1;
-
-            dw = @(x) double(x<p.Rwm)*obj.dw + double(x>p.Rwm)*double(x<p.Rgm)*obj.dw/10;
-
-            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, dw, obj.rho, p.dx, obj.tend, p.dt, icfun);
-
             
-            obj.atlas = Atlas('fdir','sphere','R', p.bd);
-            [obj.gx,obj.gy,obj.gz] = deal(obj.atlas.gx, obj.atlas.gy, obj.atlas.gz); 
-            
+            % smooth transition
+            w = 1;
+            shv = @(x,r) 1/2* (1 + tanh((r - x)/w));
+            dwfcn = @(x) shv(x,p.Rwm) * obj.dw + (1-shv(x,p.Rwm)).*(shv(x,p.Rgm)).*obj.dw/10;
+            polargeo.Pwm = @(x) shv(x,p.Rwm);
+            polargeo.Pgm = @(x) (1-shv(x,p.Rwm)).*(shv(x,p.Rgm));
+            addprop(obj,'polargeo');
+            obj.polargeo = polargeo;
+
+            % sharp transition
+            % dwfcn = @(x) double(x<p.Rwm)*obj.dw + double(x>p.Rwm)*double(x<p.Rgm)*obj.dw/10;
+
+            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, dwfcn, obj.rho, p.dx, obj.tend, p.dt, icfun);
+        end
+
+        function interpPolarSol(obj)
+            % interpolate polar solution to grid
+
             r = sqrt(obj.gx.^2+obj.gy.^2);
 
             % make polar solution grid solution
@@ -438,8 +449,8 @@ classdef GliomaSolver< dynamicprops
                 phiq = interp1(xgrid, obj.polarsol.phi, rq );
                 uqend = interp1(xgrid, obj.polarsol.sol(end,:), rq );
                 uqnn = uqend;
-                Pwmq = ones(size(rq));
-                Pgmq = zeros(size(rq));
+                Pwmq = obj.polargeo.Pwm(rq);
+                Pgmq = obj.polargeo.Pgm(rq);
 
                 uq = interpn(tgrid, xgrid, obj.polarsol.sol, tq, rq, p.method); % u(tq, xq), % for testing
                 return

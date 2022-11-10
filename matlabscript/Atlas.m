@@ -16,6 +16,7 @@ classdef Atlas<DataSet
                 p.bd = 60; % boudnary
                 p.Rwm = 50; % radius of wm region
                 p.Rgm = 0; % radius of gm region, if <p.Rwm, no gm
+                
                 p = parseargs(p, varargin{:});
                 
                 fprintf('use 2d sphere with radius %g, box %g \n',p.Rwm, p.bd);
@@ -24,8 +25,16 @@ classdef Atlas<DataSet
                 [gx,gy,gz] = ndgrid(xgrid,xgrid,1:1); 
     
                 distix = sqrt((gx-mid).^2+ (gy-mid).^2);
-                Pwm = double(distix<p.Rwm);
-                Pgm = double(distix>=p.Rwm).*double(distix<p.Rgm);
+                
+                % smooth transition
+                w = 1;
+                shv = @(x,r) 1/2* (1 + tanh((r - x)/w)); 
+                Pwm = shv(distix,p.Rwm);
+                Pgm = (1-shv(distix,p.Rwm)).*(shv(distix,p.Rgm));
+
+                % sharp transition
+%                 Pwm = double(distix<p.Rwm);
+%                 Pgm = double(distix>=p.Rwm).*double(distix<p.Rgm);
                 Pcsf = zeros(size(Pwm));
             else
                 fprintf('read atlas %s, slice %g\n', p.fdir, p.zslice);
@@ -58,21 +67,24 @@ classdef Atlas<DataSet
             end
             
             obj@DataSet(Pwm, Pgm, Pcsf, gx, gy, gz);
-            obj.setdw(p.dw)
+            obj.setdw(p.dw, 10);
 
             
         end
 
-        function setdw(obj, dw)
+        function setdw(obj, dw, factor)
             fprintf('compute diffusion field with dw = %g\n',dw);
-            dg = dw/10;
+            dg = dw/factor;
             df = obj.Pwm*dw + obj.Pgm*dg; % diffusion coefficients
             obj.addvar(df,dw,dg);
         end
 
 
         function [ax1, h1] = plotbkgd(obj, dat)
-            ax1 = axes;
+            if ischar(dat)
+                dat = obj.(dat);
+            end
+                ax1 = axes;
             h1 = imagesc(obj.gx(1,1),obj.gy(1,1),dat);
 %             maxcdata = max(h1.CData(:));
 %             mincdata = min(h1.CData(:));

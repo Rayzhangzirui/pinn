@@ -3,6 +3,7 @@ function [phi,uall,tall,u] = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
 %     p.u0 = @(r) 0.1*exp(-0.1*r.^2);
     p.u0 = @(x,y,z) 0.1*exp(-0.1*((x-ix(1)).^2+(y-ix(2)).^2+(z-ix(3)).^2));
     p.xdim = 2;
+    p.factor = 10;
     p = parseargs(p, varargin{:});
     
     h = 1; % spacial resolution, mm (caption figure 1)
@@ -69,4 +70,5 @@ function [phi,uall,tall,u] = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     
     uend = u;
     uall = cat(p.xdim+1,uall{:});
+    fprintf('finish GliomaFdmsolve\n');
 end

@@ -94,9 +94,9 @@ classdef PostData<dynamicprops
 
 	  end %end of constructor
 
-		function readmri(obj, varargin)
-			obj.atlas = Atlas('dw', obj.trainDataSet.dw,'zslice',obj.trainDataSet.zslice);
-		end
+% 		function readmri(obj, varargin)
+% 			obj.atlas = Atlas('dw', obj.trainDataSet.dw,'zslice',obj.trainDataSet.zslice);
+% 		end
 
 	   function [fig,sc] = PlotLoss(obj,varargin)
 			fig = figure;
@@ -144,7 +144,7 @@ classdef PostData<dynamicprops
 
 
 
-	   function [fig, sc] = PlotInferErr(obj, varargin)
+       function [fig, sc] = PlotInferErr(obj, fpattern, varargin)
 		   % plot inference error
 		   rDe = obj.trainDataSet.rDe;
 		   rRHOe = obj.trainDataSet.rRHOe;
@@ -152,11 +152,14 @@ classdef PostData<dynamicprops
 		   errRHO = relerr(rRHOe, obj.log.rRHO);
 
 		   fig = figure;
+
+           k = obj.whichpred(fpattern);
+
 		   ts = sprintf('%s rel err\n rD = %0.2e, rRHO = %0.2e\n',...
-			   obj.tag, relerr(rDe,obj.upred{1}.rD),relerr(rRHOe,obj.upred{1}.rRHO))
-			sc(1) = plot(obj.log.it, errD,'DisplayName', 'rD',varargin{:});
+			   obj.tag, relerr(rDe,obj.upred{k}.rD),relerr(rRHOe,obj.upred{k}.rRHO))
+			sc(1) = plot(obj.log.it, errD,'DisplayName', 'rD', varargin{:});
 			hold on;
-			sc(2) = plot(obj.log.it, errRHO,'DisplayName', 'rRHO',varargin{:} );
+			sc(2) = plot(obj.log.it, errRHO,'DisplayName', 'rRHO', varargin{:} );
 			grid on;
 			title(ts);
 			xlabel('steps');
@@ -195,9 +198,8 @@ classdef PostData<dynamicprops
 		end
 
 
-		function [ax1,ax2] = scatter(obj, X, data, tag)
-
-			[ax1,ax2] = obj.atlas.scatter('df', X(:,2:end) , 8, data,...
+        function [ax1,ax2] = scatter(obj, bgname, X, data, tag)
+			[ax1,ax2] = obj.atlas.scatter(bgname, X(:,2:end) , 8, data,...
 			'filled','MarkerFaceAlpha',0.5);
 			title(ax1,tag);
 		end
@@ -270,13 +272,13 @@ classdef PostData<dynamicprops
             set(cb(2).Label,{'String','Rotation','Position'},{'D',0,[0.5 -0.01]});
         end
 
-        function scatterupred(obj, fpattern)
+        function scatterupred(obj, bgname, fpattern)
             % prediction error
             [xdat, upredxdat, udat, uq, phidat] = obj.getplotdat(fpattern);
             umax = min(max(udat),1);
                 
 			% plot pred u
-			[ax1,ax2] = obj.scatter(xdat, upredxdat.*phidat, '\phi u_{pred}');
+			[ax1,ax2] = obj.scatter(bgname, xdat, upredxdat.*phidat, '\phi u_{pred}');
             clim(ax2, [0, umax]);
             
 			fname = 'fig_upredxdat.jpg';
@@ -284,14 +286,14 @@ classdef PostData<dynamicprops
 			
 
 			% plot data u
-			[ax1,ax2] = obj.scatter(xdat, udat.*phidat, '\phi u_{dat}');
+			[ax1,ax2] = obj.scatter(bgname, xdat, udat.*phidat, '\phi u_{dat}');
             clim(ax2, [0, umax]);
 			fname = 'fig_udat.jpg';
 			obj.savefig(fname);
 
 			% plot error u
 			err = (upredxdat - udat ).*phidat;
-			[ax1,ax2] = obj.scatter(xdat, err, '\phi|u_{pred}-u_{dat}|');
+			[ax1,ax2] = obj.scatter(bgname, xdat, err, '\phi|u_{pred}-u_{dat}|');
 
 			fname = 'fig_uprederr.jpg';
 			obj.savefig(fname);
@@ -300,7 +302,7 @@ classdef PostData<dynamicprops
             % plot error noise
             warning('assuming xr and xdat same');
 			noise = (udat - uq ).*phidat;
-			[ax1,ax2] = obj.scatter(xdat, noise, '\phi noise');
+			[ax1,ax2] = obj.scatter(bgname, xdat, noise, '\phi noise');
 
 			fname = 'fig_noise.jpg';
 			obj.savefig(fname);
@@ -354,7 +356,7 @@ classdef PostData<dynamicprops
 			    obj.fwdmodel.solve(varargin{:});
 
                 obj.fwdmodele.readmri(obj.atlas);
-			    obj.fwdmodele.solve('savesol',false);
+			    obj.fwdmodele.solve('savesol',false,varargin{:});
             end
             obj.atlas = obj.fwdmodele.atlas; % copy atlas
     
@@ -411,7 +413,10 @@ classdef PostData<dynamicprops
 
 
 
-        function  axs = contourt(obj, k, level, i)
+        function  axs = contourt(obj, k, level, i, varargin)
+            
+
+
             u = obj.upred{k}.upredts(:,i);
             [~,fname,~] =  fileparts(obj.upred{k}.path);
             parts = split(fname,'_');
@@ -474,7 +479,10 @@ classdef PostData<dynamicprops
         end
 
 
-        function  [axs] = contoursep(obj, k, level, ti)
+        function  [axs] = contoursep(obj, k, level, ti,varargin)
+            p.bgname = 'df';
+            p = parseargs(p, varargin{:});
+
             u = obj.upred{k}.upredts(:,ti);
             [~,fname,~] =  fileparts(obj.upred{k}.path);
             parts = split(fname,'_');
@@ -485,7 +493,7 @@ classdef PostData<dynamicprops
             ugrid = obj.fwdmodele.interpgrid(tq,'linear');
             phigrid = obj.fwdmodele.phi;
             
-            [axbg, ~] = obj.atlas.plotbkgd(obj.atlas.df);
+            [axbg, ~] = obj.atlas.plotbkgd(p.bgname);
             
             axugrid = axes;
             dat = contourdat(level, obj.atlas.gy(1,:), obj.atlas.gx(:,1)', ugrid(:,:,ti).*phigrid);
@@ -549,13 +557,13 @@ classdef PostData<dynamicprops
             lgd = legend('Location','northeast');
         end
 
-        function contourts(obj, pat, level, ts)
+        function contourts(obj, pat, level, ts, varargin)
             % pat = pattern for file
             paths = cellfun(@(x) x.path, obj.upred, 'UniformOutput', false);
             k = find(contains(paths, pat));
             for ti = ts
                 figure;
-                obj.contoursep(k, level, ti);
+                obj.contoursep(k, level, ti, varargin{:});
                 
             end
         end

@@ -19,7 +19,12 @@ classdef TrainDataSet<DataSet
         function dist3d(obj, xf, field, n)
             % 3d distribution of xr
             X = obj.(xf);
-            dat = obj.(field);
+            if ischar(field)
+                dat = obj.(field);
+            else
+                dat = field;
+            end
+            
             if nargin<4
                 n = size(X,1);
             end
