@@ -54,7 +54,9 @@ class PINN(tf.keras.Model):
 
         self.num_hidden_layers = num_hidden_layers
         self.output_dim = output_dim
-        
+        self.input_dim = input_dim
+        self.num_neurons_per_layer = num_neurons_per_layer
+
         # phyiscal parameters in the model
         self.param = param
 
@@ -65,6 +67,7 @@ class PINN(tf.keras.Model):
                            for _ in range(self.num_hidden_layers)]
         self.out = tf.keras.layers.Dense(output_dim)
         self.output_transform = output_transform
+        self.paddings = [[0, 0], [0, self.num_neurons_per_layer - self.input_dim]]
 
         self.build(input_shape=(None,input_dim))
         
@@ -73,6 +76,12 @@ class PINN(tf.keras.Model):
         Z = X
         for i in range(self.num_hidden_layers):
             Z = self.hidden[i](Z)
+
+        # resnet implementation
+        # Z = tf.pad(X, self.paddings)
+        # for i in range(0,self.num_hidden_layers,2):
+        #     Z = self.hidden[i+1](self.hidden[i](Z))+Z
+            
         Z = self.out(Z)
         Z = self.output_transform(X,Z)
         return Z
@@ -275,7 +284,7 @@ class PINNSolver():
             optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
             return loss
         
-        self.current_optimizer = 'tfadam'
+        self.current_optimizer = self.options['optimizer']
         best_loss = 1e6
         no_improvement_counter = 0
         start = time()
@@ -497,7 +506,7 @@ class PINNSolver():
             print("checkpoint not saved")
 
         self.save_upred(self.current_optimizer)
-        self.predtx(self.current_optimizer, self.options.get('randomt'))
+        self.predtx(self.current_optimizer, 1.0)
 
     def save_history(self):
         ''' save training history as txt

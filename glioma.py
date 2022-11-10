@@ -69,7 +69,7 @@ class DataSet:
         self.opts['scale'] = {'T':self.T, 'L':self.L, 'DW':self.DW, 'RHO':self.RHO}
 
         # characteristic diffusion ceofficient at each point
-        self.Dphi = (self.pwm * self.DW + self.pgm * (self.DW/10)) * self.phi
+        self.Dphi = (self.pwm * self.DW + self.pgm * (self.DW/10.0)) * self.phi
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
 
@@ -86,6 +86,7 @@ class Gmodel:
         elif opts.get('optimizer') == 'rmsprop':
             self.optim = tf.keras.optimizers.RMSprop()
         else:
+            self.opts['optimizer'] = 'adam'
             self.optim = tf.keras.optimizers.Adam()
 
         if opts.get('exactfwd') == True:
@@ -99,9 +100,9 @@ class Gmodel:
 
         def ic(x):
             L = self.dataset.L
-            # r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
-            a = tf.constant([L,0.25*L])
-            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*a),1,keepdims=True) # this is in pixel scale, unit mm, 
+            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
+            # a = tf.constant([L,0.25*L])
+            # r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*a),1,keepdims=True) # this is in pixel scale, unit mm, 
             return 0.1*tf.exp(-0.1*r2)
             # return tf.exp(-0.01*r2**2)
         
