@@ -73,6 +73,7 @@ class DataSet:
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
 
+
 class Gmodel:
     def __init__(self, opts) -> None:
 
@@ -94,7 +95,8 @@ class Gmodel:
             opts['D0'] = self.dataset.rDe
             opts['RHO0'] = self.dataset.rRHOe
 
-        param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD')), 'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'))}
+        param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE),
+        'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE)}
 
         self.info = {}
 

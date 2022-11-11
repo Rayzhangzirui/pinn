@@ -172,17 +172,16 @@ class PINNSolver():
         self.info = {} #empty dictionary to store information
 
         # set up data
-        self.xr =    (xr).astype(np.float32) # collocation point
+        self.xr =    (xr).astype(DTYPE) # collocation point
+        self.xdat =  (xdat).astype(DTYPE) # data point
+        self.udat =  (udat).astype(DTYPE) # data value
 
-        self.xdat =  (xdat).astype(np.float32) # data point
-        self.udat =  (udat).astype(np.float32) # data value
-
-        self.xtest = (xtest).astype(np.float32) # test point
-        self.utest = (utest).astype(np.float32) # test value
+        self.xtest = (xtest).astype(DTYPE) # test point
+        self.utest = (utest).astype(DTYPE) # test value
 
          # weight of residual
         if wr is None:
-            self.wr = tf.ones([tf.shape(xr)[0],1])
+            self.wr = tf.ones([tf.shape(xr)[0],1], dtype = DTYPE)
         else:
             self.wr = wr
 
@@ -275,7 +274,7 @@ class PINNSolver():
     
     def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):
         """This method performs a gradient descent type optimization."""
-        
+
         @tf.function
         def train_step():
             loss, grad_theta = self.get_grad()
