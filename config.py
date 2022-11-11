@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 
 # Set data type
-DTYPE='float64'
+DTYPE='float32'
 tf.keras.backend.set_floatx(DTYPE)
 
 

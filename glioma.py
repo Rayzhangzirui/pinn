@@ -126,18 +126,28 @@ class Gmodel:
                 x = x_r[:,1:2]
                 y = x_r[:,2:3]
                 xr = tf.concat([t,x,y], axis=1)
+                
+                r = tf.sqrt((x*self.dataset.L)**2+(y*self.dataset.L)**2)
+                phi = 0.5 + 0.5*tf.tanh((50.0 - r)/3.0)
+                D = f.param['rD'] * self.dataset.DW  *(0.9*( 0.5 + 0.5*tf.tanh((20.0 - r))) + 0.1)
+                Dphi = D * phi
+
                 u =  f(xr)
                 
-                u_t = tf.gradients(u, t)[0]
+                phiu_t = tf.gradients(phi*u, t)[0]
 
                 u_x = tf.gradients(u, x)[0]
-                u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
-                
                 u_y = tf.gradients(u, y)[0]
-                u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
+                
+                # u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
+                # u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
 
-                res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                u_xx = tf.gradients(Dphi * u_x, x)[0]
+                u_yy = tf.gradients(Dphi * u_y, y)[0]
+
+                res = phiu_t - ((u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * phi * u * (1-u))
                 return res
+            
         else:
             @tf.function
             def pde(x_r, f):

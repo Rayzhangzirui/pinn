@@ -160,12 +160,13 @@ classdef GliomaSolver< dynamicprops
             p.Rwm = p.bd;
             p.Rgm = p.bd*2;
             icfun = @(r) 0.1*exp(-0.1*r.^2);
-            p.h = 1;
             p.dx = 1;
             p.dt = obj.tend/10;
             p.epsilon = 3;
             
             p = parseargs(p, varargin{:});
+            disp(p);
+            
             m = obj.xdim-1;
             
             % smooth transition
