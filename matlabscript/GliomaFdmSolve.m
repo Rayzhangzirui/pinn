@@ -1,4 +1,4 @@
-function [phi,uall,tall,u] = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
+function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     
 %     p.u0 = @(r) 0.1*exp(-0.1*r.^2);
     p.u0 = @(x,y,z) 0.1*exp(-0.1*((x-ix(1)).^2+(y-ix(2)).^2+(z-ix(3)).^2));
@@ -64,11 +64,18 @@ function [phi,uall,tall,u] = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
         tall(end+1) = t;
         uall{end+1} = u;
 
-        
-        
     end
+
     
-    uend = u;
     uall = cat(p.xdim+1,uall{:});
     fprintf('finish GliomaFdmsolve\n');
+
+    fdmsol.phi = phi;
+    fdmsol.uall = uall;
+    fdmsol.tall = tall;
+    fdmsol.uend = u;
+    fdmsol.DxDphi = DxDphi;
+    fdmsol.DyDphi = DyDphi;
+    fdmsol.DzDphi = DzDphi;
+
 end

@@ -31,10 +31,7 @@ classdef GliomaSolver< dynamicprops
         atlas 
         
         % solution
-        phi
-        uall
-        tall
-        uend
+        fdmsol
         
         % polar solution
         polarsol
@@ -98,10 +95,8 @@ classdef GliomaSolver< dynamicprops
                 fprintf('%s already exist\n',fp);
                 return
             end
-            uall = obj.uall;
-            tall = obj.tall;
-            phi = obj.phi;
-            save(fp,'uall','tall','phi','-v7.3');
+            fdmsol = obj.fdmsol;
+            save(fp,'-struct','fdmsol','-v7.3');
             fprintf('save to %s\n',fp)
         end
 
@@ -109,14 +104,12 @@ classdef GliomaSolver< dynamicprops
             % load result of fdm solution, uall, tall, phi
             assert(isfile(fp));
 
-            dat = load(fp);
-            obj.uall = dat.uall;
-            obj.tall = dat.tall;
-            obj.phi = dat.phi;
+            obj.fdmsol = load(fp);
+            obj.atlas.add('phi',obj.fdmsol.phi);
             if obj.xdim == 2
-                obj.uend = obj.uall(:,:,end);
+                obj.fdmsol.uend = obj.fdmsol.uall(:,:,end);
             else
-                obj.uend = obj.uall(:,:,:,end);
+                obj.fdmsol.uend = obj.fdmsol.uall(:,:,:,end);
             end
         end
 
@@ -137,10 +130,11 @@ classdef GliomaSolver< dynamicprops
                 obj.loadsol(fp);
             else
                 if ~isprop(obj.atlas,'phi')
+                    fprintf('phi not computed, compute phi\n');
                     obj.atlas.getphi();
                 end
                 
-                [obj.phi,obj.uall,obj.tall,obj.uend] = GliomaFdmSolve(obj.atlas, obj.rho, obj.tend, obj.ix, varargin{:});
+                obj.fdmsol = GliomaFdmSolve(obj.atlas, obj.rho, obj.tend, obj.ix, varargin{:});
                 
                 if p.savesol
                     fprintf('save pde solution\n');
@@ -190,17 +184,17 @@ classdef GliomaSolver< dynamicprops
             r = sqrt(obj.gx.^2+obj.gy.^2);
 
             % make polar solution grid solution
-            obj.tall = obj.polarsol.tgrid;
+            obj.fdmsol.tall = obj.polarsol.tgrid;
             warning('interp polar solution to grid, assuming xdim = 2');
-            for i = 1:length(obj.tall)
+            for i = 1:length(obj.fdmsol.tall)
                 ui = interp1(obj.polarsol.xgrid, obj.polarsol.sol(i,:), r(:) );
                 ui(isnan(ui)) = 0;
                 ui = reshape(ui, size(obj.gx));
-                obj.uall(:,:,i) = ui;
+                obj.fdmsol.uall(:,:,i) = ui;
             end
             phi = interp1(obj.polarsol.xgrid, obj.polarsol.phi, r(:) );
-            obj.phi = reshape(phi, size(obj.gx));
-            obj.uend = obj.uall(:,:,end);
+            obj.atlas.phi = reshape(phi, size(obj.gx));
+            obj.fdmsol.uend = obj.fdmsol.uall(:,:,end);
 
             obj.getrmax()
         end
@@ -208,7 +202,7 @@ classdef GliomaSolver< dynamicprops
         function f = getSlice(obj, name, vz, tk)
             % get data at time index tk, slice vz (optional)
             if nargin < 4
-                tk = length(obj.tall); % tk defaul end
+                tk = length(obj.fdmsol.tall); % tk defaul end
             end
             if nargin < 3
                 vz = obj.zslice; % vz default zslice
@@ -232,14 +226,14 @@ classdef GliomaSolver< dynamicprops
 
         function [fig, ax1, ax2] = plotuend(obj,varargin)
             figure;
-            uend = slice2d(obj.uend,varargin{:});
+            uend = slice2d(obj.fdmsol.uend,varargin{:});
             [ax1, ax2]  = obj.atlas.imagescfg(uend, varargin{:});
         end
 
         function [fig, ax1, ax2] = plotphiuend(obj,varargin)
             fig = figure;
-            uend = slice2d(obj.uend,varargin{:});
-            phi = slice2d(obj.phi,varargin{:});
+            uend = slice2d(obj.fdmsol.uend,varargin{:});
+            phi = slice2d(obj.atlas.phi,varargin{:});
             [ax1, ax2]  = obj.atlas.imagescfg(uend.*phi, varargin{:});
         end
 
@@ -252,8 +246,8 @@ classdef GliomaSolver< dynamicprops
             padding = 1; % padding ot max distance
             threshold = 0.01; % threshold for tumor region
 
-            tk = length(obj.tall); 
-            idx = find(obj.uend.*obj.phi>threshold); % index of u value greater than threshold
+
+            idx = find(obj.fdmsol.uend.*obj.atlas.phi>threshold); % index of u value greater than threshold
             
             distix = sqrt((obj.atlas.gx-obj.ix(1)).^2+ (obj.atlas.gy-obj.ix(2)).^2+(obj.atlas.gz-obj.ix(3)).^2);
             [maxdis,maxidx] = max(distix(idx));
@@ -283,11 +277,11 @@ classdef GliomaSolver< dynamicprops
                 xg = f(obj.gx(:,1,1));
                 yg = f(obj.gy(1,:,1));
                 zg = f(obj.gz(1,1,:));
-                fq = interpn(xg, yg, zg, obj.tall, obj.uall, X(:,1), X(:,2), X(:,3), t, method);
+                fq = interpn(xg, yg, zg, obj.fdmsol.tall, obj.fdmsol.uall, X(:,1), X(:,2), X(:,3), t, method);
             else
                 xg = f(obj.gx(:,1));
                 yg = f(obj.gy(1,:));
-                fq = interpn(xg, yg, obj.tall, obj.uall, X(:,1), X(:,2), t, method);
+                fq = interpn(xg, yg, obj.fdmsol.tall, obj.fdmsol.uall, X(:,1), X(:,2), t, method);
             end 
         end
 
@@ -300,14 +294,14 @@ classdef GliomaSolver< dynamicprops
                 xg = f(obj.gx(:,1,1));
                 yg = f(obj.gy(1,:,1));
                 zg = f(obj.gz(1,1,:));
-                tg = f(obj.tall);
-                F = griddedInterpolant({xg, yg, zg, tg}, obj.uall, method,extrap);
+                tg = f(obj.fdmsol.tall);
+                F = griddedInterpolant({xg, yg, zg, tg}, obj.fdmsol.uall, method,extrap);
                 uq = F({xg,yg,zg,tq});
             else
                 xg = f(obj.gx(:,1));
                 yg = f(obj.gy(1,:));
-                tg = f(obj.tall);
-                F = griddedInterpolant({xg, yg, tg}, obj.uall, method,extrap);
+                tg = f(obj.fdmsol.tall);
+                F = griddedInterpolant({xg, yg, tg}, obj.fdmsol.uall, method,extrap);
                 uq = F({xg,yg,tq});
             end 
             uq(isnan(uq)) = 0;
@@ -336,7 +330,7 @@ classdef GliomaSolver< dynamicprops
         function [uq, xq, tq, phiq] = genGridDataUt(obj,mskin,ts)
             % generate final time data from FD grid
             if nargin < 3
-                ts = length(obj.tall);
+                ts = length(obj.fdmsol.tall);
             end
             
             assert(obj.xdim == 2,'only in 2d');
@@ -347,12 +341,12 @@ classdef GliomaSolver< dynamicprops
             tq = [];
             for i = 1:length(ts)
                 tk = ts(i);
-                fprintf('sample grid data at t = %g\n',obj.tall(tk));
+                fprintf('sample grid data at t = %g\n',obj.fdmsol.tall(tk));
                 xq = [xq;[obj.gx(mskin) obj.gy(mskin)]];
-                phiq = [phiq;obj.phi(mskin)];
-                u = obj.uall(:,:,tk);
+                phiq = [phiq;obj.atlas.phi(mskin)];
+                u = obj.fdmsol.uall(:,:,tk);
                 uq = [uq; u(mskin)];
-                tq = [tq; ones(length(uq),1) * obj.tall(tk)];
+                tq = [tq; ones(length(uq),1) * obj.fdmsol.tall(tk)];
             end
 
             p = randperm(length(uq));
@@ -368,8 +362,8 @@ classdef GliomaSolver< dynamicprops
             xq = xgrid;
             Pwmq = obj.atlas.Pwm(mskin);
             Pgmq = obj.atlas.Pgm(mskin);
-            phiq = obj.phi(mskin);
-            uq = obj.uend(mskin);
+            phiq = obj.atlas.phi(mskin);
+            uq = obj.fdmsol.uend(mskin);
             tq = obj.tend * ones(size(uq));
 
         end
@@ -381,10 +375,10 @@ classdef GliomaSolver< dynamicprops
             xgrid = [obj.gx(mskin) obj.gy(mskin)];
             
             % repeat ti in space, then reshape to 1d
-            tmp = repmat(obj.tall,size(xgrid,1),1);
+            tmp = repmat(obj.fdmsol.tall,size(xgrid,1),1);
             tq = tmp(:);
 
-            tlen = length(obj.tall);
+            tlen = length(obj.fdmsol.tall);
             repeat = @(x) repmat(x, tlen, 1);
 
             
@@ -392,12 +386,12 @@ classdef GliomaSolver< dynamicprops
 
             Pwmq = repeat(obj.atlas.Pwm(mskin));
             Pgmq = repeat(obj.atlas.Pgm(mskin));
-            phiq = repeat(obj.phi(mskin));
+            phiq = repeat(obj.atlas.phi(mskin));
 
             u = zeros(length(phiq),1);
             uq = [];
             for i = 1:tlen
-                uslice = obj.uall(:,:,i);
+                uslice = obj.fdmsol.uall(:,:,i);
                 uq = [uq;uslice(mskin)];
             end
 
@@ -461,9 +455,9 @@ classdef GliomaSolver< dynamicprops
             uq = obj.interpu(tq, xq, p.method); % u(tq, xq), mainly for testing
 
             % useful for xdat and xtest
-            uqnn = obj.interpf(obj.uend, xq, p.method); % data no noise
-            nzuend = addNoise(obj.uend, varargin{:});
-            phiq = obj.interpf(obj.phi, xq, p.method);
+            uqnn = obj.interpf(obj.fdmsol.uend, xq, p.method); % data no noise
+            nzuend = addNoise(obj.fdmsol.uend, varargin{:});
+            phiq = obj.interpf(obj.atlas.phi, xq, p.method);
             uqend = obj.interpf(nzuend, xq, p.method);
 
             % Pwmq and Pgmq only useful of xr
@@ -564,9 +558,9 @@ classdef GliomaSolver< dynamicprops
 
             % sample data points
             if p.Results.softic == true
-                ts = [1, length(obj.tall)];
+                ts = [1, length(obj.fdmsol.tall)];
             else
-                ts = [length(obj.tall)];
+                ts = [length(obj.fdmsol.tall)];
             end
             [udat, xdat, tdat, phidat] = obj.genGridDataUt(mskin, ts);
             xdat = obj.transformDat(xdat, tdat);
@@ -605,7 +599,7 @@ classdef GliomaSolver< dynamicprops
                 fprintf('weighted sample by graddf %g\n', n_enhance);
                 
                 xtmp = sampleDenseBall(ntmp, obj.xdim, p.radius, obj.x0, true); % uniform temporary 
-                [dxdf, dydf] = gradient(obj.atlas.df.*obj.phi);
+                [dxdf, dydf] = gradient(obj.atlas.df.*obj.atlas.phi);
                 normgrad = dxdf.^2 + dydf.^2;
                 normgrad = imgaussfilt(normgrad, 1,'FilterDomain','spatial');
                 normgradq = obj.interpf(normgrad, xtmp, 'linear');
@@ -661,13 +655,13 @@ classdef GliomaSolver< dynamicprops
 
             Pwmq = obj.interpf(obj.atlas.Pwm, xq, method);
             Pgmq = obj.interpf(obj.atlas.Pgm, xq, method);
-            phiq = obj.interpf(obj.phi, xq, method);
+            phiq = obj.interpf(obj.atlas.phi, xq, method);
             uq = obj.interpu(tq, xq, method); % u(tq, xq)
             
             % final time data
             xqe = xq;
             tqe = ones(n,1)*obj.tend; % all final time
-            uqe = obj.interpf(obj.uend, xq, method); % u(t_end,xq), without noise
+            uqe = obj.interpf(obj.fdmsol.uend, xq, method); % u(t_end,xq), without noise
 
             % down sample
             wn = p.Results.wsample;
@@ -708,7 +702,7 @@ classdef GliomaSolver< dynamicprops
             elseif strcmpi(p.Results.noiseon, 'uend')
                 % add noise to uend then interp
                 fprintf('add noise then interp\n');
-                nzuend = addNoise(obj.uend, p.Unmatched);
+                nzuend = addNoise(obj.fdmsol.uend, p.Unmatched);
                 nzuqe = obj.interpf(nzuend, xq, method); % u(t_end,xq)
             else
                error('unknown option') 
