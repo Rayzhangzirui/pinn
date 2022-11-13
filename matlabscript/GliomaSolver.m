@@ -408,7 +408,7 @@ classdef GliomaSolver< dynamicprops
 
 
 
-        function [Pwmq,Pgmq,phiq,uq,xq,tq,uqend,uqnn, tqend] = genScatterData(obj, varargin)
+        function dat = genScatterData(obj, varargin)
             % generate scatter data set
             % (1) sample xq and tq, if finalt, set tq = 1
             % (2) based on (xq,tq), interpolate Pwm, Pm, phi, uend. might add noise
@@ -452,18 +452,21 @@ classdef GliomaSolver< dynamicprops
             end
             
             
-            uq = obj.interpu(tq, xq, p.method); % u(tq, xq), mainly for testing
+            dat.uq = obj.interpu(tq, xq, p.method); % u(tq, xq), mainly for testing
 
             % useful for xdat and xtest
-            uqnn = obj.interpf(obj.fdmsol.uend, xq, p.method); % data no noise
-            nzuend = addNoise(obj.fdmsol.uend, varargin{:});
-            phiq = obj.interpf(obj.atlas.phi, xq, p.method);
-            uqend = obj.interpf(nzuend, xq, p.method);
+            dat.uqnn = obj.interpf(obj.fdmsol.uend, xq, p.method); % data no noise
+            dat.nzuend = addNoise(obj.fdmsol.uend, varargin{:});
+            dat.phiq = obj.interpf(obj.atlas.phi, xq, p.method);
+            dat.uqend = obj.interpf(nzuend, xq, p.method);
 
             % Pwmq and Pgmq only useful of xr
             % interpolate anyway, might not be useful for testing data
-            Pwmq = obj.interpf(obj.atlas.Pwm, xq, p.method);
-            Pgmq = obj.interpf(obj.atlas.Pgm, xq, p.method);
+            dat.Pwmq = obj.interpf(obj.atlas.Pwm, xq, p.method);
+            dat.Pgmq = obj.interpf(obj.atlas.Pgm, xq, p.method);
+            dat.DxDphi = obj.interpf(obj.fdmsol.DxDphi, xq, p.method);
+            dat.DyDphi = obj.interpf(obj.fdmsol.DyDphi, xq, p.method);
+            dat.DzDphi = obj.interpf(obj.fdmsol.DzDphi, xq, p.method);
 
         end
 
@@ -481,7 +484,7 @@ classdef GliomaSolver< dynamicprops
             
             % sample xr scattered
 %             [Pwmq,Pgmq,phiq,uq,xq,tq, uqend, udatnn, tqend] = obj.genScatterData(xrArg{:});
-            [Pwmdat,Pgmdat,phidat,uq, xdat, tq, udat, udatnn, tdat] = obj.genScatterData(xdatArg{:});
+            Xdat = obj.genScatterData(xdatArg{:});
 
             
             if p.samex

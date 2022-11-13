@@ -8,7 +8,7 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     
     h = 1; % spacial resolution, mm (caption figure 1)
     
-    % integer grid, horizontal is x, vertical y, only used to get u0
+    % integer grid, nd grid
     [gx,gy,gz,D,phi] = deal(atlas.gx, atlas.gy, atlas.gz, atlas.df, atlas.phi); 
 
     sz = [1 1 1];
@@ -17,7 +17,7 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
 
     %% finite difference operators
     flap = cat(3,[0 0 0;0 1 0; 0 0 0],[0 1 0;1 -6 1; 0 1 0],[0 0 0;0 1 0; 0 0 0])/h^2;
-    fdx = [-1 0 1]/(2*h);
+    fdx = [-1 0 1]'/(2*h);
     fdy = fdx';
     fdz = reshape(fdx,1,1,3);
     operator = @(x,f) imfilter(x,f,'circular','same'); % periodic bc, so that in 2d flap is actually [1,-4, 1]

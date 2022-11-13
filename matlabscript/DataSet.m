@@ -54,14 +54,22 @@ classdef DataSet < dynamicprops
 
 
         function copyprop(obj, a, varargin)
-            for i = 1:length(varargin)
-                pname = varargin{i};
+            % copy property from other object/struct a
+            if isempty(varargin)
+                fnames = fieldnames(a);
+            else
+                fnames = varargin;
+            end
+
+            for i = 1:length(fnames)
+                pname = fnames{i};
                 val = a.(pname);
                 obj.add(pname, val);
             end
         end
 
         function load(obj, matfile)
+            % load from matfile
             dat = load(matfile);
             fields = fieldnames(dat);
             for i=1:numel(fields)

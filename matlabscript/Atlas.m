@@ -175,7 +175,6 @@ classdef Atlas<DataSet
             
         end
  
-
         function getphi(obj,varargin)
             phi = solvePhaseField(obj.Pwm, obj.Pgm, obj.Pcsf, varargin{:});
             obj.addvar(phi);

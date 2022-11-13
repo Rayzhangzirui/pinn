@@ -94,9 +94,14 @@ classdef PostData<dynamicprops
 
 	  end %end of constructor
 
-% 		function readmri(obj, varargin)
-% 			obj.atlas = Atlas('dw', obj.trainDataSet.dw,'zslice',obj.trainDataSet.zslice);
-% 		end
+        function readmri(obj,varargin)
+            % read mri data, fdir = dir to atla
+            if length(varargin)==1 && isa(varargin{1},'Atlas')
+                obj.atlas = varargin{1};
+            else
+                obj.atlas = Atlas('dw', obj.trainDataSet.dw, 'zslice',obj.trainDataSet.zslice, varargin{:});
+            end
+        end 
 
 	   function [fig,sc] = PlotLoss(obj,varargin)
 			fig = figure;
@@ -491,7 +496,7 @@ classdef PostData<dynamicprops
             % interpolate solution at time from PINN
             tq = obj.upred{k}.ts * obj.trainDataSet.tend;
             ugrid = obj.fwdmodele.interpgrid(tq,'linear');
-            phigrid = obj.fwdmodele.phi;
+            phigrid = obj.atlas.phi;
             
             [axbg, ~] = obj.atlas.plotbkgd(p.bgname);
             
