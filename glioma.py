@@ -53,12 +53,7 @@ class DataSet:
             print('add noise to udat')
             self.udat = self.udat + np.random.normal(scale = opts.get('addnoise'), size = self.udat.shape)
 
-        # residual pts
-        self.xr =  matdat.get('xr')[0:nres,:]
-        self.phi =  matdat.get('phiq')[0:nres,:]
-        self.pwm =  matdat.get('Pwmq')[0:nres,:]
-        self.pgm =  matdat.get('Pgmq')[0:nres,:]
-
+        
         # non dimensional parameters
         self.T = matdat['T'].item()
         self.L = matdat['L'].item()
@@ -68,8 +63,18 @@ class DataSet:
         self.rRHOe = matdat['rRHOe'].item()
         self.opts['scale'] = {'T':self.T, 'L':self.L, 'DW':self.DW, 'RHO':self.RHO}
 
+        # residual pts
+        self.xr =  matdat.get('xr')[0:nres,:]
+        self.phi =  matdat.get('phiq')[0:nres,:]
+        self.pwm =  matdat.get('Pwmq')[0:nres,:]
+        self.pgm =  matdat.get('Pgmq')[0:nres,:]
+        self.DxDphi =  matdat.get('DxDphi')[0:nres,:]* self.DW 
+        self.DyDphi =  matdat.get('DyDphi')[0:nres,:]* self.DW 
+        self.DzDphi =  matdat.get('DzDphi')[0:nres,:]* self.DW 
+
+
         # characteristic diffusion ceofficient at each point
-        self.Dphi = (self.pwm * self.DW + self.pgm * (self.DW/10.0)) * self.phi
+        self.Dphi = self.DW * (self.pwm  + self.pgm * (1.0/10.0)) * self.phi
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
 
@@ -118,7 +123,6 @@ class Gmodel:
             def ot(x,u):
                 return u* x[:, 0:1]+ ic(x)
 
-
         if self.xdim == 2:
             @tf.function
             def pde(x_r, f):
@@ -127,14 +131,9 @@ class Gmodel:
                 y = x_r[:,2:3]
                 xr = tf.concat([t,x,y], axis=1)
                 
-                r = tf.sqrt((x*self.dataset.L)**2+(y*self.dataset.L)**2)
-                phi = 0.5 + 0.5*tf.tanh((50.0 - r)/3.0)
-                D = f.param['rD'] * self.dataset.DW  *(0.9*( 0.5 + 0.5*tf.tanh((20.0 - r))) + 0.1)
-                Dphi = D * phi
-
                 u =  f(xr)
                 
-                phiu_t = tf.gradients(phi*u, t)[0]
+                u_t = tf.gradients(u, t)[0]
 
                 u_x = tf.gradients(u, x)[0]
                 u_y = tf.gradients(u, y)[0]
@@ -142,10 +141,13 @@ class Gmodel:
                 # u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
                 # u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
 
-                u_xx = tf.gradients(Dphi * u_x, x)[0]
-                u_yy = tf.gradients(Dphi * u_y, y)[0]
+                u_xx = tf.gradients(u_x, x)[0]
+                u_yy = tf.gradients(u_y, y)[0]
 
-                res = phiu_t - ((u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * phi * u * (1-u))
+                prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u)
+
+                diffusion = f.param['rD'] * (self.dataset.Dphi * (u_xx + u_yy) + self.dataset.DxDphi * u_x + self.dataset.DyDphi * u_y)
+                res = self.dataset.phi * u_t - ( diffusion +  prolif)
                 return res
             
         else:
