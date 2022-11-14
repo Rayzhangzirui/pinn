@@ -132,21 +132,27 @@ class Gmodel:
                     xr = tf.concat([t,x,y], axis=1)
                     
                     r = tf.sqrt((x*self.dataset.L)**2+(y*self.dataset.L)**2)
-                    phi = 0.5 + 0.5*tf.tanh((50.0 - r)/3.0)
-                    D = f.param['rD'] * self.dataset.DW  *(0.9*( 0.5 + 0.5*tf.tanh((20.0 - r))) + 0.1)
-                    Dphi = D * phi
+                    phi = 0.5 + 0.5*tf.tanh((50.0 - r)/1.0)
+                    P = 0.9*( 0.5 + 0.5*tf.tanh((20.0 - r)/1.0)) + 0.1
 
                     u =  f(xr)
                     
-                    phiu_t = tf.gradients(phi*u, t)[0]
+                    u_t = tf.gradients(u, t)[0]
 
                     u_x = tf.gradients(u, x)[0]
                     u_y = tf.gradients(u, y)[0]
                     
-                    u_xx = tf.gradients(Dphi * u_x, x)[0]
-                    u_yy = tf.gradients(Dphi * u_y, y)[0]
+                    u_xx = tf.gradients( u_x, x)[0]
+                    u_yy = tf.gradients( u_y, y)[0]
+                    
+                    DxPphi = tf.gradients( P * phi, x)[0]
+                    DyPphi = tf.gradients( P * phi, y)[0]
 
-                    res = phiu_t - ((u_xx + u_yy) + f.param['rRHO'] * self.dataset.RHO * phi * u * (1-u))
+                    diffusion =  f.param['rD'] * self.dataset.DW *( P * phi * (u_xx + u_yy) + DxPphi * u_x + DyPphi * u_y)
+                    
+                    prolif = f.param['rRHO'] * self.dataset.RHO * phi * u * (1-u)
+
+                    res = phi * u_t - ( diffusion + prolif)
                     return res
             else:
                 @tf.function
@@ -168,7 +174,7 @@ class Gmodel:
 
                     prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u)
 
-                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.P *self.dataset.phi * (u_xx + u_yy) + self.dataset.DxPphi * u_x + self.dataset.DyPphi * u_y)
+                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.P *self.dataset.phi * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
                     res = self.dataset.phi * u_t - ( diffusion +  prolif)
                     return res
 

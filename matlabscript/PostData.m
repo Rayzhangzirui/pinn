@@ -33,7 +33,7 @@ classdef PostData<dynamicprops
           obj.setting.argfig = {'-m3'}
 
 		  assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
-		  obj.tag = p.Results.tag;
+		  obj.tag = replace(p.Results.tag,"_","-");
 		  fs = dir(obj.modeldir);          
 		  
 		  for i = 1:length(fs)
@@ -209,8 +209,11 @@ classdef PostData<dynamicprops
 			title(ax1,tag);
 		end
         
+
         function savefig(obj,fname)
+            
             fp = fullfile(obj.modeldir,fname);
+            
             
             if obj.yessave
 				fprintf('save %s\n',fp);
@@ -239,7 +242,11 @@ classdef PostData<dynamicprops
 			upredxdat = obj.upred{k}.upredxdat; %prediciton on Xdat
 
 			udat = obj.trainDataSet.udat(1:ndat); % udat, might have noise
-            udatnn = obj.trainDataSet.udatnn(1:ndat); % udat on final time Xr
+            if isprop(obj.trainDataSet,'udatnn')
+                udatnn = obj.trainDataSet.udatnn(1:ndat); % udat on final time Xr
+            else
+                udatnn = udat;
+            end
             warning('assuming Xdat Xr are the same');
             
 

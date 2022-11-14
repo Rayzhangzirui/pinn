@@ -19,6 +19,7 @@ classdef Sampler< dynamicprops
             obj.setting.tag = 'sample';
             obj.setting.datdir = './';
             obj.setting.radius = model.rmax;
+            obj.setting.usepolar = false;
             
         
             obj.setting = parseargs(obj.setting, varargin{:});
@@ -74,7 +75,6 @@ classdef Sampler< dynamicprops
 
 
 
-
         function dat = genDatLdat(obj,xq)
             % interpolate fdm solution
             method = obj.setting.interp_method;
@@ -85,9 +85,18 @@ classdef Sampler< dynamicprops
 
             % useful for xdat and xtest
 
-            dat.udatnn = obj.model.interpf(obj.model.fdmsol.uend, xq, method); % data no noise
-            dat.udat = obj.model.interpf(noise_uend, xq, method); % data might with noise
-            dat.phidat = obj.model.interpf(obj.model.atlas.phi, xq, method);
+            if obj.setting.usepolar
+                rq = x2r(xq);
+                xgrid  = obj.model.polarsol.xgrid;
+                
+                dat.phidat = obj.model.polargeo.phi(rq);
+                dat.udat = interp1(xgrid, obj.model.polarsol.sol(end,:), rq, method );
+            else
+                dat.udatnn = obj.model.interpf(obj.model.fdmsol.uend, xq, method); % data no noise
+                dat.udat = obj.model.interpf(noise_uend, xq, method); % data might with noise
+                dat.phidat = obj.model.interpf(obj.model.atlas.phi, xq, method);
+            end
+            
             
             dat.xdat = obj.model.transformDat(xq, tqend);
             dat.xq = xq;
@@ -108,12 +117,21 @@ classdef Sampler< dynamicprops
             dat.nxr = size(xq,1);
             tq = rand(dat.nxr,1)*obj.model.tend; % sample t, unit
 
-            dat.phiq = obj.model.interpf(obj.model.atlas.phi, xq, method);
-            dat.Pq = obj.model.interpf(obj.model.atlas.P, xq, method);
-
-            dat.DxPphi = obj.model.interpf(obj.model.fdmsol.DxPphi, xq, method);
-            dat.DyPphi = obj.model.interpf(obj.model.fdmsol.DyPphi, xq, method);
-            dat.DzPphi = obj.model.interpf(obj.model.fdmsol.DzPphi, xq, method);
+            if obj.setting.usepolar
+                rq = x2r(xq);
+                
+                dat.phiq = obj.model.polargeo.phi(rq);
+                dat.Pq = obj.model.polargeo.P(rq);
+                [dat.DxPphi, dat.DyPphi] = obj.model.evalVectorPolar(obj.model.polargeo.DxPphi, xq(:,1),xq(:,2));
+                dat.DzPphi = zeros(size(dat.DxPphi));
+                
+            else
+                dat.phiq = obj.model.interpf(obj.model.atlas.phi, xq, method);
+                dat.Pq = obj.model.interpf(obj.model.atlas.P, xq, method);
+                dat.DxPphi = obj.model.interpf(obj.model.fdmsol.DxPphi, xq, method);
+                dat.DyPphi = obj.model.interpf(obj.model.fdmsol.DyPphi, xq, method);
+                dat.DzPphi = obj.model.interpf(obj.model.fdmsol.DzPphi, xq, method);
+            end
 
             dat.xr = obj.model.transformDat(xq, tq);
 

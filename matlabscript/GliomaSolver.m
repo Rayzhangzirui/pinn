@@ -205,14 +205,17 @@ classdef GliomaSolver< dynamicprops
             fxi = reshape(fri, size(obj.gx));
         end
 
-        function [vx,vy] = interpVectorPolar(obj,dfdr)
-            [theta,rho] = cart2pol(obj.gx-obj.x0(1),obj.gy-obj.x0(2));
-            dr = dfdr(rho)./rho;
-            vx = dr.*cos(theta);
-            vy = dr.*sin(theta);
-            vx(rho<1) = 0;
-            vy(rho<1) = 0;
+
+
+        function [vx,vy] = evalVectorPolar(obj,dfdr,X,Y)
+            [theta,r] = cart2pol(X,Y);
+            dr = dfdr(r);
+            vx = dr.*X./r;
+            vy = dr.*Y./r;
+            vx(r<1e-3) = 0;
+            vy(r<1e-3) = 0;
         end
+
 
         function interpPolarSol(obj)
             % interpolate polar solution to grid
@@ -225,15 +228,10 @@ classdef GliomaSolver< dynamicprops
             obj.atlas.phi = obj.interpGridPolar(obj.polarsol.xgrid, obj.polarsol.phi);
             obj.atlas.P = obj.interpGridPolar(obj.polarsol.xgrid, obj.polarsol.df)/obj.dw;
             obj.fdmsol.uend = obj.fdmsol.uall(:,:,end);
-            
-            h = 1;
-            [Dx,Dy,Dz,~] = fdmOp(h);
-
-            
-            [obj.fdmsol.DxPphi,obj.fdmsol.DyPphi] = obj.interpVectorPolar(obj.polargeo.DxPphi);
+                        
+            [obj.fdmsol.DxPphi,obj.fdmsol.DyPphi] = obj.evalVectorPolar(obj.polargeo.DxPphi, obj.gx-obj.x0(1), obj.gy-obj.x0(2));
             obj.fdmsol.DzPphi = zeros(size(obj.fdmsol.DyPphi));
-             
-            
+
             obj.getrmax()
         end
 

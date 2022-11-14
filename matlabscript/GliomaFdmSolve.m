@@ -9,7 +9,7 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     h = 1; % spacial resolution, mm (caption figure 1)
     
     % integer grid, nd grid
-    [gx,gy,gz,D,phi] = deal(atlas.gx, atlas.gy, atlas.gz, atlas.df, atlas.phi); 
+    [gx,gy,gz,D,phi,P] = deal(atlas.gx, atlas.gy, atlas.gz, atlas.df, atlas.phi,atlas.P); 
 
     sz = [1 1 1];
     sz(1:numel(size(D))) = size(D); 
@@ -74,8 +74,8 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     fdmsol.uall = uall;
     fdmsol.tall = tall;
     fdmsol.uend = u;
-    fdmsol.Dxdfphi = DxDphi;
-    fdmsol.Dydfphi = DyDphi;
-    fdmsol.Dzdfphi = DzDphi;
+    fdmsol.DxPphi = Dx(P.*phi);
+    fdmsol.DyPphi = Dy(P.*phi);
+    fdmsol.DzPphi = Dz(P.*phi);
 
 end
