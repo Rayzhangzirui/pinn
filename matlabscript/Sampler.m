@@ -2,25 +2,30 @@ classdef Sampler< dynamicprops
     properties
         setting
         model
+
+        datlres
+        datldat
+        datltest
     end
 
     methods
         function obj = Sampler(model,varargin)
+            obj.model = model;
+
             obj.setting.interp_method = 'linear';
             obj.setting.samex = true;
             obj.setting.savedat = true;
             obj.setting.seed = 1;
             obj.setting.tag = 'sample';
             obj.setting.datdir = './';
+            obj.setting.radius = model.rmax;
             
         
             obj.setting = parseargs(obj.setting, varargin{:});
             rng(obj.setting.seed,'twister');
 
 
-            obj.setting.noise.type = 'none';
-            obj.model = model;
-            
+            obj.setting.noise.type = 'none';            
         end
 
         function setnoise(obj,varargin)
@@ -30,7 +35,7 @@ classdef Sampler< dynamicprops
         function obj = xsample(obj, datname, varargin)
             p.n = 20000; % total number of data point
             p.uniformx = false; % uniform distribution or not
-            p.radius = obj.model.rmax;
+            radius = obj.setting.radius;
 
             p.nwratio = 0.0; % ratio of data that are weighted
             p.wdata = [];  % weighted by some data
@@ -39,14 +44,14 @@ classdef Sampler< dynamicprops
             n_basic = p.n * (1-p.nwratio);
             n_enhance = p.n * (p.nwratio);
 
-            xq = sampleDenseBall(n_basic, obj.model.xdim, p.radius, obj.model.x0, p.uniformx); 
-            fprintf('sample %g, radius %g, uniformx = %g\n', n_basic, p.radius, p.uniformx);
+            xq = sampleDenseBall(n_basic, obj.model.xdim, radius, obj.model.x0, p.uniformx); 
+            fprintf('sample %g, radius %g, uniformx = %g\n', n_basic, radius, p.uniformx);
 
             if ~isempty(p.wdata)
                 ntmp = n_enhance*10;
                 fprintf('weighted sample');
                 
-                xtmp = sampleDenseBall(ntmp, obj.model.xdim, p.radius, obj.model.x0, true); % uniform temporary 
+                xtmp = sampleDenseBall(ntmp, obj.model.xdim, radius, obj.model.x0, true); % uniform temporary 
                 % [dxdf, dydf] = gradient(p.wdata);
                 % normgrad = dxdf.^2 + dydf.^2;
                 % normgrad = imgaussfilt(normgrad, 1,'FilterDomain','spatial');
@@ -79,6 +84,7 @@ classdef Sampler< dynamicprops
             noise_uend = addNoise(obj.model.fdmsol.uend, obj.setting.noise);
 
             % useful for xdat and xtest
+
             dat.udatnn = obj.model.interpf(obj.model.fdmsol.uend, xq, method); % data no noise
             dat.udat = obj.model.interpf(noise_uend, xq, method); % data might with noise
             dat.phidat = obj.model.interpf(obj.model.atlas.phi, xq, method);
@@ -86,12 +92,10 @@ classdef Sampler< dynamicprops
             dat.xdat = obj.model.transformDat(xq, tqend);
             dat.xq = xq;
             
-            if ~isprop(obj,'datldat')
-                addprop(obj, 'datldat');
-            end
             obj.datldat= dat;
         end
 
+        
 
         function dat = genDatLres(obj,xq)
             % data for residual
@@ -104,19 +108,15 @@ classdef Sampler< dynamicprops
             dat.nxr = size(xq,1);
             tq = rand(dat.nxr,1)*obj.model.tend; % sample t, unit
 
-            % useful for xdat and xtest
             dat.phiq = obj.model.interpf(obj.model.atlas.phi, xq, method);
-            dat.Pwmq = obj.model.interpf(obj.model.atlas.Pwm, xq, method);
-            dat.Pgmq = obj.model.interpf(obj.model.atlas.Pgm, xq, method);
-            dat.DxDphi = obj.model.interpf(obj.model.fdmsol.DxDphi, xq, method)/obj.model.dw;
-            dat.DyDphi = obj.model.interpf(obj.model.fdmsol.DyDphi, xq, method)/obj.model.dw;
-            dat.DzDphi = obj.model.interpf(obj.model.fdmsol.DzDphi, xq, method)/obj.model.dw;
+            dat.Pq = obj.model.interpf(obj.model.atlas.P, xq, method);
+
+            dat.DxPphi = obj.model.interpf(obj.model.fdmsol.DxPphi, xq, method);
+            dat.DyPphi = obj.model.interpf(obj.model.fdmsol.DyPphi, xq, method);
+            dat.DzPphi = obj.model.interpf(obj.model.fdmsol.DzPphi, xq, method);
 
             dat.xr = obj.model.transformDat(xq, tq);
 
-            if ~isprop(obj,'datlres')
-                addprop(obj, 'datlres');
-            end
             obj.datlres= dat;
         end
 
@@ -130,12 +130,9 @@ classdef Sampler< dynamicprops
 
             dat.utest = obj.model.interpu(tq, xq, method); % u(tq, xq), mainly for testing
             dat.phitest = obj.model.interpf(obj.model.atlas.phi, xq, method);
+
             dat.xtest = obj.model.transformDat(xq, tq);
     
-
-            if ~isprop(obj,'datltest')
-                addprop(obj, 'datltest');
-            end
             obj.datltest= dat;
         end
 

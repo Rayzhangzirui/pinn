@@ -74,9 +74,10 @@ classdef Atlas<DataSet
 
         function setdw(obj, dw, factor)
             fprintf('compute diffusion field with dw = %g\n',dw);
-            dg = dw/factor;
-            df = obj.Pwm*dw + obj.Pgm*dg; % diffusion coefficients
-            obj.addvar(df,dw,dg);
+            
+            P = obj.Pwm + obj.Pgm/factor; % normalized diffusion coeff/weighted P(x)
+            df = P*dw; % diffusion coefficients
+            obj.addvar(P, df, dw);
         end
 
 
@@ -95,7 +96,7 @@ classdef Atlas<DataSet
         
         function [ax1, ax2] = imagescfg(obj, fgdat, varargin)
             p.bgname = 'df';
-            p.th = 0.1;
+            p.th = 0.01;
             p = parseargs(p, varargin{:});
             
             bgdat = slice2d(obj.(p.bgname), varargin{:});

@@ -583,5 +583,55 @@ classdef PostData<dynamicprops
             disp([minres maxres]);
             title(ax1, sprintf('residual t = %g',tq(i)));
         end
+
+
+        function plotPolarSol(obj,fpattern,varargin)
+            % plot prediction 
+            p.tk = 1:2:11;
+            p = parseargs(p,varargin{:});
+
+            k = obj.whichpred(fpattern)
+            xr = obj.upred{k}.xr;
+            dat = obj.upred{k}.upredts;
+            r = x2r(xr(:,2:end));
+            figure
+            for i = p.tk
+                t = obj.upred{k}.ts(i) * obj.trainDataSet.tend;   
+                scatter(r, dat(:,i) ,12, t*ones(size(r)),'filled')
+                hold on
+                plot(obj.fwdmodele.polarsol.xgrid, obj.fwdmodele.polarsol.sol(i,:),'k','LineWidth',2)
+            end
+            xlim([0,50])
+            ylim([0,1])
+            cb = colorbar();
+            cb.Label.String = 't[days]'
+            xlabel('r[mm]')
+            ylabel('u')
+        end
+
+
+        function plotPolarRes(obj,fpattern,varargin)
+
+            p.tk = 1:2:11;
+            p = parseargs(p,varargin{:});
+
+            k = obj.whichpred(fpattern)
+            xr = obj.upred{k}.xr;
+            dat = obj.upred{k}.rests;
+            r = x2r(xr(:,2:end));
+            figure
+            for i = p.tk
+                t = obj.upred{k}.ts(i) * obj.trainDataSet.tend;   
+                scatter(r, dat(:,i) ,12, t*ones(size(r)),'filled')
+            end
+            xlim([0,50])
+            ylim([0,1])
+            cb = colorbar();
+            cb.Label.String = 't[days]'
+            xlabel('r[mm]')
+            ylabel('residual')
+        end
+
+
    end
 end

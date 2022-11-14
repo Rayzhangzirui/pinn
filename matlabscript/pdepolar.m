@@ -18,7 +18,8 @@ nx = floor(bd/dx);
 s.xgrid = linspace(0,bd,nx+1);
 nt = floor(tend/dt);
 s.tgrid = linspace(0,tend,nt+1);
-s.phi = phi(s.xgrid);
+s.phi = phi(s.xgrid); %phase field fcn
+s.df = D(s.xgrid); % diffusion coefficients
 s.sol = pdepe(m,@pdefunc,icfun,@bcfun,s.xgrid,s.tgrid);
 
 

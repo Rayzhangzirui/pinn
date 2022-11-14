@@ -8,6 +8,7 @@ classdef GliomaSolver< dynamicprops
 
         dw 
         dg
+        factor
         rho
         x0 % initial location
         ix 
@@ -54,7 +55,8 @@ classdef GliomaSolver< dynamicprops
             % set up parameters
             obj.xdim = xdim;
             obj.dw = d;
-            obj.dg = d/10;
+            obj.factor = 10;
+            obj.dg = d/obj.factor;
             obj.rho = rho; %1/day
             obj.tend = tend; % day
             obj.x0 = x0;
@@ -148,15 +150,15 @@ classdef GliomaSolver< dynamicprops
         end
 
         function solvepolar(obj,varargin)
-            p.epsilon = 3;
+            fac = obj.factor; % factor = dw/dg
+            p.epsilon = 1;
             p.bd = 50;
             p.m = obj.xdim-1;
             p.Rwm = p.bd;
             p.Rgm = p.bd*2;
             icfun = @(r) 0.1*exp(-0.1*r.^2);
-            p.dx = 1;
-            p.dt = obj.tend/10;
-            p.epsilon = 3;
+            p.dx = 0.1;
+            p.dt = obj.tend/fac;
             
             p = parseargs(p, varargin{:});
             disp(p);
@@ -164,38 +166,74 @@ classdef GliomaSolver< dynamicprops
             m = obj.xdim-1;
             
             % smooth transition
-            w = 1;
-            shv = @(x,r) 1/2* (1 + tanh((r - x)/w));
-            dwfcn = @(x) shv(x,p.Rwm) * obj.dw + (1-shv(x,p.Rwm)).*(shv(x,p.Rgm)).*obj.dw/10;
+            w = p.epsilon;
+            shv = @(x,r) 1/2* (1 + tanh((r - x)/w)); %smooth heaviside
+            Dxshv = @(x,r) 0.5*(1-tanh((r - x)/w).^2)*(-1/w); % dx of smooth heavisdie function
+            
+            phifcn = @(x) shv(x, p.bd); 
+            Pfcn = @(x) shv(x,p.Rwm)  + (1-shv(x,p.Rwm)).*(shv(x,p.Rgm))/fac;
+            dffcn = @(x) obj.dw * Pfcn(x); % diffusion coefficent with unit function
+
+
+            DxPfcn = @(x) Dxshv(x,p.Rwm)  - Dxshv(x,p.Rwm).*shv(x,p.Rgm)/fac + (1-shv(x,p.Rwm)).*Dxshv(x,p.Rgm)/fac;
+            Dxphi = @(x) Dxshv(x,p.bd);
+            DxPphi = @(x) phifcn(x).*DxPfcn(x) + Dxphi(x).*Pfcn(x);
+
+
             polargeo.Pwm = @(x) shv(x,p.Rwm);
             polargeo.Pgm = @(x) (1-shv(x,p.Rwm)).*(shv(x,p.Rgm));
+            polargeo.P = Pfcn;
+            polargeo.DxPphi = DxPphi;
+            polargeo.phi = phifcn;
+
+
             addprop(obj,'polargeo');
             obj.polargeo = polargeo;
 
             % sharp transition
             % dwfcn = @(x) double(x<p.Rwm)*obj.dw + double(x>p.Rwm)*double(x<p.Rgm)*obj.dw/10;
 
-            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, dwfcn, obj.rho, p.dx, obj.tend, p.dt, icfun);
+            obj.polarsol = pdepolar(true, p.epsilon, p.bd, m, dffcn, obj.rho, p.dx, obj.tend, p.dt, icfun);
+        end
+
+        function fxi = interpGridPolar(obj, r, f)
+            % interpolate f(r) on x, extrapolate as 0
+            warning('interp polar assuming 2d');
+            rxi = sqrt((obj.gx-obj.x0(1)).^2+(obj.gy-obj.x0(2)).^2);
+            fri = interp1(r, f, rxi(:) );
+            fri(isnan(fri)) = 0;
+            fxi = reshape(fri, size(obj.gx));
+        end
+
+        function [vx,vy] = interpVectorPolar(obj,dfdr)
+            [theta,rho] = cart2pol(obj.gx-obj.x0(1),obj.gy-obj.x0(2));
+            dr = dfdr(rho)./rho;
+            vx = dr.*cos(theta);
+            vy = dr.*sin(theta);
+            vx(rho<1) = 0;
+            vy(rho<1) = 0;
         end
 
         function interpPolarSol(obj)
             % interpolate polar solution to grid
-
-            r = sqrt(obj.gx.^2+obj.gy.^2);
-
             % make polar solution grid solution
             obj.fdmsol.tall = obj.polarsol.tgrid;
             warning('interp polar solution to grid, assuming xdim = 2');
             for i = 1:length(obj.fdmsol.tall)
-                ui = interp1(obj.polarsol.xgrid, obj.polarsol.sol(i,:), r(:) );
-                ui(isnan(ui)) = 0;
-                ui = reshape(ui, size(obj.gx));
-                obj.fdmsol.uall(:,:,i) = ui;
+                obj.fdmsol.uall(:,:,i) = obj.interpGridPolar(obj.polarsol.xgrid, obj.polarsol.sol(i,:));
             end
-            phi = interp1(obj.polarsol.xgrid, obj.polarsol.phi, r(:) );
-            obj.atlas.phi = reshape(phi, size(obj.gx));
+            obj.atlas.phi = obj.interpGridPolar(obj.polarsol.xgrid, obj.polarsol.phi);
+            obj.atlas.P = obj.interpGridPolar(obj.polarsol.xgrid, obj.polarsol.df)/obj.dw;
             obj.fdmsol.uend = obj.fdmsol.uall(:,:,end);
+            
+            h = 1;
+            [Dx,Dy,Dz,~] = fdmOp(h);
 
+            
+            [obj.fdmsol.DxPphi,obj.fdmsol.DyPphi] = obj.interpVectorPolar(obj.polargeo.DxPphi);
+            obj.fdmsol.DzPphi = zeros(size(obj.fdmsol.DyPphi));
+             
+            
             obj.getrmax()
         end
 

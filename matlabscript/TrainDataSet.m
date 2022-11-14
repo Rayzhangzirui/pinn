@@ -43,7 +43,7 @@ classdef TrainDataSet<DataSet
 
         function getdf(obj)
             % 3d distribution of xr
-            df = obj.Pwmq * obj.dw + obj.Pgmq * obj.dg;
+            df = obj.Pq * obj.dw;
             obj.addvar(df);
         end
 

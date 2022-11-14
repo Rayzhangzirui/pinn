@@ -74,8 +74,8 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     fdmsol.uall = uall;
     fdmsol.tall = tall;
     fdmsol.uend = u;
-    fdmsol.DxDphi = DxDphi;
-    fdmsol.DyDphi = DyDphi;
-    fdmsol.DzDphi = DzDphi;
+    fdmsol.Dxdfphi = DxDphi;
+    fdmsol.Dydfphi = DyDphi;
+    fdmsol.Dzdfphi = DzDphi;
 
 end
