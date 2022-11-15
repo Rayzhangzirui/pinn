@@ -3,9 +3,10 @@ classdef Sampler< dynamicprops
         setting
         model
 
-        datlres
-        datldat
-        datltest
+        datlres % data for residual loss, P, phi, DxyzPphi
+        datldat % data for data loss
+        datltest % data for testing loss
+        dateval % data for evaluating
     end
 
     methods
@@ -20,6 +21,7 @@ classdef Sampler< dynamicprops
             obj.setting.datdir = './';
             obj.setting.radius = model.rmax;
             obj.setting.usepolar = false;
+            obj.setting.urange = [-inf inf];
             
         
             obj.setting = parseargs(obj.setting, varargin{:});
@@ -82,8 +84,8 @@ classdef Sampler< dynamicprops
         function dat = genDatLdat(obj,xq)
             % interpolate fdm solution
             method = obj.setting.interp_method;
-            dat.ndat = size(xq,1);
-            tqend = ones(dat.ndat, 1) * obj.model.tend; % all final time
+            ndat = size(xq,1);
+            tqend = ones(ndat, 1) * obj.model.tend; % all final time
         
             noise_uend = addNoise(obj.model.fdmsol.uend, obj.setting.noise);
 
@@ -92,9 +94,8 @@ classdef Sampler< dynamicprops
             if obj.setting.usepolar
                 rq = x2r(xq);
                 xgrid  = obj.model.polarsol.xgrid;
-                
-                dat.phidat = obj.model.polargeo.phi(rq);
                 dat.udat = interp1(xgrid, obj.model.polarsol.sol(end,:), rq, method );
+                dat.phidat = obj.model.polargeo.phi(rq);
             else
                 dat.udatnn = obj.model.interpf(obj.model.fdmsol.uend, xq, method); % data no noise
                 dat.udat = obj.model.interpf(noise_uend, xq, method); % data might with noise
@@ -103,7 +104,17 @@ classdef Sampler< dynamicprops
             
             
             dat.xdat = obj.model.transformDat(xq, tqend);
-            dat.xq = xq;
+            
+            % data for evaluating nn
+            obj.dateval.xeval = dat.xdat;
+            obj.dateval.phieval = dat.phidat;
+            obj.dateval.ueval = dat.udatnn;
+
+
+            % down sample every
+            idx = dat.udat>obj.setting.urange(1) & dat.udat<obj.setting.urange(2);
+            dat = structfun(@(x) x(idx,:), dat, 'UniformOutput', false);
+            fprintf('urange down sample %d to %d \n',ndat, sum(idx));
             
             obj.datldat= dat;
         end
@@ -114,12 +125,12 @@ classdef Sampler< dynamicprops
             % data for residual
             if obj.setting.samex
                 fprintf('xr same as xdat\n');
-                xq = obj.datldat.xq;
+                xq = obj.xqdat;
             end
 
             method = obj.setting.interp_method;
-            dat.nxr = size(xq,1);
-            tq = rand(dat.nxr,1)*obj.model.tend; % sample t, unit
+            nxr = size(xq,1);
+            tq = rand(nxr,1)*obj.model.tend; % sample t, unit
 
             if obj.setting.usepolar
                 rq = x2r(xq);
@@ -146,9 +157,9 @@ classdef Sampler< dynamicprops
             % data for testing
 
             method = obj.setting.interp_method;
-            dat.ntest = size(xq,1);
+            ntest = size(xq,1);
             
-            tq = rand(dat.ntest,1)*obj.model.tend; % sample t, unit
+            tq = rand(ntest,1)*obj.model.tend; % sample t, unit
 
             dat.utest = obj.model.interpu(tq, xq, method); % u(tq, xq), mainly for testing
             dat.phitest = obj.model.interpf(obj.model.atlas.phi, xq, method);
@@ -170,6 +181,8 @@ classdef Sampler< dynamicprops
 
 
         function dataset = genDataSet(obj)
+            % generate data set for training
+
             dataset = TrainDataSet();
 
             dataset.copyprop(obj.model, 'dwc','rhoc','L','T','DW','RHO','rDe','rRHOe',...
@@ -178,7 +191,9 @@ classdef Sampler< dynamicprops
             dataset.copyprop(obj.datldat);
             dataset.copyprop(obj.datlres);
             dataset.copyprop(obj.datltest);
-            
+            dataset.copyprop(obj.setting.noise);
+            dataset.copyprop(obj.dateval);
+
             fp = sprintf('dat_%s_%s.mat',obj.model.name,obj.setting.tag);
             fp = fullfile(obj.setting.datdir, fp);
 

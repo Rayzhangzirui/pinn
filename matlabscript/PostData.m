@@ -376,15 +376,16 @@ classdef PostData<dynamicprops
 			
 		end
 
-		function fwderr(obj)
+		function plotfwderr(obj)
             % error of fwd solution using infered param
-			[ax1,ax2] = obj.atlas.imagescfg(obj.fwdmodel.uend.*obj.fwdmodel.phi);
+            figure;
+			[ax1,ax2] = obj.atlas.imagescfg(obj.fwdmodel.fdmsol.uend.*obj.fwdmodel.fdmsol.phi);
 			title(ax1,'\phi u_{fdm,pred}');
 			obj.savefig('fig_fdm_upred.jpg');
 			
-
-			err =  abs(obj.fwdmodel.uend - obj.fwdmodele.uend).*obj.fwdmodel.phi;
-			[ax1,ax2] = obj.atlas.imagesc2('df', err);
+            figure;
+			err =  abs(obj.fwdmodel.fdmsol.uend - obj.fwdmodele.fdmsol.uend).*obj.fwdmodel.fdmsol.phi;
+			[ax1,ax2] = obj.atlas.imagescfg(err);
 			title(ax1,'\phi |u_{fdm,pred} - u_{end}|');
 			obj.savefig('fig_fdm_err.jpg');
 			
@@ -569,14 +570,13 @@ classdef PostData<dynamicprops
             lgd = legend('Location','northeast');
         end
 
-        function contourts(obj, pat, level, ts, varargin)
-            % pat = pattern for file
-            paths = cellfun(@(x) x.path, obj.upred, 'UniformOutput', false);
-            k = find(contains(paths, pat));
+        function contourts(obj, fpat, level, ts, varargin)
+            % fpat = pattern for file
+            k = obj.whichpred(fpat);
+            
             for ti = ts
                 figure;
                 obj.contoursep(k, level, ti, varargin{:});
-                
             end
         end
 
