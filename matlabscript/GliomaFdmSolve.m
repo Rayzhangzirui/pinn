@@ -3,8 +3,9 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
 %     p.u0 = @(r) 0.1*exp(-0.1*r.^2);
     p.u0 = @(x,y,z) 0.1*exp(-0.1*((x-ix(1)).^2+(y-ix(2)).^2+(z-ix(3)).^2));
     p.xdim = 2;
-    p.factor = 10;
+    p.conservative = false; % use conservative form
     p = parseargs(p, varargin{:});
+    
     
     h = 1; % spacial resolution, mm (caption figure 1)
     
@@ -41,11 +42,13 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
     t = 0;
     tall = [t];
     uall = {u0};
-
-    DxDphi = Dx(D.*phi);
-    DyDphi = Dy(D.*phi);
-    DzDphi = Dz(D.*phi);
-
+    
+    Dphi = D.*phi;
+    DxDphi = Dx(Dphi);
+    DyDphi = Dy(Dphi);
+    DzDphi = Dz(Dphi);
+    
+    tic;
     while t<tfinal
 %         imagesc(u);
 %         fprintf('%g\n',t)
@@ -54,8 +57,14 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
         else
             dt = tfinal-t;
         end
-
-        dudt = DxDphi.*Dx(u) + DyDphi.*Dy(u) + DzDphi.*Dz(u) + D.*phi.* Lap(u) + rho*phi.*u.*(1-u);
+        
+        if p.conservative
+            dudt = hmnLap(Dphi,u) + rho*phi.*u.*(1-u);
+        else
+            dudt = DxDphi.*Dx(u) + DyDphi.*Dy(u) + DzDphi.*Dz(u) + D.*phi.* Lap(u) + rho*phi.*u.*(1-u);
+        end
+        
+            
         
         u = u + dt*dudt;
         u = threshod(u);
@@ -65,10 +74,10 @@ function fdmsol = GliomaFdmSolve(atlas, rho, tfinal, ix, varargin)
         uall{end+1} = u;
 
     end
-
+    fprintf('finish GliomaFdmsolve, %g s\n',toc);
     
     uall = cat(p.xdim+1,uall{:});
-    fprintf('finish GliomaFdmsolve\n');
+    
 
     fdmsol.phi = phi;
     fdmsol.uall = uall;

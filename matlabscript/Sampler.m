@@ -26,7 +26,11 @@ classdef Sampler< dynamicprops
             rng(obj.setting.seed,'twister');
 
 
-            obj.setting.noise.type = 'none';            
+            obj.setting.noise.type = 'none';
+            obj.setting.noise.mu = 0;
+            obj.setting.noise.std = 0.1;
+            obj.setting.noise.fsig = 3;
+            obj.setting.noise.threshold = [0,1];
         end
 
         function setnoise(obj,varargin)

@@ -378,7 +378,7 @@ classdef PostData<dynamicprops
 
 		function fwderr(obj)
             % error of fwd solution using infered param
-			[ax1,ax2] = obj.atlas.imagesc2('df', obj.fwdmodel.uend.*obj.fwdmodel.phi);
+			[ax1,ax2] = obj.atlas.imagescfg(obj.fwdmodel.uend.*obj.fwdmodel.phi);
 			title(ax1,'\phi u_{fdm,pred}');
 			obj.savefig('fig_fdm_upred.jpg');
 			

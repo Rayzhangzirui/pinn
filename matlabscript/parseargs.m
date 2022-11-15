@@ -1,4 +1,4 @@
-function X = parseargs(X,varargin)
+function [X,unmatch] = parseargs(X,varargin)
 %PARSEARGS - Parses name-value pairs
 %
 % Behaves like setfield, but accepts multiple name-value pairs and provides
@@ -31,7 +31,7 @@ function X = parseargs(X,varargin)
 % of MATLAB.
 
 % Copyright 2006-2010 The MathWorks, Inc.
-
+unmatch = {};
 remaining = nargin-1; % number of arguments other than X
 count = 1;
 fields = fieldnames(X);
@@ -68,8 +68,10 @@ while remaining>=2
         X = setfield(X,fieldname,newvalue); %#ok
         modified(fieldind) = 1;
     else
-        % allow not parsed
-        % error(['Not a valid field name: ' fieldname]);
+        % comment to allow not parsed
+        unmatch{end+1} = fieldname;
+        unmatch{end+1} = varargin{count+1};
+%         error(['Not a valid field name: ' fieldname]);
     end
     remaining = remaining - 2;
     count = count + 2;

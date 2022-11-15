@@ -124,7 +124,7 @@ classdef GliomaSolver< dynamicprops
             % solve pde, 
             p.redo = false;
             p.savesol = true;
-            p = parseargs(p, varargin{:});
+            [p,unmatch] = parseargs(p, varargin{:});
 
             [fp,es] = obj.solpath;
             if es && p.redo == false
@@ -136,7 +136,7 @@ classdef GliomaSolver< dynamicprops
                     obj.atlas.getphi();
                 end
                 
-                obj.fdmsol = GliomaFdmSolve(obj.atlas, obj.rho, obj.tend, obj.ix, varargin{:});
+                obj.fdmsol = GliomaFdmSolve(obj.atlas, obj.rho, obj.tend, obj.ix, unmatch{:});
                 
                 if p.savesol
                     fprintf('save pde solution\n');
