@@ -305,19 +305,23 @@ classdef GliomaSolver< dynamicprops
             end 
         end
 
-        function fq = interpu(obj, t, X, method)
+        function fq = interpu(obj, tq, X, method)
             % interpolate u(x,t)
             f = @(x) reshape(x,[],1);
+            
+            if length(tq)==1
+                tq = ones(size(X,1),1)*tq;
+            end
 
             if obj.xdim == 3
                 xg = f(obj.gx(:,1,1));
                 yg = f(obj.gy(1,:,1));
                 zg = f(obj.gz(1,1,:));
-                fq = interpn(xg, yg, zg, obj.fdmsol.tall, obj.fdmsol.uall, X(:,1), X(:,2), X(:,3), t, method);
+                fq = interpn(xg, yg, zg, obj.fdmsol.tall, obj.fdmsol.uall, X(:,1), X(:,2), X(:,3), tq, method);
             else
                 xg = f(obj.gx(:,1));
                 yg = f(obj.gy(1,:));
-                fq = interpn(xg, yg, obj.fdmsol.tall, obj.fdmsol.uall, X(:,1), X(:,2), t, method);
+                fq = interpn(xg, yg, obj.fdmsol.tall, obj.fdmsol.uall, X(:,1), X(:,2), tq, method);
             end 
         end
 

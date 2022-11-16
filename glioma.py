@@ -71,7 +71,6 @@ class DataSet:
         self.DyPphi =  matdat.get('DyPphi')[0:nres,:]
         self.DzPphi =  matdat.get('DzPphi')[0:nres,:]
 
-
         # characteristic diffusion ceofficient at each point
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
@@ -246,6 +245,7 @@ class Gmodel:
         self.saveopts()
         
     def saveopts(self):
+        # save all options 
         z = self.opts | self.solver.info
         fpath = os.path.join(self.opts['model_dir'],'options.json')
         json.dump( z, open( fpath, 'w' ) )

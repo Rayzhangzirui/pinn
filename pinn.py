@@ -157,7 +157,8 @@ class PINNSolver():
     def __init__(self, model, pde, 
                 fdatloss,
                 ftestloss,
-                xr = None, wr = None,
+                wr = None,
+                xr = None, 
                 xdat = None, udat = None,
                 xtest = None, utest=None,
                 options=None):
@@ -543,7 +544,7 @@ class PINNSolver():
         savedat['rests'] = np.concatenate([*rests],axis=1)
         savedat['xr'] = xr
         savedat['ts'] = ts
-        print(f'save upred at different t to {predfile}')
+        print(f'save upred of xr at different t to {predfile}')
         savemat(predfile,savedat)
         
                 

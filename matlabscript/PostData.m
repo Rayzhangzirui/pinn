@@ -242,6 +242,7 @@ classdef PostData<dynamicprops
 			upredxdat = obj.upred{k}.upredxdat; %prediciton on Xdat
 
 			udat = obj.trainDataSet.udat(1:ndat); % udat, might have noise
+            
             if isprop(obj.trainDataSet,'udatnn')
                 udatnn = obj.trainDataSet.udatnn(1:ndat); % udat on final time Xr
             else
@@ -262,7 +263,7 @@ classdef PostData<dynamicprops
         end
         
         function [ax1,ax2] = PlotudatFig(obj, fpattern, withnoise)
-            % plot data at the end
+            % plot data at the end, presentation figure
            [xdat, upredxdat, udat, udatnn, phidat] = obj.getplotdat(fpattern);
            umax = min(max(udatnn),1);
             
@@ -284,11 +285,11 @@ classdef PostData<dynamicprops
             set(cb(2).Label,{'String','Rotation','Position'},{'D',0,[0.5 -0.01]});
         end
 
-        function scatterupred(obj, bgname, fpattern)
+        function scatterupredxdat(obj, bgname, fpattern)
             % prediction error
             [xdat, upredxdat, udat, uq, phidat] = obj.getplotdat(fpattern);
             umax = min(max(udat),1);
-                
+
 			% plot pred u
 			[ax1,ax2] = obj.scatter(bgname, xdat, upredxdat.*phidat, '\phi u_{pred}');
             clim(ax2, [0, umax]);
@@ -318,6 +319,54 @@ classdef PostData<dynamicprops
 
 			fname = 'fig_noise.jpg';
 			obj.savefig(fname);
+        end
+
+
+
+        function scatterupredxrt(obj, bgname, t, fpattern)
+            % prediction on xr, at different time tk
+            
+            method = 'linear';
+            fs = @(varargin) sprintf(varargin{:});
+
+            % get x and t
+            k = obj.whichpred(fpattern);
+            dat = obj.upred{k};
+            ts = dat.ts.*obj.trainDataSet.tend;
+            tk = find(abs(ts-t)<1e-6);
+            if isempty(tk)
+                error('t not found')
+            end
+            xq = dat.xr;
+            upredxrt = dat.upredts(:,tk);
+            tq = ts(tk);
+            
+            % interpolate exact data
+            uxrt = obj.fwdmodele.interpu(tq, xq(:,2:end), method);  % data might with noise
+            phixr = obj.fwdmodele.interpf(obj.atlas.phi, xq(:,2:end), method);
+            
+            umax = min(max(uxrt),1);
+
+			% plot pred u
+			[ax1,ax2] = obj.scatter(bgname, xq, upredxrt.*phixr, fs('\\phi u_{pred} (xr,t=%g)',tq));
+            clim(ax2, [0, umax]);
+            
+			fname = 'fig_upredxrt.jpg';
+			obj.savefig(fname);
+			
+			% plot data u
+			[ax1,ax2] = obj.scatter(bgname, xq, uxrt.*phixr, fs('\\phi u_{dat} (xr,t=%g)',tq));
+            clim(ax2, [0, umax]);
+			fname = 'fig_udatxrt.jpg';
+			obj.savefig(fname);
+
+			% plot error u
+			err = (upredxrt - uxrt ).*phixr;
+			[ax1,ax2] = obj.scatter(bgname, xq, err, fs('\\phi u_{pred}-u_{dat}|(xr,t=%g)',tq));
+
+			fname = 'fig_err_xrt.jpg';
+			obj.savefig(fname);
+
 		end
 
 		function [ax1,ax2] = scatterres(obj)
@@ -378,11 +427,23 @@ classdef PostData<dynamicprops
 
 		function plotfwderr(obj)
             % error of fwd solution using infered param
+
+            figure;
+			[ax1,ax2] = obj.atlas.imagescfg(obj.fwdmodele.fdmsol.uend.*obj.fwdmodele.fdmsol.phi);
+            cmin = min(obj.fwdmodele.fdmsol.uend(:));
+            cmax = max(obj.fwdmodele.fdmsol.uend(:));
+            clim([cmin, cmax]);
+			title(ax1,'\phi u_{fdm,udat}');
+			obj.savefig('fig_fdm_udat.jpg');
+
             figure;
 			[ax1,ax2] = obj.atlas.imagescfg(obj.fwdmodel.fdmsol.uend.*obj.fwdmodel.fdmsol.phi);
+            clim([cmin, cmax]);
 			title(ax1,'\phi u_{fdm,pred}');
 			obj.savefig('fig_fdm_upred.jpg');
 			
+            
+
             figure;
 			err =  abs(obj.fwdmodel.fdmsol.uend - obj.fwdmodele.fdmsol.uend).*obj.fwdmodel.fdmsol.phi;
 			[ax1,ax2] = obj.atlas.imagescfg(err);
@@ -573,7 +634,7 @@ classdef PostData<dynamicprops
         function contourts(obj, fpat, level, ts, varargin)
             % fpat = pattern for file
             k = obj.whichpred(fpat);
-            
+
             for ti = ts
                 figure;
                 obj.contoursep(k, level, ti, varargin{:});

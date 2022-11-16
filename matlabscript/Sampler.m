@@ -2,6 +2,11 @@ classdef Sampler< dynamicprops
     properties
         setting
         model
+        
+        % spatial sample of xr, xtest, xdat, used to generate training data
+        sxr
+        sxtest
+        sxdat
 
         datlres % data for residual loss, P, phi, DxyzPphi
         datldat % data for data loss
@@ -22,37 +27,52 @@ classdef Sampler< dynamicprops
             obj.setting.radius = model.rmax;
             obj.setting.usepolar = false;
             obj.setting.urange = [-inf inf];
+            obj.setting.uth = [];
+
             
         
             obj.setting = parseargs(obj.setting, varargin{:});
             rng(obj.setting.seed,'twister');
-
 
             obj.setting.noise.type = 'none';
             obj.setting.noise.mu = 0;
             obj.setting.noise.std = 0.1;
             obj.setting.noise.fsig = 3;
             obj.setting.noise.threshold = [0,1];
+
         end
 
         function setnoise(obj,varargin)
             obj.setting.noise = parseargs(obj.setting.noise, varargin{:});
         end
 
-        function obj = xsample(obj, datname, varargin)
-            p.n = 20000; % total number of data point
+        function setxsample(obj,datname,varargin)
+            p.n = 20000;
             p.uniformx = false; % uniform distribution or not
-            radius = obj.setting.radius;
-
+            p.radius = obj.setting.radius;
             p.nwratio = 0.0; % ratio of data that are weighted
             p.wdata = [];  % weighted by some data
-            p = parseargs(p,varargin{:});
+            p.sameas = '';
+            p = parseargs(p, varargin{:});
+            obj.setting.(datname) = p;
+        end
+
+
+        function xq = xsample(obj, datname)
+
+            p = obj.setting.(datname);
+
+            if ~isempty(p.sameas)
+                xq = obj.(p.sameas);
+                fprintf('datname same as %s\n',p.sameas);
+                return
+            end
 
             n_basic = p.n * (1-p.nwratio);
             n_enhance = p.n * (p.nwratio);
 
-            xq = sampleDenseBall(n_basic, obj.model.xdim, radius, obj.model.x0, p.uniformx); 
-            fprintf('sample %g, radius %g, uniformx = %g\n', n_basic, radius, p.uniformx);
+            xq = sampleDenseBall(n_basic, obj.model.xdim, p.radius, obj.model.x0, p.uniformx); 
+            fprintf('sample %g, radius %g, uniformx = %g\n', n_basic, p.radius, p.uniformx);
 
             if ~isempty(p.wdata)
                 ntmp = n_enhance*10;
@@ -71,11 +91,6 @@ classdef Sampler< dynamicprops
                 xq = [xq; xtmp];
                 xq = xq(randperm(size(xq, 1)), :);
             end 
-            
-            if ~isprop(obj,datname)
-                addprop(obj, datname);
-            end
-            obj.(datname) = xq;
 
         end
 
@@ -112,9 +127,22 @@ classdef Sampler< dynamicprops
 
 
             % down sample every
-            idx = dat.udat>obj.setting.urange(1) & dat.udat<obj.setting.urange(2);
-            dat = structfun(@(x) x(idx,:), dat, 'UniformOutput', false);
-            fprintf('urange down sample %d to %d \n',ndat, sum(idx));
+            
+            if isempty(obj.setting.uth)
+                idx = dat.udat>obj.setting.urange(1) & dat.udat<obj.setting.urange(2);
+                dat = structfun(@(x) x(idx,:), dat, 'UniformOutput', false);
+                fprintf('urange down sample %d to %d \n',ndat, sum(idx));
+            else
+                % threshold udat to [0, uth(1), uth(2)]
+                top = dat.udat>obj.setting.urange(2);
+                top2 = dat.udat>obj.setting.urange(1);
+                dat.udat(top2) = obj.setting.uth(1);
+                dat.udat(top) = obj.setting.uth(2);
+                dat.udat(~top2) = 0.0;
+                fprintf('threshold to [0, %g, %g ]\n', obj.setting.uth);
+            end
+            
+            
             
             obj.datldat= dat;
         end
@@ -123,10 +151,6 @@ classdef Sampler< dynamicprops
 
         function dat = genDatLres(obj,xq)
             % data for residual
-            if obj.setting.samex
-                fprintf('xr same as xdat\n');
-                xq = obj.xqdat;
-            end
 
             method = obj.setting.interp_method;
             nxr = size(xq,1);
@@ -172,11 +196,14 @@ classdef Sampler< dynamicprops
         
 
         function genScatterData(obj)
-            obj.xsample('xqdat');
-            obj.genDatLdat(obj.xqdat);
-            obj.genDatLres();
-            obj.xsample('xqtest');
-            obj.genDatTest(obj.xqtest);
+            obj.sxdat = obj.xsample('xdatopt');
+            obj.genDatLdat(obj.sxdat);
+            
+            obj.sxr = obj.xsample('xropt');
+            obj.genDatLres(obj.sxr);
+
+            obj.sxtest = obj.xsample('xtestopt');
+            obj.genDatTest(obj.sxtest);
         end
 
 
