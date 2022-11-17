@@ -388,8 +388,9 @@ classdef PostData<dynamicprops
 
         function forward(obj, varargin)
             % forward FDM solve using inferred parameter
-			rD = obj.upred{1}.rD;
-			rRHO = obj.upred{1}.rRHO;
+            k = obj.whichpred('upred_scipylbfgs');
+			rD = obj.upred{k}.rD;
+			rRHO = obj.upred{k}.rRHO;
             
             % get training param
 			[xdim,x0,zslice,dw,rho,tend,L,T,DW,RHO] = obj.trainDataSet.getvar('xdim','x0','zslice','dw','rho','tend','L','T','DW','RHO');
@@ -443,45 +444,35 @@ classdef PostData<dynamicprops
 			obj.savefig('fig_fdm_upred.jpg');
 			
             
-
             figure;
 			err =  abs(obj.fwdmodel.fdmsol.uend - obj.fwdmodele.fdmsol.uend).*obj.fwdmodel.fdmsol.phi;
 			[ax1,ax2] = obj.atlas.imagescfg(err);
 			title(ax1,'\phi |u_{fdm,pred} - u_{end}|');
 			obj.savefig('fig_fdm_err.jpg');
-			
 
         end
 
-        function [ax1, ax2] = contourfdm(obj, level)
-            [ax1, ax2] = obj.atlas.contoursc(obj.upred{1}.xdat, obj.upred{1}.upredxdat, level );
-            
-            ax3 = axes;
-            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend, level, 'y','LineWidth',2);
-            
-            set(ax3,'YDir','reverse')
-            set(ax3,'color','none','visible','on')
-            
-            hLink = linkprop([ax3,ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
-            hLink.Targets(1).DataAspectRatio = [1 1 1];
-        end
-
-
-        function contourfwd(obj, level)
+        function contourfwd(obj, level, t)
+            % look at contour of forward model
+            figure;
             [ax1,h1] = obj.atlas.plotbkgd(obj.atlas.df);
             ax1.Position(3) = ax1.Position(3)-0.1;
             
             ax2 = axes;
-            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodel.uend,level,'b','LineWidth',2);
-
-            ax3 = axes;
-            contour(obj.atlas.gy, obj.atlas.gx, obj.fwdmodele.uend,level,'r','LineWidth',2);
+            fwdut = obj.fwdmodel.interpgrid(t,'linear');
+            contour(ax2, obj.atlas.gy, obj.atlas.gx, fwdut ,level,'b','LineWidth',2);
             
-            set([ax2,ax3],'YDir','reverse')
-            set([ax2,ax3],'color','none','visible','on')
+            hold on
+            fwdeut = obj.fwdmodele.interpgrid(t,'linear');
+            contour(ax2, obj.atlas.gy, obj.atlas.gx, fwdeut, level,'r','LineWidth',2);
             
-            hLink = linkprop([ax3, ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
+            set([ax2],'YDir','reverse')
+            set([ax2],'color','none','visible','on')
+            
+            hLink = linkprop([ax2, ax1],{'XLim','YLim','Position','DataAspectRatio'});
             hLink.Targets(1).DataAspectRatio = [1 1 1];
+
+            obj.savefig(sprintf('fig_fdm_contour_diff_t%d.jpg',t));
         end
         
 
@@ -584,9 +575,30 @@ classdef PostData<dynamicprops
             datpinn = contourdat(level, obj.atlas.gy(1,:), obj.atlas.gx(:,1)', uq);
             
             
-            for j = 1:length(level)
-                hl = plot(axugrid,datpinn.x{j},datpinn.y{j},'DisplayName',sprintf('%g PINN',level(j)));
-                plot(axugrid,dat.x{j},dat.y{j},'Color',hl.Color,'LineStyle',':','DisplayName',sprintf('%g FDM',level(j)));
+            corder = get(gca,'colororder');
+            
+            for j = 1:length(datpinn.zsunique)
+                first = true; % only show legend for the first one
+                for k = find(datpinn.zs==datpinn.zsunique(j))
+                    if first
+                        plot(axugrid,datpinn.x{k},datpinn.y{k},'Color', corder(j,:),'DisplayName',sprintf('%g PINN',datpinn.zs(j)));
+                        first = false;
+                    else
+                        plot(axugrid,datpinn.x{k},datpinn.y{k},'Color', corder(j,:),'HandleVisibility','off');
+                    end
+                end
+            end
+
+            for j = 1:length(dat.zsunique)
+                first = true;
+                for k = find(dat.zs==dat.zsunique(j))
+                    if first
+                        plot(axugrid,dat.x{k},dat.y{k},'Color', corder(j,:),'LineStyle',':','LineWidth',2,'DisplayName',sprintf('%g FDM',dat.zs(j)));
+                        first  = false;
+                    else
+                        plot(axugrid,dat.x{k},dat.y{k},'Color', corder(j,:),'LineStyle',':','LineWidth',2,'HandleVisibility','off');
+                    end
+                end
             end
 
             set(axugrid,'YDir','reverse','color','none','visible','on');
@@ -662,10 +674,13 @@ classdef PostData<dynamicprops
             xr = obj.upred{k}.xr;
             dat = obj.upred{k}.upredts;
             r = x2r(xr(:,2:end));
+            tpinn = obj.upred{k}.ts * obj.trainDataSet.tend;
+            tgrid = obj.fwdmodele.polarsol.tgrid;
             figure
             for i = p.tk
-                t = obj.upred{k}.ts(i) * obj.trainDataSet.tend;   
-                scatter(r, dat(:,i) ,12, t*ones(size(r)),'filled')
+                j = find(abs(tgrid(i)-tpinn)<1e-3);
+                t = obj.upred{k}.ts(j) * obj.trainDataSet.tend;   
+                scatter(r, dat(:,j) ,12, t*ones(size(r)),'filled')
                 hold on
                 plot(obj.fwdmodele.polarsol.xgrid, obj.fwdmodele.polarsol.sol(i,:),'k','LineWidth',2)
             end
@@ -675,6 +690,8 @@ classdef PostData<dynamicprops
             cb.Label.String = 't[days]'
             xlabel('r[mm]')
             ylabel('u')
+
+            obj.savefig('fig_polar');
         end
 
 

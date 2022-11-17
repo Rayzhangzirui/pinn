@@ -36,6 +36,7 @@ classdef GliomaSolver< dynamicprops
         
         % polar solution
         polarsol
+        polargeo
         
         % scaling
         rmax % radius of tumor region
@@ -186,8 +187,6 @@ classdef GliomaSolver< dynamicprops
             polargeo.DxPphi = DxPphi;
             polargeo.phi = phifcn;
 
-
-            addprop(obj,'polargeo');
             obj.polargeo = polargeo;
 
             % sharp transition
@@ -260,10 +259,12 @@ classdef GliomaSolver< dynamicprops
             end
         end
 
-        function [fig, ax1, ax2] = plotuend(obj,varargin)
+        function [ax1, ax2] = plotuend(obj,varargin)
             figure;
             uend = slice2d(obj.fdmsol.uend,varargin{:});
             [ax1, ax2]  = obj.atlas.imagescfg(uend, varargin{:});
+            hold(ax2,'on');
+            scatter(ax2, obj.x0(2),obj.x0(1),'xr');
         end
 
         function [fig, ax1, ax2] = plotphiuend(obj,varargin)
@@ -326,7 +327,7 @@ classdef GliomaSolver< dynamicprops
         end
 
         function uq = interpgrid(obj, tq, method)
-            % interpolate u(x,t)
+            % interpolate u(x,t) at grid 
 
             f = @(x) reshape(x,[],1);
             extrap = 'none';

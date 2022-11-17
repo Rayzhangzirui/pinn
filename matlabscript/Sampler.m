@@ -24,7 +24,7 @@ classdef Sampler< dynamicprops
             obj.setting.seed = 1;
             obj.setting.tag = 'sample';
             obj.setting.datdir = './';
-            obj.setting.radius = model.rmax;
+            obj.setting.radius = model.rmax+1;
             obj.setting.usepolar = false;
             obj.setting.urange = [-inf inf];
             obj.setting.uth = [];

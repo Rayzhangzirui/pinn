@@ -3,7 +3,7 @@ set(0,'DefaultLineLineWidth', 1)
 
 set(0,'defaultAxesFontName', 'times')
 set(0,'defaultTextFontName', 'times')
-set(0,'defaultAxesFontSize', 16)
+set(0,'defaultAxesFontSize', 12)
 
 
 

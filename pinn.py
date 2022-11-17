@@ -518,7 +518,7 @@ class PINNSolver():
         np.savetxt(fpath, hist, fmt, header = self.header, comments = '')
         print(f'save training hist to {fpath}')
 
-    def predtx(self, suffix, tend = 1.0, n = 11):
+    def predtx(self, suffix, tend = 1.0, n = 21):
         # evalute at residual points. not data points. 
         # need Pwm, Pgm , phi etc
         if tend is None:

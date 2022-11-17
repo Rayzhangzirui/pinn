@@ -85,13 +85,15 @@ classdef Atlas<DataSet
             if ischar(dat)
                 dat = obj.(dat);
             end
-                ax1 = axes;
+            ax1 = axes;
             h1 = imagesc(obj.gx(1,1),obj.gy(1,1),dat);
+
 %             maxcdata = max(h1.CData(:));
 %             mincdata = min(h1.CData(:));
 %             clim(ax1,[mincdata,maxcdata]);
             cmap = colormap(ax1,gray(20));
             cb1 = colorbar(ax1,'Location','westoutside');
+            ax1.Position(3) = ax1.Position(3)-0.1;
         end
         
         function [ax1, ax2] = imagescfg(obj, fgdat, varargin)
@@ -103,7 +105,6 @@ classdef Atlas<DataSet
             fgdat = slice2d(fgdat, varargin{:});
             
             [ax1,h1] = plotbkgd(obj, bgdat);
-            ax1.Position(3) = ax1.Position(3)-0.1;
             
             ax2 = axes;
             h2 = imagesc(obj.gx(1),obj.gy(1),fgdat);
@@ -124,7 +125,6 @@ classdef Atlas<DataSet
             fgdat = slice2d(fgdat, varargin{:});
             
             [ax1,h1] = plotbkgd(obj, bgdat);
-            ax1.Position(3) = ax1.Position(3)-0.1;
             
             ax2 = axes;
             [~,c] = contour(obj.gy, obj.gx, fgdat, level,'b','LineWidth',2);
@@ -163,7 +163,7 @@ classdef Atlas<DataSet
             figure;
             bgdat = slice2d(obj.(bgname));
             [ax1,~] = plotbkgd(obj, bgdat);
-            ax1.Position(3) = ax1.Position(3)-0.1;
+            
             ax2 = axes;
             scatter(ax2,X(:,end),X(:,end-1),varargin{:});
             set(ax2,'YDir','reverse')
