@@ -169,6 +169,7 @@ classdef PostData<dynamicprops
 			title(ts);
 			xlabel('steps');
 			ylabel('rel err');
+            ylim([-1,1]);
 			legend('Location','best');
 			
 			fpath = fullfile(obj.modeldir,'fig_relerr.jpg');
@@ -667,8 +668,7 @@ classdef PostData<dynamicprops
 
         function plotPolarSol(obj,fpattern,varargin)
             % plot prediction 
-            p.tk = 1:2:11;
-            p = parseargs(p,varargin{:});
+            
 
             k = obj.whichpred(fpattern)
             xr = obj.upred{k}.xr;
@@ -676,9 +676,17 @@ classdef PostData<dynamicprops
             r = x2r(xr(:,2:end));
             tpinn = obj.upred{k}.ts * obj.trainDataSet.tend;
             tgrid = obj.fwdmodele.polarsol.tgrid;
+
+
+            p.tk = 1:2:length(tgrid); %time index in fdm
+            p = parseargs(p,varargin{:});
+
             figure
             for i = p.tk
-                j = find(abs(tgrid(i)-tpinn)<1e-3);
+                j = find(abs(tgrid(i)-tpinn)<1e-3); % match time in pinn
+                if isempty(j)
+                    continue
+                end
                 t = obj.upred{k}.ts(j) * obj.trainDataSet.tend;   
                 scatter(r, dat(:,j) ,12, t*ones(size(r)),'filled')
                 hold on

@@ -38,6 +38,7 @@ classdef GliomaSolver< dynamicprops
         polarsol
         polargeo
         
+        
         % scaling
         rmax % radius of tumor region
         dwc
@@ -48,6 +49,9 @@ classdef GliomaSolver< dynamicprops
         RHO
         rDe
         rRHOe
+
+        % density to image
+        img
         
         end
     
@@ -159,7 +163,7 @@ classdef GliomaSolver< dynamicprops
             p.Rgm = p.bd*2;
             icfun = @(r) 0.1*exp(-0.1*r.^2);
             p.dx = 0.1;
-            p.dt = obj.tend/fac;
+            p.dt = obj.tend/20;
             
             p = parseargs(p, varargin{:});
             disp(p);
@@ -794,6 +798,22 @@ classdef GliomaSolver< dynamicprops
             upredall = double(s.upred);
             i = find(ts==obj.tend);
             upred = upredall(:,i);
+        end
+
+
+        function u2pet()
+            u2pet = @(u) 4*u.*(1-u)
+            u2seg = @(u, th1, th2, th3) 2*(double(u>th1)+double(u>th2)+double(u>th3))
+            
+            pet = u2pet(g.fdmsol.uend);
+            seg = u2seg(g.fdmsol.uend, 0.0001, 0.3, 0.7);
+            
+            upet = zeros(size(pet));
+            tumor = seg>3;
+            edema = seg==2;
+            upet(tumor) = (1 + sqrt(1-pet(tumor)))/2;
+            upet(edema) = (1 - sqrt(1-pet(edema)))/2;
+            upet = imgaussfilt3(upet,2,'FilterDomain','spatial');
         end
 
         function plotline(obj, dat,name)

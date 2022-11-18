@@ -1,4 +1,4 @@
-classdef MriDataSet<handle
+classdef MriDataSet<DataSet
     properties
         modeldir
         mods
@@ -37,8 +37,9 @@ classdef MriDataSet<handle
             
             j = 1;
             for i = 1:length(fs)
-                parts = split(fs(i).name,{'.'});
-                whichmod = parts{1};
+                fname = split(fs(i).name,{'.'});
+                parts = split(fname{1},{'_'});
+                whichmod = parts{end};
 
                 % if isempty, read all, 
                 if ~isempty(readmods) && ~contains(whichmod,readmods)
@@ -146,7 +147,41 @@ classdef MriDataSet<handle
             obj.append('uadc',u,'u lin quad adc');
             
         end
+        
+        function stat = getBkgdStat(obj,mod,f)
+            seg = obj.get('seg');
+            dat = obj.get(mod);
 
+            idx = dat>1e-6 & seg<1;
+            med = median(dat(idx));
+        end
+
+
+        function getupetpatient(obj)
+            seg = obj.get('seg');
+            pet = obj.get('pet');
+            
+            bgidx = pet>1e-6 & seg<1;
+            med = median(pet(bgidx));
+
+            pet = pet - med;
+            pet(pet<0) = 0;
+            
+            msk = seg>1;
+
+            pet(msk) = rescale(pet(msk));
+            obj.append('petpscale',pet,'pet re scaled');
+
+            tumor = seg>3;
+            edema = seg==2;
+            u = zeros(size(pet));
+            u(tumor) = (1 + sqrt(1-pet(tumor)))/2;
+            u(edema) = (1 - sqrt(1-pet(edema)))/2;
+            u = imgaussfilt3(u,2,'FilterDomain','spatial');
+            u(seg<1) = nan;
+            obj.append('upetp',u,'u quad pet 2');
+
+        end
 
         function getupet(obj, lb, ub)
             seg = obj.get('seg');
@@ -163,13 +198,15 @@ classdef MriDataSet<handle
 
             tumor = seg>3;
             edema = seg==2;
-            u(tumor) = (1 + sqrt(1-pet(tumor)/4))/2;
-            u(edema) = (1 - sqrt(1-pet(edema)/4))/2;
+            u(tumor) = (1 + sqrt(1-pet(tumor)))/2;
+            u(edema) = (1 - sqrt(1-pet(edema)))/2;
             u = imgaussfilt3(u,2,'FilterDomain','spatial');
             u(seg<1) = nan;
             obj.append('upet',u,'u quad pet');
         end
 
+
+        
         function getBox(obj,segname)
             if nargin<2
                 segname = 'seg';
@@ -211,13 +248,12 @@ classdef MriDataSet<handle
             end
             axes(hax);
             
-            p = inputParser;
-            addOptional(p,'mod','t2',@(x) ischar(x));
-            addOptional(p,'slice',100,@(x) isscalar(x));
-            parse(p,args{:});
+            p.mod = 't2';
+            p.slice = ceil(mean(obj.box(3,:)));
+            p = parseargs(p,args{:});
             
-            mod = p.Results.mod;
-            slice = p.Results.slice;
+            mod = p.mod;
+            slice = p.slice;
 
             [dat,i] = obj.get(mod);
             
@@ -275,10 +311,10 @@ classdef MriDataSet<handle
                     fprintf('%s not exist, skip\n',mods{i});
                     continue
                 end
-                obj.visual(ha(i),obj.mods{j},slice);
+                obj.visual(ha(i),'mod',obj.mods{j},'slice',slice);
             end
             fname = sprintf('%s_slice%d',prefix,slice);
-            obj.saveplot(fname);
+            obj.saveplot(fname,'-jpg','-m3');
         end
              
         function saveplot(obj,fname,varargin)
@@ -300,7 +336,7 @@ classdef MriDataSet<handle
 
         
         
-        function histo(obj,mod)
+        function histo(obj,mod,varargin)
             % histogram of adc
             dat = obj.get(mod);
             if isempty(dat)
@@ -308,15 +344,17 @@ classdef MriDataSet<handle
                 return;
             end
             seg = obj.get('seg');
-            figure;
+            
+            histogram(dat(dat>1e-6 & seg<1),'DisplayName','background',varargin{:});
             hold on;
-            histogram(dat(seg==2),'DisplayName','edema');
-            histogram(dat(seg==4),'DisplayName','tumor');
-            histogram(dat(seg==6),'DisplayName','necrosis');
+            histogram(dat(seg==2),'DisplayName','edema',varargin{:});
+            histogram(dat(seg==4),'DisplayName','tumor',varargin{:});
+            histogram(dat(seg==6),'DisplayName','necrosis',varargin{:});
+            hold off;
             legend('Location','best');
             
-            fname = 'adc_hist_seg';
-            obj.saveplot(fname);
+            fname = sprintf('fig_%s_hist_seg',mod);
+            obj.saveplot(fname,'-jpg','-m3');
         end
 
 
@@ -335,7 +373,7 @@ classdef MriDataSet<handle
             corrplot(t);
             
             fname = 'corrplot';
-            obj.saveplot(fname);
+            obj.saveplot(fname,'-jpg');
         end
         
         function corrplot2(obj,smod,tmods)

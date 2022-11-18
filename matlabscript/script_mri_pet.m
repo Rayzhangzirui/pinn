@@ -29,7 +29,7 @@ end
 
 %%
 
-alldat = threshold(alladc,0,0.003);
+alldat = threshold(allpet,0,1e4);
 close all
 figure;
 hold on;
