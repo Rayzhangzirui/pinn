@@ -7,9 +7,11 @@ classdef Sampler< dynamicprops
         sxr
         sxtest
         sxdat
+        sxbc
 
         datlres % data for residual loss, P, phi, DxyzPphi
         datldat % data for data loss
+        datlbc % data for soft bc loss
         datltest % data for testing loss
         dateval % data for evaluating
     end
@@ -48,8 +50,10 @@ classdef Sampler< dynamicprops
 
         function setxsample(obj,datname,varargin)
             p.n = 20000;
-            p.uniformx = false; % uniform distribution or not
+            p.isuniformx = false; % uniform distribution or not
+            p.issphere = false; 
             p.radius = obj.setting.radius;
+            p.x0 = obj.model.x0;
             p.nwratio = 0.0; % ratio of data that are weighted
             p.wdata = [];  % weighted by some data
             p.sameas = '';
@@ -71,8 +75,8 @@ classdef Sampler< dynamicprops
             n_basic = p.n * (1-p.nwratio);
             n_enhance = p.n * (p.nwratio);
 
-            xq = sampleDenseBall(n_basic, obj.model.xdim, p.radius, obj.model.x0, p.uniformx); 
-            fprintf('sample %g, radius %g, uniformx = %g\n', n_basic, p.radius, p.uniformx);
+            xq = sampleDenseBall(n_basic, obj.model.xdim, p); 
+            fprintf('%s: sample %g, radius %g, uniformx = %g\n', datname, n_basic, p.radius, p.isuniformx);
 
             if ~isempty(p.wdata)
                 ntmp = n_enhance*10;
@@ -93,7 +97,6 @@ classdef Sampler< dynamicprops
             end 
 
         end
-
 
 
 
@@ -195,6 +198,19 @@ classdef Sampler< dynamicprops
             obj.datltest= dat;
         end
 
+        function dat = genDatBc(obj,xq)
+            % data for testing
+
+            method = obj.setting.interp_method;
+            n = size(xq,1);
+
+            tq = rand(n,1)*obj.model.tend; % sample t, unit
+            dat.ubc = obj.model.interpu(tq, xq, method); % u(tq, xq), mainly for testing
+            dat.phibc = obj.model.interpf(obj.model.atlas.phi, xq, method);
+            dat.xbc = obj.model.transformDat(xq, tq);
+            obj.datlbc= dat;
+        end
+
         
 
         function genScatterData(obj)
@@ -206,6 +222,9 @@ classdef Sampler< dynamicprops
 
             obj.sxtest = obj.xsample('xtestopt');
             obj.genDatTest(obj.sxtest);
+
+            obj.sxbc = obj.xsample('xbcopt');
+            obj.genDatBc(obj.sxbc);
         end
 
 
@@ -221,7 +240,7 @@ classdef Sampler< dynamicprops
             dataset.copyprop(obj.datlres);
             dataset.copyprop(obj.datltest);
             dataset.copyprop(obj.setting);
-            dataset.copyprop(obj.dateval);
+            dataset.copyprop(obj.datlbc);
 
             fp = sprintf('dat_%s_%s.mat',obj.model.name,obj.setting.tag);
             fp = fullfile(obj.setting.datdir, fp);

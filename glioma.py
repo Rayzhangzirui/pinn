@@ -43,6 +43,11 @@ class DataSet:
         self.utest = matdat.get('utest')[0:ntest,:] 
         self.phitest = matdat.get('phitest')[0:ntest,:]
 
+
+        self.xbc = matdat.get('xbc')
+        self.ubc = matdat.get('ubc') 
+        self.phibc = matdat.get('phibc')
+
         # data loss
     
         if opts.get('testasdat') == True:
@@ -216,16 +221,22 @@ class Gmodel:
         #     upred = nn(xdat)
         #     loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
         #     return loss
+        def bcloss(nn):
+            upredbc = nn(self.dataset.xbc)
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.ubc - upredbc)*self.dataset.phibc))
+            return loss
 
         def fdatloss(nn, xdat):
-            upred = nn(xdat)
 
-            neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
+            bc_loss = bcloss(nn)
+            
+            upred = nn(xdat)
+            # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
             prolif = 4 * upred * (1-upred)
             cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
             
-            loss =  neg_loss + cor_loss
-
+            loss =  cor_loss + bc_loss
+            
             return tf.squeeze(loss)
         
         
