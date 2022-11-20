@@ -669,7 +669,6 @@ classdef PostData<dynamicprops
         function plotPolarSol(obj,fpattern,varargin)
             % plot prediction 
             
-
             k = obj.whichpred(fpattern)
             xr = obj.upred{k}.xr;
             dat = obj.upred{k}.upredts;

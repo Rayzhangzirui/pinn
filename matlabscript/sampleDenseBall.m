@@ -1,4 +1,4 @@
-function [x] = sampleDenseBall(N,dim,R,x0,isuniform)
+function [x] = sampleDenseBall(N,dim,R,x0,isuniform,issurface)
 % 
 
 if nargin < 5 

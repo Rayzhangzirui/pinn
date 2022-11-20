@@ -10,6 +10,9 @@ import json
 from config import *
 from pinn import *
 
+import tensorflow_probability as tfp
+
+
 class DataSet:
     def __init__(self, opts) -> None:
         self.opts = opts
@@ -23,9 +26,14 @@ class DataSet:
         
         assert ext == '.mat', 'not reading mat file'
         
+
         matdat = loadmat(inv_dat_file)
-        
-        
+
+        for key, value in matdat.items():
+            if isinstance(value,np.ndarray) and value.dtype.kind == 'f':
+                matdat[key] = value.astype(DTYPE)
+
+                
         ntest = opts.get("n_test_pts", matdat.get('xtest').shape[0])  
         ndat =  opts.get("n_dat_pts",  matdat.get('xdat').shape[0]) 
         nres =  opts.get("n_res_pts",  matdat.get('xr').shape[0])
@@ -48,6 +56,7 @@ class DataSet:
             self.xdat = matdat.get('xdat')[0:ndat,:]
             self.udat = matdat.get('udat')[0:ndat,:] 
             self.phidat = matdat.get('phidat')[0:ndat,:]
+            self.plfdat = matdat.get('plfdat')[0:ndat,:] 
         
         if opts.get('addnoise') is not None:
             print('add noise to udat')
@@ -203,15 +212,28 @@ class Gmodel:
                 return res
 
         # loss function of data, difference of phi * u
+        # def fdatloss(nn, xdat):
+        #     upred = nn(xdat)
+        #     loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
+        #     return loss
+
         def fdatloss(nn, xdat):
             upred = nn(xdat)
-            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
-            return loss
+            prolif = 4 * upred * (1-upred)
+            # loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+
+            # loss = -tf.math.reduce_mean(prolif*self.dataset.phidat * self.dataset.plfdat*self.dataset.phidat)
+
+            loss =  - tfp.stats.covariance(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            return tf.squeeze(loss)
+        
+        
+
         
         def ftestloss(nn, xtest):
             upred = nn(xtest)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
-            return loss
+            return tf.squeeze(loss)
         
 
         self.model = PINN(param=param,

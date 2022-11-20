@@ -24,7 +24,7 @@ classdef Sampler< dynamicprops
             obj.setting.seed = 1;
             obj.setting.tag = 'sample';
             obj.setting.datdir = './';
-            obj.setting.radius = model.rmax+1;
+            obj.setting.radius = model.rmax+2;
             obj.setting.usepolar = false;
             obj.setting.urange = [-inf inf];
             obj.setting.uth = [];
@@ -96,6 +96,7 @@ classdef Sampler< dynamicprops
 
 
 
+
         function dat = genDatLdat(obj,xq)
             % interpolate fdm solution
             method = obj.setting.interp_method;
@@ -127,7 +128,6 @@ classdef Sampler< dynamicprops
 
 
             % down sample every
-            
             if isempty(obj.setting.uth)
                 idx = dat.udat>obj.setting.urange(1) & dat.udat<obj.setting.urange(2);
                 dat = structfun(@(x) x(idx,:), dat, 'UniformOutput', false);
@@ -141,6 +141,8 @@ classdef Sampler< dynamicprops
                 dat.udat(~top2) = 0.0;
                 fprintf('threshold to [0, %g, %g ]\n', obj.setting.uth);
             end
+
+            dat.plfdat = 4*dat.udat.*(1 - dat.udat); % proliferation, scaled to [0,1]
             
             
             
@@ -218,7 +220,7 @@ classdef Sampler< dynamicprops
             dataset.copyprop(obj.datldat);
             dataset.copyprop(obj.datlres);
             dataset.copyprop(obj.datltest);
-            dataset.copyprop(obj.setting.noise);
+            dataset.copyprop(obj.setting);
             dataset.copyprop(obj.dateval);
 
             fp = sprintf('dat_%s_%s.mat',obj.model.name,obj.setting.tag);
