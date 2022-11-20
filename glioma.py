@@ -219,12 +219,13 @@ class Gmodel:
 
         def fdatloss(nn, xdat):
             upred = nn(xdat)
+
+            neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
             prolif = 4 * upred * (1-upred)
-            # loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            
+            loss =  neg_loss + cor_loss
 
-            # loss = -tf.math.reduce_mean(prolif*self.dataset.phidat * self.dataset.plfdat*self.dataset.phidat)
-
-            loss =  - tfp.stats.covariance(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
             return tf.squeeze(loss)
         
         
