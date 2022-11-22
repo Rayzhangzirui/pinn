@@ -155,8 +155,8 @@ class LossAndFlatGradient(object):
 
 class PINNSolver():
     def __init__(self, model, pde, 
-                fdatloss,
-                ftestloss,
+                flosses,
+                ftests,
                 wr = None,
                 xr = None, 
                 xdat = None, udat = None,
@@ -165,8 +165,9 @@ class PINNSolver():
         self.model = model
         
         self.pde = pde
-        self.fdatloss = fdatloss
-        self.ftestloss = ftestloss
+        
+        self.flosses = flosses
+        self.ftests = ftests
 
         self.options = options
         
@@ -232,22 +233,16 @@ class PINNSolver():
         # Compute phi_r
         r = self.pde(self.xr, self.model)
         r2 = tf.math.square(r) * self.wr
-            
-        loss_res = tf.reduce_mean(r2)
-        
-        # Initialize loss
-        loss_dat = 0.0
-        w_dat = self.options.get('w_dat')
-        if w_dat > 1e-6:
-            # Add phi_0 and phi_b to the loss
-            # upred = self.model(self.xdat)
-            # loss_dat = tf.math.educe_mean(tf.math.square(self.udat - upred))
-            loss_dat = self.fdatloss(self.model, self.xdat)
 
-        loss_tot = loss_res + loss_dat * w_dat
+        losses = {}
 
-        loss = {'res':loss_res, 'data':loss_dat, 'total':loss_tot}
-        return loss
+        losses['res'] = tf.reduce_mean(r2)
+        total = losses['res']
+        for key in self.flosses:
+            losses[key] = self.flosses[key](self.model)
+            total +=losses[key]
+        losses['total'] = total
+        return losses
     
     @tf.function
     def get_grad(self):
@@ -270,7 +265,12 @@ class PINNSolver():
     def check_exact(self):
         """ check with exact solution if provided
         """
-        return self.ftestloss(self.model, self.xtest)
+
+        testlosses = {}
+        for key in self.ftests:
+            testlosses[key] = self.ftests[key](self.model)
+
+        return testlosses
     
     
     def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):
@@ -458,8 +458,8 @@ class PINNSolver():
                 # if not none, add to header
                 for pname,ptensor in self.model.param.items():
                     header+= ", {:<10}".format(f'{pname}')
-            if self.utest is not None:
-                header+= ", {:<10}".format('tmse')
+            for key in self.ftests:
+                header+= ", {:<10}".format(key)
             self.header = header
             print(header)
         
@@ -477,9 +477,10 @@ class PINNSolver():
                 info.extend( np.array(list(self.model.param.values())))
             
             # if provide test data, output test mse
-            if self.utest is not None:
-                tmse = self.check_exact()
-                info.append(tmse.numpy())    
+            
+            test_losses = self.check_exact()
+            info +=  [v.numpy() for _,v in test_losses.items()]
+
             info_str = ', '.join('{:10.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
             self.hist.append(info)

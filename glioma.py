@@ -217,33 +217,30 @@ class Gmodel:
                 return res
 
         # loss function of data, difference of phi * u
-        # def fdatloss(nn, xdat):
-        #     upred = nn(xdat)
-        #     loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
-        #     return loss
+        def fdatloss(nn):
+            upred = nn(self.dataset.xdat)
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
+            loss = loss * self.opts['w_dat']
+            return loss
+
         def bcloss(nn):
             upredbc = nn(self.dataset.xbc)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.ubc - upredbc)*self.dataset.phibc))
             return loss
 
-        def fdatloss(nn, xdat):
+        # def fdatloss(nn):
+            
+        #     upred = nn(self.dataset.xdat)
+        #     # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
+        #     prolif = 4 * upred * (1-upred)
+        #     cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            
+        #     loss =  cor_loss
 
-            bc_loss = bcloss(nn)
-            
-            upred = nn(xdat)
-            # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
-            prolif = 4 * upred * (1-upred)
-            cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
-            
-            loss =  cor_loss + bc_loss
-            
-            return tf.squeeze(loss)
+        #     return tf.squeeze(loss)
         
-        
-
-        
-        def ftestloss(nn, xtest):
-            upred = nn(xtest)
+        def ftestloss(nn):
+            upred = nn(self.dataset.xtest)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
             return tf.squeeze(loss)
         
@@ -255,11 +252,15 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
+        flosses = {'data':fdatloss,'bc':bcloss}
+
+        ftest = {'test':ftestloss} 
         
+
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
-                                fdatloss,
-                                ftestloss,
+                                flosses,
+                                ftest,
                                 xr = self.dataset.xr,
                                 xdat = self.dataset.xdat,
                                 udat = self.dataset.udat,
