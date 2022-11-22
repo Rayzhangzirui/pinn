@@ -55,6 +55,14 @@ classdef DataSet < dynamicprops
 
         function copyprop(obj, a, varargin)
             % copy property from other object/struct a
+            % obj.copyprop( struct_a, 'prop1', 'prop2')
+            % if prop name not provided, copy all
+            
+            if isempty(a)
+                warning('copyprop empty prop');
+                return;
+            end
+
             if isempty(varargin)
                 fnames = fieldnames(a);
             else

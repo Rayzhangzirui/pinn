@@ -30,7 +30,7 @@ classdef PostData<dynamicprops
 		  obj.yessave = p.Results.yessave;
 		  obj.modeldir = p.Results.modeldir;
 		  
-          obj.setting.argfig = {'-m3'}
+          obj.setting.argfig = {"Resolution",300}
 
 		  assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
 		  obj.tag = replace(p.Results.tag,"_","-");
@@ -218,7 +218,8 @@ classdef PostData<dynamicprops
             
             if obj.yessave
 				fprintf('save %s\n',fp);
-				export_fig(fp,obj.setting.argfig{:});
+				% export_fig(fp, obj.setting.argfig{:});
+                exportgraphics(gcf,fp, obj.setting.argfig{:});
             else
                 fprintf('not saved %s\n',fp);
             end
@@ -669,36 +670,41 @@ classdef PostData<dynamicprops
         function plotPolarSol(obj,fpattern,varargin)
             % plot prediction 
             
-            k = obj.whichpred(fpattern)
+            k = obj.whichpred(fpattern);
             xr = obj.upred{k}.xr;
             dat = obj.upred{k}.upredts;
             r = x2r(xr(:,2:end));
             tpinn = obj.upred{k}.ts * obj.trainDataSet.tend;
             tgrid = obj.fwdmodele.polarsol.tgrid;
 
-
-            p.tk = 1:2:length(tgrid); %time index in fdm
+            p.tk = tgrid(1:2:end); %time index in fdm
             p = parseargs(p,varargin{:});
+            method = 'spline';
+
 
             figure
-            for i = p.tk
-                j = find(abs(tgrid(i)-tpinn)<1e-3); % match time in pinn
-                if isempty(j)
-                    continue
-                end
-                t = obj.upred{k}.ts(j) * obj.trainDataSet.tend;   
-                scatter(r, dat(:,j) ,12, t*ones(size(r)),'filled')
-                hold on
-                plot(obj.fwdmodele.polarsol.xgrid, obj.fwdmodele.polarsol.sol(i,:),'k','LineWidth',2)
-            end
-            xlim([0,50])
-            ylim([0,1])
-            cb = colorbar();
-            cb.Label.String = 't[days]'
-            xlabel('r[mm]')
-            ylabel('u')
+            ax = axes;
+            hold(ax,'on');
+            for t = p.tk
+                
+                upinn_interpt = interp1(tpinn', dat', t ,method); % interpolated u;
+                ufdm_interpt = interp1(obj.fwdmodele.polarsol.tgrid', obj.fwdmodele.polarsol.sol, t ,method);
 
-            obj.savefig('fig_polar');
+                scatter(ax, r(1:10:end), upinn_interpt(1:10:end) ,12, t*ones(size(r(1:10:end))),'filled','DisplayName',sprintf('t=%g',t));
+                plot(ax,obj.fwdmodele.polarsol.xgrid, ufdm_interpt,'k','LineWidth',2);
+                
+            end
+
+            set(gca, 'XAxisLocation', 'origin', 'YAxisLocation', 'origin')
+            xlim([0,50])
+            
+            cb = colorbar();
+            cb.Label.String = 't[days]';
+            xlabel('r[mm]');
+            ylabel('u');
+            
+
+            obj.savefig('fig_polar.jpg');
         end
 
 
