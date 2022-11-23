@@ -220,7 +220,7 @@ class Gmodel:
         def fdatloss(nn):
             upred = nn(self.dataset.xdat)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
-            loss = loss * self.opts['w_dat']
+            loss = loss
             return loss
 
         def bcloss(nn):
@@ -228,16 +228,17 @@ class Gmodel:
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.ubc - upredbc)*self.dataset.phibc))
             return loss
 
-        # def fdatloss(nn):
-            
-        #     upred = nn(self.dataset.xdat)
-        #     # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
-        #     prolif = 4 * upred * (1-upred)
-        #     cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
-            
-        #     loss =  cor_loss
 
-        #     return tf.squeeze(loss)
+        def fcorloss(nn):
+            
+            upred = nn(self.dataset.xdat)
+            # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
+            prolif = 4 * upred * (1-upred)
+            cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            
+            loss =  cor_loss
+
+            return tf.squeeze(loss)
         
         def ftestloss(nn):
             upred = nn(self.dataset.xtest)
@@ -254,8 +255,9 @@ class Gmodel:
 
         flosses = {'data':fdatloss,'bc':bcloss}
 
-        ftest = {'test':ftestloss} 
+        ftest = {'test':ftestloss,'cor':fcorloss} 
         
+        self.opts['weights'] = {'data':1.0, 'bc':1.0}
 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
