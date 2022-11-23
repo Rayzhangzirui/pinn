@@ -223,7 +223,7 @@ classdef Sampler< dynamicprops
             obj.sxtest = obj.xsample('xtestopt');
             obj.genDatTest(obj.sxtest);
             
-            if isprop(obj.setting,'xbcopt')
+            if isfield(obj.setting,'xbcopt')
                 obj.sxbc = obj.xsample('xbcopt');
                 obj.genDatBc(obj.sxbc);
             end

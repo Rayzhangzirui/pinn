@@ -30,7 +30,7 @@ classdef PostData<dynamicprops
 		  obj.yessave = p.Results.yessave;
 		  obj.modeldir = p.Results.modeldir;
 		  
-          obj.setting.argfig = {"Resolution",300}
+          obj.setting.argfig = {"Resolution",200};
 
 		  assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
 		  obj.tag = replace(p.Results.tag,"_","-");
@@ -103,23 +103,30 @@ classdef PostData<dynamicprops
             end
         end 
 
-	   function [fig,sc] = PlotLoss(obj,varargin)
+	   function [fig,sc] = PlotLoss(obj, lossnames, varargin)
 			fig = figure;
-			sc(1) = plot(obj.log.it, log10(obj.log.total),'DisplayName', 'total',varargin{:});
-			hold on;
-			
-            w_dat = obj.info.w_dat;
-            datlos  = obj.log.data * w_dat;
-
-			sc(2) = plot(obj.log.it, log10(obj.log.res),'DisplayName',   'res',varargin{:});
-			sc(3) = plot(obj.log.it, log10(datlos),'DisplayName', [num2str(w_dat) 'data'],varargin{:} );
-% 			sc(3) = plot(obj.log.it, log10(obj.log.tmse),'DisplayName', 'test',varargin{:} );
+            
+            hold on;
+            for i = 1:length(lossnames)
+                lname = lossnames{i};
+                dispname = lname;
+                data = log10(obj.log.(lname))
+                
+                if startsWith(lname,'dat')
+                    w_dat = obj.info.w_dat;
+                    data  = data * w_dat;
+                    dispname = [num2str(w_dat) 'data'];
+                end
+                sc(i) = plot(obj.log.it, data ,'DisplayName', dispname);
+                
+            end
+% 			sc(3) = plot(obj.log.it, log10(obj.log.tmse),'DisplayName', 'test' );
 			grid on;
 			xlabel('steps');
 			ylabel('log10(loss)');
 			legend('Location','best');
 			title(obj.tag);
-			export_fig(fullfile(obj.modeldir,'fig_loss.jpg'),'-m3');
+			obj.savefig('fig_loss.jpg');
        end
 
        function [fig,sc] = PlotLossFig(obj, varargin)
@@ -172,9 +179,7 @@ classdef PostData<dynamicprops
             ylim([-1,1]);
 			legend('Location','best');
 			
-			fpath = fullfile(obj.modeldir,'fig_relerr.jpg');
-			fprintf('rel err param saved to %s\n',fpath);
-			export_fig(fpath,'-m3');
+			obj.savefig('fig_relerr.jpg');
        end
 
 
@@ -214,12 +219,12 @@ classdef PostData<dynamicprops
         function savefig(obj,fname)
             
             fp = fullfile(obj.modeldir,fname);
-            
-            
+
             if obj.yessave
 				fprintf('save %s\n',fp);
-				% export_fig(fp, obj.setting.argfig{:});
                 exportgraphics(gcf,fp, obj.setting.argfig{:});
+%                 export_fig(fp,'-m3');
+                pause(1);
             else
                 fprintf('not saved %s\n',fp);
             end
