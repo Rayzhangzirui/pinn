@@ -15,9 +15,10 @@ import sys
 # make prediction and save
 from scipy.io import savemat
 
-
 from config import *
 from util import *
+
+tf.keras.backend.set_floatx(DTYPE)
 
 # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
 class Logger(object):
@@ -239,8 +240,9 @@ class PINNSolver():
         losses['res'] = tf.reduce_mean(r2)
         total = losses['res']
         for key in self.flosses:
-            losses[key] = self.flosses[key](self.model)
-            total += losses[key] * self.options['weights'][key]
+            if self.options['weights'].get(key) is not None:
+                losses[key] = self.flosses[key](self.model)
+                total += losses[key] * self.options['weights'][key]
             
         losses['total'] = total
         return losses

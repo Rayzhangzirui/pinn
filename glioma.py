@@ -9,85 +9,10 @@ import json
 
 from config import *
 from pinn import *
+from DataSet import DataSet
 
 import tensorflow_probability as tfp
 
-
-class DataSet:
-    def __init__(self, opts) -> None:
-        self.opts = opts
-        
-        
-        inv_dat_file = opts['inv_dat_file']
-
-        assert os.path.exists(inv_dat_file), f'{inv_dat_file} not exist'
-        
-        _ , ext = os.path.splitext(inv_dat_file)
-        
-        assert ext == '.mat', 'not reading mat file'
-        
-
-        matdat = loadmat(inv_dat_file)
-
-        for key, value in matdat.items():
-            if isinstance(value,np.ndarray) and value.dtype.kind == 'f':
-                matdat[key] = value.astype(DTYPE)
-
-                
-        ntest = opts.get("n_test_pts", matdat.get('xtest').shape[0])  
-        ndat =  opts.get("n_dat_pts",  matdat.get('xdat').shape[0]) 
-        nres =  opts.get("n_res_pts",  matdat.get('xr').shape[0])
-        
-        # testing data
-        self.xtest = matdat.get('xtest')[0:ntest,:]
-        self.utest = matdat.get('utest')[0:ntest,:] 
-        self.phitest = matdat.get('phitest')[0:ntest,:]
-
-
-        self.xbc = matdat.get('xbc')
-        self.ubc = matdat.get('ubc') 
-        self.phibc = matdat.get('phibc')
-
-        # data loss
-    
-        if opts.get('testasdat') == True:
-            print('use test data for data loss')
-            # use test data as data loss, full time
-            self.xdat = self.xtest
-            self.udat = self.utest
-            self.phidat = self.phitest
-        else:
-            # single time inference
-            self.xdat = matdat.get('xdat')[0:ndat,:]
-            self.udat = matdat.get('udat')[0:ndat,:] 
-            self.phidat = matdat.get('phidat')[0:ndat,:]
-            self.plfdat = matdat.get('plfdat')[0:ndat,:] 
-        
-        if opts.get('addnoise') is not None:
-            print('add noise to udat')
-            self.udat = self.udat + np.random.normal(scale = opts.get('addnoise'), size = self.udat.shape)
-
-        
-        # non dimensional parameters
-        self.T = matdat['T'].item()
-        self.L = matdat['L'].item()
-        self.DW = matdat['DW'].item() #characteristic DW
-        self.RHO = matdat['RHO'].item() #characteristic RHO
-        self.rDe = matdat['rDe'].item() # exact ratio
-        self.rRHOe = matdat['rRHOe'].item()
-        self.opts['scale'] = {'T':self.T, 'L':self.L, 'DW':self.DW, 'RHO':self.RHO}
-
-        # residual pts
-        self.xr =  matdat.get('xr')[0:nres,:]
-        self.P =  matdat.get('Pq')[0:nres,:]
-        self.phi =  matdat.get('phiq')[0:nres,:]
-        self.DxPphi =  matdat.get('DxPphi')[0:nres,:]
-        self.DyPphi =  matdat.get('DyPphi')[0:nres,:]
-        self.DzPphi =  matdat.get('DzPphi')[0:nres,:]
-
-        # characteristic diffusion ceofficient at each point
-        self.dim = self.xr.shape[1]
-        self.xdim = self.xr.shape[1]-1
 
 
 class Gmodel:
@@ -183,10 +108,10 @@ class Gmodel:
                     u_xx = tf.gradients(u_x, x)[0]
                     u_yy = tf.gradients(u_y, y)[0]
 
-                    prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u)
+                    prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u)
 
-                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.P *self.dataset.phi * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
-                    res = self.dataset.phi * u_t - ( diffusion +  prolif)
+                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
+                    res = self.dataset.phiq * u_t - ( diffusion +  prolif)
                     return res
 
             
@@ -213,14 +138,32 @@ class Gmodel:
                 u_z = tf.gradients(u, z)[0]
                 u_zz = tf.gradients(self.dataset.Dphi*u_z, z)[0]
 
-                res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                res = self.dataset.phiq*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u))
                 return res
+        
+        @tf.function
+        def grad(X, f):
+            # t,x,y normalized here
+            t = X[:,0:1]
+            x = X[:,1:2]
+            y = X[:,2:3]
+            Xcat = tf.concat([t,x,y], axis=1)
+            u =  f(Xcat)
+            u_x = tf.gradients(u, x)[0]
+            u_y = tf.gradients(u, y)[0]
+            return u, u_x, u_y
 
         # loss function of data, difference of phi * u
         def fdatloss(nn):
             upred = nn(self.dataset.xdat)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
-            loss = loss
+            return loss
+
+        def profmseloss(nn):
+            upred = nn(self.dataset.xdat)
+            prolif = 4 * upred * (1-upred)
+
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.plfdat - prolif)*self.dataset.phidat))
             return loss
 
         def bcloss(nn):
@@ -228,22 +171,33 @@ class Gmodel:
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.ubc - upredbc)*self.dataset.phibc))
             return loss
 
+        def negloss(nn):
+            # penalize negative of u
+            upred = nn(self.dataset.xdat)
+            neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
+            return neg_loss
 
         def fcorloss(nn):
-            
+            # correlation of proliferation 4u(1-u)
             upred = nn(self.dataset.xdat)
-            # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
             prolif = 4 * upred * (1-upred)
-            cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
-            
-            loss =  cor_loss
-
-            return tf.squeeze(loss)
+            loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            loss = tf.squeeze(loss)
+            return loss
+        
+        def fgradcorloss(nn):
+            # correlation of gradient, assume 2D
+            u, ux, uy = grad(self.dataset.xdat, nn)
+            dxprolif = 4 * (ux-2*u*ux)
+            dyprolif = 4 * (uy-2*u*uy)
+            loss =  - tfp.stats.correlation(dxprolif, self.dataset.dxplfdat) - tfp.stats.correlation(dyprolif, self.dataset.dyplfdat) 
+            loss = tf.squeeze(loss)
+            return loss
         
         def ftestloss(nn):
             upred = nn(self.dataset.xtest)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
-            return tf.squeeze(loss)
+            return loss
         
 
         self.model = PINN(param=param,
@@ -253,11 +207,9 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'data':fdatloss,'bc':bcloss}
+        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss}
 
-        ftest = {'test':ftestloss,'cor':fcorloss} 
-        
-        self.opts['weights'] = {'data':1.0, 'bc':1.0}
+        ftest = {'test':ftestloss} 
 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
