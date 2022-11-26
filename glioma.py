@@ -145,7 +145,13 @@ class Gmodel:
         def fdatloss(nn):
             upred = nn(self.dataset.xdat)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
-            loss = loss
+            return loss
+
+        def profmseloss(nn):
+            upred = nn(self.dataset.xdat)
+            prolif = 4 * upred * (1-upred)
+
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.plfdat - prolif)*self.dataset.phidat))
             return loss
 
         def bcloss(nn):
@@ -153,15 +159,19 @@ class Gmodel:
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.ubc - upredbc)*self.dataset.phibc))
             return loss
 
+        def negloss(nn):
+            upred = nn(self.dataset.xdat)
+            prolif = 4 * upred * (1-upred)
+
+            neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
+            return neg_loss
 
         def fcorloss(nn):
             
             upred = nn(self.dataset.xdat)
-            # neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
-            prolif = 4 * upred * (1-upred)
-            cor_loss = - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
             
-            loss =  cor_loss
+            prolif = 4 * upred * (1-upred)
+            loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
 
             return tf.squeeze(loss)
         
@@ -178,11 +188,9 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'data':fdatloss,'bc':bcloss}
+        flosses = {'datprolif': profmseloss , 'bc':bcloss, 'cor':fcorloss, 'neg': negloss}
 
-        ftest = {'test':ftestloss,'cor':fcorloss} 
-        
-        self.opts['weights'] = {'data':1.0, 'bc':1.0}
+        ftest = {'test':ftestloss} 
 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 

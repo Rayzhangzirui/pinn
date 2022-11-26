@@ -240,8 +240,9 @@ class PINNSolver():
         losses['res'] = tf.reduce_mean(r2)
         total = losses['res']
         for key in self.flosses:
-            losses[key] = self.flosses[key](self.model)
-            total += losses[key] * self.options['weights'][key]
+            if self.options['weights'].get(key) is not None:
+                losses[key] = self.flosses[key](self.model)
+                total += losses[key] * self.options['weights'][key]
             
         losses['total'] = total
         return losses
