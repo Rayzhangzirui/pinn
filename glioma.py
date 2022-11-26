@@ -9,85 +9,10 @@ import json
 
 from config import *
 from pinn import *
+from DataSet import DataSet
 
 import tensorflow_probability as tfp
 
-
-class DataSet:
-    def __init__(self, opts) -> None:
-        self.opts = opts
-        
-        
-        inv_dat_file = opts['inv_dat_file']
-
-        assert os.path.exists(inv_dat_file), f'{inv_dat_file} not exist'
-        
-        _ , ext = os.path.splitext(inv_dat_file)
-        
-        assert ext == '.mat', 'not reading mat file'
-        
-
-        matdat = loadmat(inv_dat_file)
-
-        for key, value in matdat.items():
-            if isinstance(value,np.ndarray) and value.dtype.kind == 'f':
-                matdat[key] = value.astype(DTYPE)
-
-                
-        ntest = opts.get("n_test_pts", matdat.get('xtest').shape[0])  
-        ndat =  opts.get("n_dat_pts",  matdat.get('xdat').shape[0]) 
-        nres =  opts.get("n_res_pts",  matdat.get('xr').shape[0])
-        
-        # testing data
-        self.xtest = matdat.get('xtest')[0:ntest,:]
-        self.utest = matdat.get('utest')[0:ntest,:] 
-        self.phitest = matdat.get('phitest')[0:ntest,:]
-
-
-        self.xbc = matdat.get('xbc')
-        self.ubc = matdat.get('ubc') 
-        self.phibc = matdat.get('phibc')
-
-        # data loss
-    
-        if opts.get('testasdat') == True:
-            print('use test data for data loss')
-            # use test data as data loss, full time
-            self.xdat = self.xtest
-            self.udat = self.utest
-            self.phidat = self.phitest
-        else:
-            # single time inference
-            self.xdat = matdat.get('xdat')[0:ndat,:]
-            self.udat = matdat.get('udat')[0:ndat,:] 
-            self.phidat = matdat.get('phidat')[0:ndat,:]
-            self.plfdat = matdat.get('plfdat')[0:ndat,:] 
-        
-        if opts.get('addnoise') is not None:
-            print('add noise to udat')
-            self.udat = self.udat + np.random.normal(scale = opts.get('addnoise'), size = self.udat.shape)
-
-        
-        # non dimensional parameters
-        self.T = matdat['T'].item()
-        self.L = matdat['L'].item()
-        self.DW = matdat['DW'].item() #characteristic DW
-        self.RHO = matdat['RHO'].item() #characteristic RHO
-        self.rDe = matdat['rDe'].item() # exact ratio
-        self.rRHOe = matdat['rRHOe'].item()
-        self.opts['scale'] = {'T':self.T, 'L':self.L, 'DW':self.DW, 'RHO':self.RHO}
-
-        # residual pts
-        self.xr =  matdat.get('xr')[0:nres,:]
-        self.P =  matdat.get('Pq')[0:nres,:]
-        self.phi =  matdat.get('phiq')[0:nres,:]
-        self.DxPphi =  matdat.get('DxPphi')[0:nres,:]
-        self.DyPphi =  matdat.get('DyPphi')[0:nres,:]
-        self.DzPphi =  matdat.get('DzPphi')[0:nres,:]
-
-        # characteristic diffusion ceofficient at each point
-        self.dim = self.xr.shape[1]
-        self.xdim = self.xr.shape[1]-1
 
 
 class Gmodel:
@@ -183,10 +108,10 @@ class Gmodel:
                     u_xx = tf.gradients(u_x, x)[0]
                     u_yy = tf.gradients(u_y, y)[0]
 
-                    prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u)
+                    prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u)
 
-                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.P *self.dataset.phi * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
-                    res = self.dataset.phi * u_t - ( diffusion +  prolif)
+                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
+                    res = self.dataset.phiq * u_t - ( diffusion +  prolif)
                     return res
 
             
@@ -213,7 +138,7 @@ class Gmodel:
                 u_z = tf.gradients(u, z)[0]
                 u_zz = tf.gradients(self.dataset.Dphi*u_z, z)[0]
 
-                res = self.dataset.phi*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phi * u * (1-u))
+                res = self.dataset.phiq*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u))
                 return res
 
         # loss function of data, difference of phi * u
