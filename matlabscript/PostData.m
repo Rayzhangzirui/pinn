@@ -30,7 +30,7 @@ classdef PostData<dynamicprops
 		  obj.yessave = p.Results.yessave;
 		  obj.modeldir = p.Results.modeldir;
 		  
-          obj.setting.argfig = {"Resolution",200};
+          obj.setting.argfig = {"Resolution",150};
 
 		  assert(exist(obj.modeldir, 'dir')==7,'dir does not exist');
 		  obj.tag = replace(p.Results.tag,"_","-");
@@ -104,22 +104,30 @@ classdef PostData<dynamicprops
         end 
 
 	   function [fig,sc] = PlotLoss(obj, lossnames, varargin)
-			fig = figure;
-            
-            hold on;
             for i = 1:length(lossnames)
                 lname = lossnames{i};
                 dispname = lname;
-                data = log10(obj.log.(lname))
-                
-                if startsWith(lname,'dat')
-                    w_dat = obj.info.w_dat;
-                    data  = data * w_dat;
-                    dispname = [num2str(w_dat) 'data'];
+                if ~ismember(lname,obj.log.Properties.VariableNames)
+                    warning("%s not in table", lname);
+                    continue
                 end
-                sc(i) = plot(obj.log.it, data ,'DisplayName', dispname);
+                data = obj.log.(lname);
+                
+                if isfield(obj.info.weights, lname)
+                    weight = obj.info.weights.(lname);
+                else
+                    weight = 1;
+                end
+
+                data  = data * weight;
+                
+                dispname = [num2str(weight) lname];
+                
+                sc(i) = plot(obj.log.it, log10(data) ,'DisplayName', dispname);
+                hold on;
                 
             end
+            hold off;
 % 			sc(3) = plot(obj.log.it, log10(obj.log.tmse),'DisplayName', 'test' );
 			grid on;
 			xlabel('steps');
@@ -223,7 +231,7 @@ classdef PostData<dynamicprops
             if obj.yessave
 				fprintf('save %s\n',fp);
                 exportgraphics(gcf,fp, obj.setting.argfig{:});
-%                 export_fig(fp,'-m3');
+%                 export_fig(fp,'-m2');
                 pause(1);
             else
                 fprintf('not saved %s\n',fp);
@@ -685,8 +693,6 @@ classdef PostData<dynamicprops
             p.tk = tgrid(1:2:end); %time index in fdm
             p = parseargs(p,varargin{:});
             method = 'spline';
-
-
             figure
             ax = axes;
             hold(ax,'on');

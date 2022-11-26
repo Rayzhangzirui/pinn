@@ -30,10 +30,11 @@ classdef Sampler< dynamicprops
             obj.setting.usepolar = false;
             obj.setting.urange = [-inf inf];
             obj.setting.uth = [];
+            obj.setting.useplf = false;
 
             
         
-            obj.setting = parseargs(obj.setting, varargin{:});
+            [obj.setting, unmatched] = parseargs(obj.setting, varargin{:});
             rng(obj.setting.seed,'twister');
 
             obj.setting.noise.type = 'none';
@@ -50,6 +51,7 @@ classdef Sampler< dynamicprops
 
         function setxsample(obj,datname,varargin)
             p.n = 20000;
+            p.finalt = false;
             p.isuniformx = false; % uniform distribution or not
             p.issphere = false; 
             p.radius = obj.setting.radius;
@@ -144,10 +146,14 @@ classdef Sampler< dynamicprops
                 dat.udat(~top2) = 0.0;
                 fprintf('threshold to [0, %g, %g ]\n', obj.setting.uth);
             end
-
-            dat.plfdat = 4*dat.udat.*(1 - dat.udat); % proliferation, scaled to [0,1]
             
-            
+            if obj.setting.useplf
+                dat.dxudat = obj.model.interpf(obj.model.fdmsol.Dxuend, xq, method);
+                dat.dyudat = obj.model.interpf(obj.model.fdmsol.Dyuend, xq, method);
+                dat.plfdat = 4*dat.udat.*(1 - dat.udat); % proliferation, scaled to [0,1]
+                dat.dxplfdat = 4 * (dat.dxudat - 2 * dat.udat .* dat.dxudat);
+                dat.dyplfdat = 4 * (dat.dyudat - 2 * dat.udat .* dat.dyudat);
+            end
             
             obj.datldat= dat;
         end
@@ -204,7 +210,11 @@ classdef Sampler< dynamicprops
             method = obj.setting.interp_method;
             n = size(xq,1);
 
-            tq = rand(n,1)*obj.model.tend; % sample t, unit
+            if obj.setting.xbcopt.finalt ==true 
+                tq = ones(n,1) * obj.model.tend;
+            else
+                tq = rand(n,1) * obj.model.tend;
+            end
             dat.ubc = obj.model.interpu(tq, xq, method); % u(tq, xq), mainly for testing
             dat.phibc = obj.model.interpf(obj.model.atlas.phi, xq, method);
             dat.xbc = obj.model.transformDat(xq, tq);
