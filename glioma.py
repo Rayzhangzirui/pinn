@@ -140,6 +140,18 @@ class Gmodel:
 
                 res = self.dataset.phiq*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u))
                 return res
+        
+        @tf.function
+        def grad(X, f):
+            # t,x,y normalized here
+            t = X[:,0:1]
+            x = X[:,1:2]
+            y = X[:,2:3]
+            Xcat = tf.concat([t,x,y], axis=1)
+            u =  f(Xcat)
+            u_x = tf.gradients(u, x)[0]
+            u_y = tf.gradients(u, y)[0]
+            return u, u_x, u_y
 
         # loss function of data, difference of phi * u
         def fdatloss(nn):
@@ -160,25 +172,32 @@ class Gmodel:
             return loss
 
         def negloss(nn):
+            # penalize negative of u
             upred = nn(self.dataset.xdat)
-            prolif = 4 * upred * (1-upred)
-
             neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
             return neg_loss
 
         def fcorloss(nn):
-            
+            # correlation of proliferation 4u(1-u)
             upred = nn(self.dataset.xdat)
-            
             prolif = 4 * upred * (1-upred)
             loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
-
-            return tf.squeeze(loss)
+            loss = tf.squeeze(loss)
+            return loss
+        
+        def fgradcorloss(nn):
+            # correlation of gradient, assume 2D
+            u, ux, uy = grad(self.dataset.xdat, nn)
+            dxprolif = 4 * (ux-2*u*ux)
+            dyprolif = 4 * (uy-2*u*uy)
+            loss =  - tfp.stats.correlation(dxprolif, self.dataset.dxplfdat) - tfp.stats.correlation(dyprolif, self.dataset.dyplfdat) 
+            loss = tf.squeeze(loss)
+            return loss
         
         def ftestloss(nn):
             upred = nn(self.dataset.xtest)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
-            return tf.squeeze(loss)
+            return loss
         
 
         self.model = PINN(param=param,
@@ -188,7 +207,7 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'datprolif': profmseloss , 'bc':bcloss, 'cor':fcorloss, 'neg': negloss}
+        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss}
 
         ftest = {'test':ftestloss} 
 
