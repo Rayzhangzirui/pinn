@@ -102,3 +102,14 @@ def read_mri_dat(n,inv_dat_file,dim):
         pwm =  matdat['Pwmq'][0:n,:]
         pgm =  matdat['Pgmq'][0:n,:]
     return xdat, udat, phi, pwm, pgm
+
+def parsedict(d, *argv):
+    i = 0
+    while i < len(argv):
+        key = argv[i]
+        if key in d:
+            if isinstance(d[key],str): 
+                d[key] = argv[i+1]
+            else:
+                d[key] = eval(argv[i+1])
+        i +=2

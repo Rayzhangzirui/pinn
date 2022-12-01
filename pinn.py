@@ -303,6 +303,7 @@ class PINNSolver():
                 nrow = self.xr.shape[0]
                 self.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
             
+            # randomly set half of the res time to be final time
             if self.options.get('randomtfinal') == True and i % 10 == 0:
                 self.xr[:,0:1] = 1.0
                 nrow = self.xr.shape[0]

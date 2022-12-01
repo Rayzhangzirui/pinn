@@ -207,7 +207,7 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss}
+        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss}
 
         ftest = {'test':ftestloss} 
 
