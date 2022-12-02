@@ -228,6 +228,17 @@ class PINNSolver():
             self.checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
 
+        if self.options.get('trainmodel') == False:
+            # self.model.trainable = False
+            for l in self.model.layers:
+                l.trainable = False
+        # self.model.param['rD'].assign(0.5)
+        # self.model.param['rRHO'].assign(0.5)
+        
+        
+        self.model.summary()
+
+
     @tf.function
     def loss_fn(self):
         
@@ -298,7 +309,7 @@ class PINNSolver():
             self.callback()
             
             # change t
-            if self.options.get('randomt') > 0 and i % 100 == 0:
+            if self.options.get('randomt') > 0 and i % 10 == 0:
                 tend = self.options.get('randomt')
                 nrow = self.xr.shape[0]
                 self.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
