@@ -4,6 +4,7 @@ from scipy import interpolate
 import tensorflow as tf
 from time import time
 from scipy.io import loadmat
+import collections
 
 # decorator for timing
 def timer(func):
@@ -104,6 +105,7 @@ def read_mri_dat(n,inv_dat_file,dim):
     return xdat, udat, phi, pwm, pgm
 
 def parsedict(d, *argv):
+    # parse argv according to dictionary
     i = 0
     while i < len(argv):
         key = argv[i]
@@ -111,5 +113,28 @@ def parsedict(d, *argv):
             if isinstance(d[key],str): 
                 d[key] = argv[i+1]
             else:
+                # if not string, evaluate
                 d[key] = eval(argv[i+1])
         i +=2
+
+
+
+# https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
+def flatten(d, parent_key=''):
+    items = []
+    for k, v in d.items():
+        new_key = k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+def str_from_dict(d, prefix, keys):
+    # generate string from dictionary, as "key1 val1 key2 val2 ..."
+    flatd = flatten(d)
+    s = prefix
+    for k in keys:
+        s+= str(k)
+        s+= str(flatd[k])
+    return s
