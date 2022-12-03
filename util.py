@@ -104,6 +104,7 @@ def read_mri_dat(n,inv_dat_file,dim):
     return xdat, udat, phi, pwm, pgm
 
 def parsedict(d, *argv):
+    # parse argv according to dictionary
     i = 0
     while i < len(argv):
         key = argv[i]
@@ -111,5 +112,15 @@ def parsedict(d, *argv):
             if isinstance(d[key],str): 
                 d[key] = argv[i+1]
             else:
+                # if not string, evaluate
                 d[key] = eval(argv[i+1])
         i +=2
+
+
+def str_from_dict(d, prefix, keys):
+    # generate string from dictionary, as "key1 val1 key2 val2 ..."
+    s = prefix
+    for k in keys:
+        s+= str(k)
+        s+= str(d[k])
+    return s

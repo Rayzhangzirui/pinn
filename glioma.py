@@ -23,6 +23,8 @@ class Gmodel:
         self.xdim = self.dataset.xdim
         self.opts = opts
 
+        
+
         if opts.get('optimizer') == 'adamax':
             self.optim = tf.keras.optimizers.Adamax()
         elif opts.get('optimizer') == 'rmsprop':
@@ -152,9 +154,37 @@ class Gmodel:
             u_x = tf.gradients(u, x)[0]
             u_y = tf.gradients(u, y)[0]
             return u, u_x, u_y
+        
+        def binarize(x, th):
+            # https://stackoverflow.com/questions/37743574/hard-limiting-threshold-activation-function-in-tensorflow
+            # return 1.0 if x > th
+            cond = tf.greater(x, th)
+            out = tf.where(cond, 1.0, 0.0)
+            return out
+        
+        def dice(T, P):
+            # x is prediction (pos, neg), y is label,
+            TP = tf.reduce_sum(T*P)
+            FP = tf.reduce_sum((1-T)*P)
+            FN = tf.reduce_sum((1-T)*(1-P))
+            return 2 * TP / (2*TP + FP + FN)
+
+        def fdiceloss(nn): 
+            upred = nn(self.dataset.xdat)
+            
+            pu1 = binarize(upred, self.dataset.seg[0,0])
+            d1 = dice(self.dataset.u1, pu1)
+            
+            pu2 = binarize(upred, self.dataset.seg[0,1])
+            d2 = dice(self.dataset.u2, pu2)
+
+            dtotal = (d1 + d2)/2
+            # maximize dice, minimize 
+            return -dtotal
+
 
         # loss function of data, difference of phi * u
-        def fdatloss(nn):
+        def fdatloss(nn): 
             upred = nn(self.dataset.xdat)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
             return loss
@@ -207,7 +237,7 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss}
+        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice':fdiceloss}
 
         ftest = {'test':ftestloss} 
 
