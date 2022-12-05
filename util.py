@@ -132,9 +132,12 @@ def flatten(d, parent_key=''):
 
 def str_from_dict(d, prefix, keys):
     # generate string from dictionary, as "key1 val1 key2 val2 ..."
+    # skip None
     flatd = flatten(d)
     s = prefix
     for k in keys:
+        if flatd.get(k) is None:
+            continue
         s+= str(k)
         s+= str(flatd[k])
     return s
