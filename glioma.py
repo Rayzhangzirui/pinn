@@ -169,19 +169,34 @@ class Gmodel:
             FN = tf.reduce_sum(T*(1-P))
             return 2 * TP / (2*TP + FP + FN)
 
-        def fdiceloss(nn): 
+        def fdice2loss(nn): 
             upred = nn(self.dataset.xdat)
-            
-            pu1 = binarize(upred, self.dataset.seg[0,0])
-            d1 = dice(self.dataset.u1, pu1)
-            
             pu2 = binarize(upred, self.dataset.seg[0,1])
             d2 = dice(self.dataset.u2, pu2)
+            # maximize dice, minimize neg dice
+            return -d2
 
-            dtotal = (d1 + d2)/2
-            # maximize dice, minimize 
-            return -dtotal
+        def fdice1loss(nn): 
+            upred = nn(self.dataset.xdat)
+            pu1 = binarize(upred, self.dataset.seg[0,0])
+            d1 = dice(self.dataset.u1, pu1)
+            # maximize dice, minimize neg dice
+            return -d1
+        
+        def area(upred,th):
+            #estimate area above some threshold, assuming the points are uniformly distributed
+            uth = binarize(upred, th)
+            return tf.reduce_mean(uth)
 
+        def farea1loss(nn):
+            upred = nn(self.dataset.xdat)
+            a = area(upred, self.dataset.seg[0,0])
+            return (a - self.dataset.area[0,0])**2
+        
+        def farea2loss(nn):
+            upred = nn(self.dataset.xdat)
+            a = area(upred, self.dataset.seg[0,1])
+            return (a - self.dataset.area[0,1])**2
 
         # loss function of data, difference of phi * u
         def fdatloss(nn): 
@@ -237,8 +252,8 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice':fdiceloss, 'pmse': profmseloss}
-
+        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss}
+        
         ftest = {'test':ftestloss} 
 
         # Initilize PINN solver
