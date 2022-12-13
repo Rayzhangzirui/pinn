@@ -241,15 +241,8 @@ class PINNSolver():
 
     @tf.function
     def loss_fn(self):
-        
-        # Compute phi_r
-        r = self.pde(self.xr, self.model)
-        r2 = tf.math.square(r) * self.wr
-
         losses = {}
-
-        losses['res'] = tf.reduce_mean(r2)
-        total = losses['res']
+        total = 0.0
         for key in self.flosses:
             if self.options['weights'].get(key) is not None:
                 losses[key] = self.flosses[key](self.model)
@@ -275,7 +268,7 @@ class PINNSolver():
 
         return loss, g
     
-    @tf.function
+    # @tf.function
     def check_exact(self):
         """ check with exact solution if provided
         """
@@ -290,7 +283,7 @@ class PINNSolver():
     def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):
         """This method performs a gradient descent type optimization."""
 
-        @tf.function
+        # @tf.function
         def train_step():
             loss, grad_theta = self.get_grad()
             

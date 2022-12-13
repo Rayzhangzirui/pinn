@@ -38,8 +38,9 @@ class Gmodel:
             opts['D0'] = self.dataset.rDe
             opts['RHO0'] = self.dataset.rRHOe
 
-        param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE),
-        'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE)}
+        param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
+        'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
+        'wres': tf.Variable(0.5, trainable=opts.get('trainwres'),dtype = DTYPE,name="wres")}
 
         self.info = {}
 
@@ -245,6 +246,11 @@ class Gmodel:
             return loss
         
 
+        def fresloss(nn):
+            r = pde(self.dataset.xr, nn)
+            r2 = tf.math.square(r)
+            return tf.reduce_mean(r2)
+
         self.model = PINN(param=param,
                 input_dim=self.dim,
                 activation = opts['activation'],
@@ -252,9 +258,14 @@ class Gmodel:
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 output_transform=ot)
 
-        flosses = {'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss}
+
+        
+        opts['weights'] = {'res': 10**self.model.param['wres'], 'dat': 1.0}
+
+        flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss}
         
         ftest = {'test':ftestloss} 
+        
 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
@@ -279,5 +290,15 @@ class Gmodel:
     def saveopts(self):
         # save all options 
         z = self.opts | self.solver.info
+        def tensor2numpy(d):
+            # convert tf.variable in weight to numpy
+            for key in d:
+                if isinstance(d[key],dict):
+                    tensor2numpy(d[key])
+                if tf.is_tensor(d[key]):
+                    d[key] = float(d[key])
+        
+        tensor2numpy(z)
+
         fpath = os.path.join(self.opts['model_dir'],'options.json')
         json.dump( z, open( fpath, 'w' ) )
