@@ -40,7 +40,8 @@ class Gmodel:
 
         param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
-        'wres': tf.Variable(0.5, trainable=opts.get('trainwres'),dtype = DTYPE,name="wres")}
+        'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc")
+        }
 
         self.info = {}
 
@@ -177,6 +178,13 @@ class Gmodel:
             # maximize dice, minimize neg dice
             return -d2
 
+        def fadcmseloss(nn):
+            # error of adc prediction,
+            # this adc is ratio w.r.t characteristic adc
+            upred = nn(self.dataset.xdat)
+            predadc = (nn.param['madc'] * upred + 1.0)
+            return tf.reduce_mean((predadc - self.dataset.adcdat)**2)
+
         def fdice1loss(nn): 
             upred = nn(self.dataset.xdat)
             pu1 = binarize(upred, self.dataset.seg[0,0])
@@ -259,10 +267,8 @@ class Gmodel:
                 output_transform=ot)
 
 
-        
-        opts['weights'] = {'res': 10**self.model.param['wres'], 'dat': 1.0}
-
-        flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss}
+        # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adc':fadcmseloss}
         
         ftest = {'test':ftestloss} 
         

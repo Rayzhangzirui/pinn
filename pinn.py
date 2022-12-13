@@ -590,8 +590,8 @@ class PINNSolver():
             savedat['utest'] = t2n(self.utest)
             savedat['upredxtest'] = t2n(upredxtest)
 
-        savedat['rD'] = self.model.param['rD'].numpy()
-        savedat['rRHO'] = self.model.param['rRHO'].numpy()
+        for key in self.model.param:
+            savedat[key] = self.model.param[key].numpy()
 
         predfile = os.path.join(self.options['model_dir'],f'upred_{suffix}.mat')
         
