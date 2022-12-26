@@ -184,6 +184,14 @@ class Gmodel:
             upred = nn(self.dataset.xdat)
             predadc = (nn.param['madc'] * upred + 1.0)
             return tf.reduce_mean((predadc - self.dataset.adcdat)**2)
+        
+        def fadccorloss(nn):
+            # correlation of u and adc_data, minimize correlation, negtively correlated
+            upred = nn(self.dataset.xdat)
+            loss =  tfp.stats.correlation(upred*self.dataset.phidat, self.dataset.adcdat*self.dataset.phidat)
+            loss = tf.squeeze(loss)
+            return loss
+
 
         def fdice1loss(nn): 
             upred = nn(self.dataset.xdat)
@@ -268,7 +276,7 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adc':fadcmseloss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adc':fadcmseloss, 'adccor': fadccorloss}
         
         ftest = {'test':ftestloss} 
         
