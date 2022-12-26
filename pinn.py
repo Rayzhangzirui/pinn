@@ -216,11 +216,11 @@ class PINNSolver():
         if (not self.manager.latest_checkpoint) and options.get('dicard_ckpt')==False:
             print("Don't restore")
         else:
-            if options.get('restore') is not None:
-                if isinstance(options.get('restore'),int):
-                    ckptpath = self.manager.checkpoints[options.get('restore')]
+            if options['restore'] is not None:
+                if isinstance(options['restore'],int):
+                    ckptpath = self.manager.checkpoints[options['restore']]
                 else:
-                    ckptpath = options.get('restore')
+                    ckptpath = options['restore']
                 # assert os.path.exists(ckptpath), f'{ckptpath} not exist'
             else:
                 ckptpath = self.manager.latest_checkpoint
@@ -228,10 +228,24 @@ class PINNSolver():
             self.checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
 
-        if self.options.get('trainmodel') == False:
+        if self.options['trainnnweight'] == False:
+            print("do not train NN")
             # self.model.trainable = False
             for l in self.model.layers:
                 l.trainable = False
+        
+        # set layer to be trainable
+        if isinstance(self.options['trainnnweight'],int):
+            nlayer = self.options['trainnnweight']
+            k = 0
+            print(f"do not train nn layer <= {nlayer} ")
+            # self.model.trainable = False
+            for l in self.model.layers:
+                if k > nlayer:
+                    l.trainable = True
+                else:
+                    l.trainable = False
+                k += 1
         # self.model.param['rD'].assign(0.5)
         # self.model.param['rRHO'].assign(0.5)
         
