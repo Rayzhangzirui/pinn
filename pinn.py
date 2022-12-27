@@ -196,7 +196,7 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
 
         # set up log
-        os.makedirs(options['model_dir'], exist_ok=True)
+        os.makedirs(options['model_dir'], exist_ok=False)
         
         logfile = os.path.join(options['model_dir'],'solver.log')
 

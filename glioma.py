@@ -38,7 +38,7 @@ class Gmodel:
             opts['D0'] = self.dataset.rDe
             opts['RHO0'] = self.dataset.rRHOe
 
-        param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
+        self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
         'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc")
         }
@@ -48,7 +48,7 @@ class Gmodel:
         def ic(x):
             L = self.dataset.L
             r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
-            return 0.1*tf.exp(-0.1*r2)
+            return 0.1*tf.exp(-0.1*r2)*self.param['madc']
 
         
         if opts.get('ictransofrm') == False:
@@ -88,9 +88,9 @@ class Gmodel:
                     DxPphi = tf.gradients( P * phi, x)[0]
                     DyPphi = tf.gradients( P * phi, y)[0]
 
-                    diffusion =  f.param['rD'] * self.dataset.DW *( P * phi * (u_xx + u_yy) + DxPphi * u_x + DyPphi * u_y)
+                    diffusion =  self.param['rD'] * self.dataset.DW *( P * phi * (u_xx + u_yy) + DxPphi * u_x + DyPphi * u_y)
                     
-                    prolif = f.param['rRHO'] * self.dataset.RHO * phi * u * (1-u)
+                    prolif = self.param['rRHO'] * self.dataset.RHO * phi * u * (1-u)
 
                     res = phi * u_t - ( diffusion + prolif)
                     return res
@@ -112,9 +112,9 @@ class Gmodel:
                     u_xx = tf.gradients(u_x, x)[0]
                     u_yy = tf.gradients(u_y, y)[0]
 
-                    prolif = f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u)
+                    prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['madc'])
 
-                    diffusion = f.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
+                    diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
                     res = self.dataset.phiq * u_t - ( diffusion +  prolif)
                     return res
 
@@ -142,7 +142,7 @@ class Gmodel:
                 u_z = tf.gradients(u, z)[0]
                 u_zz = tf.gradients(self.dataset.Dphi*u_z, z)[0]
 
-                res = self.dataset.phiq*u_t - (f.param['rD'] * (u_xx + u_yy + u_zz) + f.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u))
+                res = self.dataset.phiq*u_t - (self.param['rD'] * (u_xx + u_yy + u_zz) + self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u))
                 return res
         
         @tf.function
@@ -182,8 +182,8 @@ class Gmodel:
             # error of adc prediction,
             # this adc is ratio w.r.t characteristic adc
             upred = nn(self.dataset.xdat)
-            predadc = (nn.param['madc'] * upred + 1.0)
-            return tf.reduce_mean((predadc - self.dataset.adcdat)**2)
+            predadc = (1.0 - upred)
+            return tf.reduce_mean(((predadc - self.dataset.adcdat)*self.dataset.phidat)**2)
         
         def fadccorloss(nn):
             # correlation of u and adc_data, minimize correlation, negtively correlated
@@ -267,7 +267,7 @@ class Gmodel:
             r2 = tf.math.square(r)
             return tf.reduce_mean(r2)
 
-        self.model = PINN(param=param,
+        self.model = PINN(param=self.param,
                 input_dim=self.dim,
                 activation = opts['activation'],
                 num_hidden_layers=opts["num_hidden_layer"], 
