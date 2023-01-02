@@ -23,8 +23,6 @@ class Gmodel:
         self.xdim = self.dataset.xdim
         self.opts = opts
 
-        
-
         if opts.get('optimizer') == 'adamax':
             self.optim = tf.keras.optimizers.Adamax()
         elif opts.get('optimizer') == 'rmsprop':
@@ -261,11 +259,22 @@ class Gmodel:
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
             return loss
         
-
         def fresloss(nn):
+            
             r = pde(self.dataset.xr, nn)
             r2 = tf.math.square(r)
             return tf.reduce_mean(r2)
+
+        def fresdtloss(nn):
+            # compute residual by evalutaing at discrete time
+            nrow = self.dataset.xr.shape[0]
+            N = 11
+            r2 = np.zeros((nrow,1))
+            for t in np.linspace(0.0,1.0,N):
+                self.dataset.xr[:,0:1] = t
+                r = pde(self.dataset.xr, nn)
+                r2 += r**2
+            return tf.reduce_mean(r2)/N
 
         self.model = PINN(param=self.param,
                 input_dim=self.dim,
@@ -276,7 +285,7 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adc':fadcmseloss, 'adccor': fadccorloss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adc':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss}
         
         ftest = {'test':ftestloss} 
         
