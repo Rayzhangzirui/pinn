@@ -38,7 +38,7 @@ class Gmodel:
 
         self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
-        'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc")
+        'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M")
         }
 
         self.info = {}
@@ -46,7 +46,7 @@ class Gmodel:
         def ic(x):
             L = self.dataset.L
             r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
-            return 0.1*tf.exp(-0.1*r2)*self.param['madc']
+            return 0.1*tf.exp(-0.1*r2)*self.param['M']
 
         
         if opts.get('ictransofrm') == False:
@@ -61,37 +61,39 @@ class Gmodel:
 
         if self.xdim == 2:
             if self.opts.get('exactres') == True:
-                print('use exact residual')
-                @tf.function
-                def pde(x_r, f):
-                    t = x_r[:,0:1]
-                    x = x_r[:,1:2]
-                    y = x_r[:,2:3]
-                    xr = tf.concat([t,x,y], axis=1)
+                exit();
+                # NEED update residual
+                # print('use exact residual')
+                # @tf.function
+                # def pde(x_r, f):
+                #     t = x_r[:,0:1]
+                #     x = x_r[:,1:2]
+                #     y = x_r[:,2:3]
+                #     xr = tf.concat([t,x,y], axis=1)
                     
-                    r = tf.sqrt((x*self.dataset.L)**2+(y*self.dataset.L)**2)
-                    phi = 0.5 + 0.5*tf.tanh((50.0 - r)/1.0)
-                    P = 0.9*( 0.5 + 0.5*tf.tanh((20.0 - r)/1.0)) + 0.1
+                #     r = tf.sqrt((x*self.dataset.L)**2+(y*self.dataset.L)**2)
+                #     phi = 0.5 + 0.5*tf.tanh((50.0 - r)/1.0)
+                #     P = 0.9*( 0.5 + 0.5*tf.tanh((20.0 - r)/1.0)) + 0.1
 
-                    u =  f(xr)
+                #     u =  f(xr)
                     
-                    u_t = tf.gradients(u, t)[0]
+                #     u_t = tf.gradients(u, t)[0]
 
-                    u_x = tf.gradients(u, x)[0]
-                    u_y = tf.gradients(u, y)[0]
+                #     u_x = tf.gradients(u, x)[0]
+                #     u_y = tf.gradients(u, y)[0]
                     
-                    u_xx = tf.gradients( u_x, x)[0]
-                    u_yy = tf.gradients( u_y, y)[0]
+                #     u_xx = tf.gradients( u_x, x)[0]
+                #     u_yy = tf.gradients( u_y, y)[0]
                     
-                    DxPphi = tf.gradients( P * phi, x)[0]
-                    DyPphi = tf.gradients( P * phi, y)[0]
+                #     DxPphi = tf.gradients( P * phi, x)[0]
+                #     DyPphi = tf.gradients( P * phi, y)[0]
 
-                    diffusion =  self.param['rD'] * self.dataset.DW *( P * phi * (u_xx + u_yy) + DxPphi * u_x + DyPphi * u_y)
+                #     diffusion =  self.param['rD'] * self.dataset.DW *( P * phi * (u_xx + u_yy) + DxPphi * u_x + DyPphi * u_y)
                     
-                    prolif = self.param['rRHO'] * self.dataset.RHO * phi * u * (1-u)
+                #     prolif = self.param['rRHO'] * self.dataset.RHO * phi * u * (1-u)
 
-                    res = phi * u_t - ( diffusion + prolif)
-                    return res
+                #     res = phi * u_t - ( diffusion + prolif)
+                #     return res
             else:
                 @tf.function
                 def pde(x_r, f):
@@ -110,7 +112,7 @@ class Gmodel:
                     u_xx = tf.gradients(u_x, x)[0]
                     u_yy = tf.gradients(u_y, y)[0]
 
-                    prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['madc'])
+                    prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
 
                     diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
                     res = self.dataset.phiq * u_t - ( diffusion +  prolif)
@@ -285,7 +287,7 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adc':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adcmse':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss}
         
         ftest = {'test':ftestloss} 
         
