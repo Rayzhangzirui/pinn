@@ -247,7 +247,7 @@ class PINNSolver():
                     l.trainable = False
                 k += 1
         # self.model.param['rD'].assign(0.5)
-        # self.model.param['rRHO'].assign(0.5)
+        # self.model.param['M'].assign()
         
         
         self.model.summary()

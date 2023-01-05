@@ -38,7 +38,8 @@ class Gmodel:
 
         self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
-        'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M")
+        'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
+        'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc"),
         }
 
         self.info = {}
@@ -182,7 +183,7 @@ class Gmodel:
             # error of adc prediction,
             # this adc is ratio w.r.t characteristic adc
             upred = nn(self.dataset.xdat)
-            predadc = (1.0 - upred)
+            predadc = (1.0 - self.param['madc']* upred)
             return tf.reduce_mean(((predadc - self.dataset.adcdat)*self.dataset.phidat)**2)
         
         def fadccorloss(nn):
