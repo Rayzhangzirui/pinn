@@ -218,8 +218,10 @@ class PINNSolver():
         else:
             if options['restore'] is not None:
                 if isinstance(options['restore'],int):
+                    # restore check point by integer, 0 = ckpt-1
                     ckptpath = self.manager.checkpoints[options['restore']]
                 else:
+                    # restore checkpoint by path
                     ckptpath = options['restore']
                 # assert os.path.exists(ckptpath), f'{ckptpath} not exist'
             else:
@@ -247,7 +249,8 @@ class PINNSolver():
                     l.trainable = False
                 k += 1
         # self.model.param['rD'].assign(0.5)
-        # self.model.param['M'].assign()
+        # self.model.param['M'].assign(1.0)
+        # self.model.param['madc'].assign(0.8)
         
         
         self.model.summary()

@@ -32,7 +32,8 @@ class DataSet:
                     value = value.item()
                 
                 setattr(self, key, value)
-
+        if self.opts.get('N') is not None:
+            self.downsample(self.opts.get('N'))
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
     
@@ -41,6 +42,17 @@ class DataSet:
         for a in attr:
             x = getattr(self, a)
             print(f"{a} {x}")
+    
+    def downsample(self,n):
+        attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
+        for a in attr:
+            x = getattr(self, a)
+            if isinstance(x,np.ndarray) and x.shape[0]>n:
+                print(f'downsample {a} from {x.shape[0]} to {n} ')
+                x = x[:n,:]
+                setattr(self, a, x)
+            
+
 
 
 if __name__ == "__main__":

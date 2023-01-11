@@ -42,6 +42,9 @@ class Gmodel:
         'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc"),
         }
 
+        # downsample data set
+        
+
         self.info = {}
 
         def ic(x):
