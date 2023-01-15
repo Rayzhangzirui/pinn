@@ -136,17 +136,20 @@ class Gmodel:
                 u =  f(xr)
                 
                 u_t = tf.gradients(u, t)[0]
-
                 u_x = tf.gradients(u, x)[0]
-                u_xx = tf.gradients(self.dataset.Dphi*u_x, x)[0]
+                u_xx = tf.gradients(u_x, x)[0]
                 
                 u_y = tf.gradients(u, y)[0]
-                u_yy = tf.gradients(self.dataset.Dphi*u_y, y)[0]
-
+                u_yy = tf.gradients(u_y, y)[0]
+                
                 u_z = tf.gradients(u, z)[0]
-                u_zz = tf.gradients(self.dataset.Dphi*u_z, z)[0]
+                u_zz = tf.gradients(u_z, z)[0]
 
-                res = self.dataset.phiq*u_t - (self.param['rD'] * (u_xx + u_yy + u_zz) + self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * (1-u))
+                prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+                diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy + u_zz) 
+                + self.dataset.L* (self.dataset.DxPphi * u_x + self.dataset.DyPphi * u_y + self.dataset.DzPphi * u_z))
+
+                res = self.dataset.phiq * u_t - ( diffusion +  prolif)
                 return res
         
         @tf.function
