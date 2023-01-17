@@ -29,7 +29,7 @@ class Gmodel:
             self.optim = tf.keras.optimizers.RMSprop()
         else:
             self.opts['optimizer'] = 'adam'
-            self.optim = tf.keras.optimizers.Adam()
+            self.optim = tf.keras.optimizers.Adam(learning_rate=opts['lr'])
 
         if opts.get('exactfwd') == True:
             print('use exat parameter from dataset')
@@ -42,8 +42,8 @@ class Gmodel:
         'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc"),
         }
 
-        # downsample data set
-        
+        self.dataset.xr0 = np.copy(self.dataset.xr)
+        self.dataset.xr0[:,0] = 0.0
 
         self.info = {}
 
@@ -284,17 +284,23 @@ class Gmodel:
                 r = pde(self.dataset.xr, nn)
                 r2 += r**2
             return tf.reduce_mean(r2)/N
+        
+        def frest0loss(nn):
+            # compute residual at time 0
+            r = pde(self.dataset.xr0, nn)
+            return tf.reduce_mean(r**2)
 
         self.model = PINN(param=self.param,
                 input_dim=self.dim,
                 activation = opts['activation'],
                 num_hidden_layers=opts["num_hidden_layer"], 
                 num_neurons_per_layer=opts["num_hidden_unit"],
+                resnet=opts.get('resnet'),
                 output_transform=ot)
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adcmse':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adcmse':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss}
         
         ftest = {'test':ftestloss} 
         
@@ -309,10 +315,14 @@ class Gmodel:
                                 xtest= self.dataset.xtest,
                                 utest= self.dataset.utest,
                                 options = opts)
+
+        if opts.get('exactfwd') == True:
+            self.param['rD'].assign(self.dataset.rDe)
+            self.param['rRHO'].assign(self.dataset.rRHOe)
     
     def solve(self):
         if self.opts["num_init_train"] > 0:
-            self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"],patience = self.opts["patience"])
+            self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"], patience = self.opts["patience"])
 
         if self.opts['lbfgs_opts'] is not None:
             results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])

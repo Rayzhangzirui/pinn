@@ -49,7 +49,7 @@ class PINN(tf.keras.Model):
             kernel_initializer='glorot_normal',
             output_transform = lambda x,u:u,
             param = None,
-            scale = None,
+            resnet = False,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -57,6 +57,7 @@ class PINN(tf.keras.Model):
         self.output_dim = output_dim
         self.input_dim = input_dim
         self.num_neurons_per_layer = num_neurons_per_layer
+        self.resnet = resnet
 
         # phyiscal parameters in the model
         self.param = param
@@ -75,13 +76,16 @@ class PINN(tf.keras.Model):
     def call(self, X):
         """Forward-pass through neural network."""
         Z = X
-        for i in range(self.num_hidden_layers):
-            Z = self.hidden[i](Z)
-
-        # resnet implementation
-        # Z = tf.pad(X, self.paddings)
-        # for i in range(0,self.num_hidden_layers,2):
-        #     Z = self.hidden[i+1](self.hidden[i](Z))+Z
+        if self.resnet != True:
+            for i in range(self.num_hidden_layers):
+                Z = self.hidden[i](Z)
+        else:
+            # resnet implementation
+            Z = self.hidden[0](Z)
+            for i in range(1,self.num_hidden_layers-1,2):
+                Z = self.hidden[i+1](self.hidden[i](Z))+Z
+            if i + 2 < self.num_hidden_layers:
+                Z = self.hidden[i+2](Z)
             
         Z = self.out(Z)
         Z = self.output_transform(X,Z)
