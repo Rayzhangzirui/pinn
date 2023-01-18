@@ -171,6 +171,11 @@ class Gmodel:
             out = tf.where(cond, 1.0, 0.0)
             return out
         
+        def sigmoidbinarize(x, th):
+            # smooth heaviside function
+            return tf.math.sigmoid(10*(x-th))
+
+        
         def dice(T, P):
             # x is prediction (pos, neg), y is label,
             TP = tf.reduce_sum(T*P)
@@ -209,7 +214,7 @@ class Gmodel:
         
         def area(upred,th):
             #estimate area above some threshold, assuming the points are uniformly distributed
-            uth = binarize(upred, th)
+            uth = sigmoidbinarize(upred, th)
             return tf.reduce_mean(uth)
 
         def farea1loss(nn):
@@ -300,7 +305,8 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adcmse':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adcmse':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
+        'area1':farea1loss,'area2':farea2loss}
         
         ftest = {'test':ftestloss} 
         
@@ -319,7 +325,11 @@ class Gmodel:
         if opts.get('exactfwd') == True:
             self.param['rD'].assign(self.dataset.rDe)
             self.param['rRHO'].assign(self.dataset.rRHOe)
-    
+
+        if opts.get('resetparam') == True:
+            self.param['M'].assign(self.opts['M0'])
+            self.param['madc'].assign(self.opts['madc0'])
+
     def solve(self):
         if self.opts["num_init_train"] > 0:
             self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"], patience = self.opts["patience"])
@@ -343,4 +353,4 @@ class Gmodel:
         tensor2numpy(z)
 
         fpath = os.path.join(self.opts['model_dir'],'options.json')
-        json.dump( z, open( fpath, 'w' ) )
+        json.dump( z, open( fpath, 'w' ), indent=4 )
