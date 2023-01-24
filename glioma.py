@@ -173,7 +173,16 @@ class Gmodel:
         
         def sigmoidbinarize(x, th):
             # smooth heaviside function
-            return tf.math.sigmoid(10*(x-th))
+            return tf.math.sigmoid(50*(x-th))
+
+        def smoothheaviside(x, th):
+            # smooth heaviside function
+            # tfp.math.smootherstep S(x), transition 0 to 1
+            # F(x) = S((x+1)/2) = S(x/2+1/2), -1 to 1
+            # G(x) = S(Kx/2+1/2), -1/K to 1/K
+            K = 50.0
+            return tfp.math.smootherstep(K * (x-th)/2.0 + 1.0/2.0)
+             
 
         
         def dice(T, P):
@@ -183,19 +192,33 @@ class Gmodel:
             FN = tf.reduce_sum(T*(1-P))
             return 2 * TP / (2*TP + FP + FN)
 
+        # maximize dice, minimize 1-dice
+        def fdice1loss(nn): 
+            upred = nn(self.dataset.xdat)
+            pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
+            d1 = dice(self.dataset.u1, pu1)
+            return 1.0-d1
+
         def fdice2loss(nn): 
             upred = nn(self.dataset.xdat)
-            pu2 = binarize(upred, self.dataset.seg[0,1])
+            pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
             d2 = dice(self.dataset.u2, pu2)
-            # maximize dice, minimize neg dice
-            return -d2
+            return 1.0-d2
 
         def fadcmseloss(nn):
             # error of adc prediction,
             # this adc is ratio w.r.t characteristic adc
             upred = nn(self.dataset.xdat)
             predadc = (1.0 - self.param['madc']* upred)
-            return tf.reduce_mean(((predadc - self.dataset.adcdat)*self.dataset.phidat)**2)
+            diff = (predadc - self.dataset.adcdat) * self.dataset.mask
+            return tf.reduce_mean((diff*self.dataset.phidat)**2)
+
+        def fadcnlmseloss(nn):
+            # adc nonlinear relation: a = 1 / (1 + 4 m u)
+            upred = nn(self.dataset.xdat)
+            predadc = 1.0/(1.0 + self.param['madc'] * 4* upred)
+            diff = (predadc - self.dataset.adcdat) * self.dataset.mask
+            return tf.reduce_mean((diff*self.dataset.phidat)**2)
         
         def fadccorloss(nn):
             # correlation of u and adc_data, minimize correlation, negtively correlated
@@ -205,15 +228,9 @@ class Gmodel:
             return loss
 
 
-        def fdice1loss(nn): 
-            upred = nn(self.dataset.xdat)
-            pu1 = binarize(upred, self.dataset.seg[0,0])
-            d1 = dice(self.dataset.u1, pu1)
-            # maximize dice, minimize neg dice
-            return -d1
-        
         def area(upred,th):
             #estimate area above some threshold, assuming the points are uniformly distributed
+            # uth = smoothheaviside(upred, th)
             uth = sigmoidbinarize(upred, th)
             return tf.reduce_mean(uth)
 
@@ -233,13 +250,15 @@ class Gmodel:
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
             return loss
 
+        # proliferation loss
         def profmseloss(nn):
             upred = nn(self.dataset.xdat)
             prolif = 4 * upred * (1-upred)
 
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.plfdat - prolif)*self.dataset.phidat))
             return loss
-
+        
+        #  boundary condition loss
         def bcloss(nn):
             upredbc = nn(self.dataset.xbc)
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.ubc - upredbc)*self.dataset.phibc))
@@ -305,8 +324,10 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss, 'adcmse':fadcmseloss, 'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
-        'area1':farea1loss,'area2':farea2loss}
+        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss,'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
+        'area1':farea1loss,'area2':farea2loss,
+        'dice1':fdice1loss,'dice2':fdice2loss,
+        'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss}
         
         ftest = {'test':ftestloss} 
         
