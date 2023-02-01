@@ -164,8 +164,8 @@ class PINNSolver():
                 ftests,
                 wr = None,
                 xr = None, 
-                xdat = None, udat = None,
-                xtest = None, utest=None,
+                xdat = None,
+                xtest = None,
                 options=None):
         self.model = model
         
@@ -181,10 +181,11 @@ class PINNSolver():
         # set up data
         self.xr =    (xr).astype(DTYPE) # collocation point
         self.xdat =  (xdat).astype(DTYPE) # data point
-        self.udat =  (udat).astype(DTYPE) # data value
-
-        self.xtest = (xtest).astype(DTYPE) # test point
-        self.utest = (utest).astype(DTYPE) # test value
+        if xtest is not None: 
+            self.xtest = (xtest).astype(DTYPE) # test point
+        else:
+            self.xtest = None
+        
 
          # weight of residual
         if wr is None:
@@ -216,23 +217,26 @@ class PINNSolver():
         # set up check point
         self.checkpoint = tf.train.Checkpoint(model)
         self.manager = tf.train.CheckpointManager(self.checkpoint, directory=os.path.join(options['model_dir'],'ckpt'), max_to_keep=4)
+        # self.manager.latest_checkpoint is None if no ckpt found
         
-        if (not self.manager.latest_checkpoint) and options.get('dicard_ckpt')==False:
-            print("Don't restore")
-        else:
-            if options['restore'] is not None:
-                if isinstance(options['restore'],int):
-                    # restore check point by integer, 0 = ckpt-1
-                    ckptpath = self.manager.checkpoints[options['restore']]
-                else:
-                    # restore checkpoint by path
-                    ckptpath = options['restore']
-                # assert os.path.exists(ckptpath), f'{ckptpath} not exist'
+        
+        if options['restore'] is not None:
+            if isinstance(options['restore'],int):
+                # restore check point in the same directory by integer, 0 = ckpt-1
+                ckptpath = self.manager.checkpoints[options['restore']]
             else:
-                ckptpath = self.manager.latest_checkpoint
-            
+                # restore checkpoint by path
+                ckptpath = options['restore']
             self.checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
+        else:
+            # try to continue previous simulation
+            ckptpath = self.manager.latest_checkpoint
+            if ckptpath is not None:
+                self.checkpoint.restore(ckptpath)
+                print("Restored from {}".format(ckptpath))
+            else:
+                print("No restore")
 
         if self.options['trainnnweight'] == False:
             print("do not train NN")
@@ -291,7 +295,6 @@ class PINNSolver():
     def check_exact(self):
         """ check with exact solution if provided
         """
-
         testlosses = {}
         for key in self.ftests:
             testlosses[key] = self.ftests[key](self.model)
@@ -485,8 +488,9 @@ class PINNSolver():
                 # if not none, add to header
                 for pname,ptensor in self.model.param.items():
                     header+= ", {:<10}".format(f'{pname}')
-            for key in self.ftests:
-                header+= ", {:<10}".format(key)
+            if self.ftests is not None:
+                for key in self.ftests:
+                    header+= ", {:<10}".format(key)
             self.header = header
             print(header)
         
@@ -504,9 +508,9 @@ class PINNSolver():
                 info.extend( np.array(list(self.model.param.values())))
             
             # if provide test data, output test mse
-            
-            test_losses = self.check_exact()
-            info +=  [v.numpy() for _,v in test_losses.items()]
+            if self.ftests is not None:
+                test_losses = self.check_exact()
+                info +=  [v.numpy() for _,v in test_losses.items()]
 
             info_str = ', '.join('{:10.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
@@ -593,20 +597,12 @@ class PINNSolver():
         if self.xdat is not None:
             upredxdat = self.model(self.xdat)
             savedat['xdat'] = t2n(self.xdat)
-            savedat['udat'] = t2n(self.udat)
             savedat['upredxdat'] = t2n(upredxdat)
-
-            # if self.xdat.shape[0] == self.Dphi.shape[0]:
-                # print('compute residual on xdat')
-                # warning: this is only valid if xdat and xr have same spatial points
-                # resxdat = self.pde(self.xdat, self.model)
-                # savedat['resxdat'] = t2n(resxdat)
 
         # can not evaluate residual at xtest, need Pwm Pwg
         if self.xtest is not None:
             upredxtest = self.model(self.xtest)
             savedat['xtest'] = t2n(self.xtest)
-            savedat['utest'] = t2n(self.utest)
             savedat['upredxtest'] = t2n(upredxtest)
 
         for key in self.model.param:

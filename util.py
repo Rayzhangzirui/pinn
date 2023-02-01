@@ -141,3 +141,17 @@ def str_from_dict(d, prefix, keys):
         s+= str(k)
         s+= str(flatd[k])
     return s
+
+def preprocess_option(opts):
+    # 
+    if opts['exactfwd'] == True:
+        opts['trainD'] = False
+        opts['trainRHO'] = False
+        opts['trainM'] = False
+        opts['trainm'] = False
+        opts['restore'] = None
+        for wkey in opts['weights']:
+            if wkey == 'res' or wkey == 'bc' or wkey == 'dat':
+                continue
+            else:
+                opts['weights'][wkey] = None

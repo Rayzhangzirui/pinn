@@ -39,7 +39,7 @@ class Gmodel:
         self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
         'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
-        'madc': tf.Variable(opts['madc0'], trainable=opts.get('trainmadc'),dtype = DTYPE,name="madc"),
+        'm': tf.Variable(opts['m0'], trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
         }
 
         self.dataset.xr0 = np.copy(self.dataset.xr)
@@ -209,14 +209,23 @@ class Gmodel:
             # error of adc prediction,
             # this adc is ratio w.r.t characteristic adc
             upred = nn(self.dataset.xdat)
-            predadc = (1.0 - self.param['madc']* upred)
-            diff = (predadc - self.dataset.adcdat) * self.dataset.mask
+            predadc = (1.0 - self.param['m']* upred)
+            diff = (predadc - self.dataset.adcdat)
             return tf.reduce_mean((diff*self.dataset.phidat)**2)
+        
+        def fpetmseloss(nn):
+            # assuming mu ~ pet
+            upred = nn(self.dataset.xdat)
+            predpet = self.param['m']* upred
+            diff = (predpet - self.dataset.petdat)
+            return tf.reduce_mean((diff*self.dataset.phidat)**2)
+        
+        
 
         def fadcnlmseloss(nn):
             # adc nonlinear relation: a = 1 / (1 + 4 m u)
             upred = nn(self.dataset.xdat)
-            predadc = 1.0/(1.0 + self.param['madc'] * 4* upred)
+            predadc = 1.0/(1.0 + self.param['m'] * 4* upred)
             diff = (predadc - self.dataset.adcdat) * self.dataset.mask
             return tf.reduce_mean((diff*self.dataset.phidat)**2)
         
@@ -226,6 +235,10 @@ class Gmodel:
             loss =  tfp.stats.correlation(upred*self.dataset.phidat, self.dataset.adcdat*self.dataset.phidat)
             loss = tf.squeeze(loss)
             return loss
+        
+        def fmregloss(nn):
+            # return (self.param['m']-1.0)**2
+            return tf.nn.relu(self.param['m']-1.0) + tf.nn.relu(-self.param['m'])
 
 
         def area(upred,th):
@@ -251,7 +264,7 @@ class Gmodel:
             return loss
 
         # proliferation loss
-        def profmseloss(nn):
+        def fplfmseloss(nn):
             upred = nn(self.dataset.xdat)
             prolif = 4 * upred * (1-upred)
 
@@ -270,7 +283,7 @@ class Gmodel:
             neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
             return neg_loss
 
-        def fcorloss(nn):
+        def fplfcorloss(nn):
             # correlation of proliferation 4u(1-u)
             upred = nn(self.dataset.xdat)
             prolif = 4 * upred * (1-upred)
@@ -323,14 +336,18 @@ class Gmodel:
                 output_transform=ot)
 
 
-        # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': profmseloss, 'adc':fadcmseloss}
+        # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fplfcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': fplfmseloss, 'adc':fadcmseloss}
         flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss,'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
         'area1':farea1loss,'area2':farea2loss,
         'dice1':fdice1loss,'dice2':fdice2loss,
-        'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss}
+        'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
+        'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,'mreg':fmregloss}
         
         ftest = {'test':ftestloss} 
         
+        if not hasattr(self.dataset,'xtest'):
+            self.dataset.xtest = None
+            ftest = None
 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
@@ -338,9 +355,7 @@ class Gmodel:
                                 ftest,
                                 xr = self.dataset.xr,
                                 xdat = self.dataset.xdat,
-                                udat = self.dataset.udat,
-                                xtest= self.dataset.xtest,
-                                utest= self.dataset.utest,
+                                xtest = self.dataset.xtest,
                                 options = opts)
 
         if opts.get('exactfwd') == True:
@@ -349,7 +364,7 @@ class Gmodel:
 
         if opts.get('resetparam') == True:
             self.param['M'].assign(self.opts['M0'])
-            self.param['madc'].assign(self.opts['madc0'])
+            self.param['m'].assign(self.opts['m0'])
 
     def solve(self):
         if self.opts["num_init_train"] > 0:
@@ -375,3 +390,4 @@ class Gmodel:
 
         fpath = os.path.join(self.opts['model_dir'],'options.json')
         json.dump( z, open( fpath, 'w' ), indent=4 )
+    
