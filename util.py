@@ -120,6 +120,7 @@ def parsedict(d, *argv):
 
 
 # https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
+# turn a nested dict to a single dict
 def flatten(d, parent_key=''):
     items = []
     for k, v in d.items():
@@ -132,6 +133,8 @@ def flatten(d, parent_key=''):
 
 def str_from_dict(d, prefix, keys):
     # generate string from dictionary, as "key1 val1 key2 val2 ..."
+    # d is the option dictionary, might be nested dict
+    # keys is a list of keys
     # skip None
     flatd = flatten(d)
     s = prefix
@@ -155,3 +158,11 @@ def preprocess_option(opts):
                 continue
             else:
                 opts['weights'][wkey] = None
+    
+    # quick test
+    if opts['smalltest'] == True:
+        opts['restore'] = None
+        opts['N'] = 100
+        opts['num_init_train'] = 500
+        opts['num_hidden_unit'] = 8
+        opts['lbfgs_opts']['maxfun'] = 200

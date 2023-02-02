@@ -50,6 +50,7 @@ class PINN(tf.keras.Model):
             output_transform = lambda x,u:u,
             param = None,
             resnet = False,
+            regularizer = None,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -65,7 +66,8 @@ class PINN(tf.keras.Model):
         # Define NN architecture
         self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
                              activation=tf.keras.activations.get(activation),
-                             kernel_initializer=kernel_initializer)
+                             kernel_initializer=kernel_initializer,
+                             kernel_regularizer= regularizer)
                            for _ in range(self.num_hidden_layers)]
         self.out = tf.keras.layers.Dense(output_dim)
         self.output_transform = output_transform
@@ -505,7 +507,7 @@ class PINNSolver():
             info = [self.iter] + losses
 
             if self.model.param is not None:
-                info.extend( np.array(list(self.model.param.values())))
+                info.extend(np.array(list(self.model.param.values())))
             
             # if provide test data, output test mse
             if self.ftests is not None:

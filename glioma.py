@@ -40,8 +40,13 @@ class Gmodel:
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
         'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
         'm': tf.Variable(opts['m0'], trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
+        'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
+        'y0': tf.Variable(opts['y0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
         }
 
+        self.ix = [[self.param['x0'],self.param['y0']]]
+
+        # for computing residual at initial time
         self.dataset.xr0 = np.copy(self.dataset.xr)
         self.dataset.xr0[:,0] = 0.0
 
@@ -49,7 +54,7 @@ class Gmodel:
 
         def ic(x):
             L = self.dataset.L
-            r2 = tf.reduce_sum(tf.square(x[:, 1:self.dim]*L),1,keepdims=True) # this is in pixel scale, unit mm, 
+            r2 = tf.reduce_sum(tf.square((x[:, 1:self.dim]-self.ix)*L), 1, keepdims=True) # this is in pixel scale, unit mm, 
             return 0.1*tf.exp(-0.1*r2)*self.param['M']
 
         
@@ -172,7 +177,7 @@ class Gmodel:
             return out
         
         def sigmoidbinarize(x, th):
-            # smooth heaviside function
+            # smooth heaviside function using a sigmoid
             return tf.math.sigmoid(50*(x-th))
 
         def smoothheaviside(x, th):
@@ -204,6 +209,17 @@ class Gmodel:
             pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
             d2 = dice(self.dataset.u2, pu2)
             return 1.0-d2
+        
+        # segmentation mse loss, mse of threholded u and data (patient geometry)
+        def fseg1loss(nn): 
+            upred = nn(self.dataset.xdat)
+            pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
+            return tf.reduce_mean((pu1-self.dataset.u1)**2)
+
+        def fseg2loss(nn): 
+            upred = nn(self.dataset.xdat)
+            pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
+            return tf.reduce_mean((pu2-self.dataset.u2)**2)
 
         def fadcmseloss(nn):
             # error of adc prediction,
@@ -327,19 +343,25 @@ class Gmodel:
             r = pde(self.dataset.xr0, nn)
             return tf.reduce_mean(r**2)
 
+        reg = None
+        if self.opts.get('reg') is not None:
+            reg = tf.keras.regularizers.L2(self.opts['reg'])
+
         self.model = PINN(param=self.param,
                 input_dim=self.dim,
                 activation = opts['activation'],
                 num_hidden_layers=opts["num_hidden_layer"], 
                 num_neurons_per_layer=opts["num_hidden_unit"],
                 resnet=opts.get('resnet'),
-                output_transform=ot)
+                output_transform=ot,
+                regularizer=reg)
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fplfcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': fplfmseloss, 'adc':fadcmseloss}
         flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss,'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
         'area1':farea1loss,'area2':farea2loss,
         'dice1':fdice1loss,'dice2':fdice2loss,
+        'seg1':fseg1loss,'seg2':fseg2loss,
         'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
         'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,'mreg':fmregloss}
         
