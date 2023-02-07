@@ -141,7 +141,7 @@ def str_from_dict(d, prefix, keys):
     for k in keys:
         if flatd.get(k) is None:
             continue
-        s+= str(k)
+        s+= ("_"+str(k))
         s+= str(flatd[k])
     return s
 
@@ -152,6 +152,7 @@ def preprocess_option(opts):
         opts['trainRHO'] = False
         opts['trainM'] = False
         opts['trainm'] = False
+        opts['trainx0'] = False
         opts['restore'] = None
         for wkey in opts['weights']:
             if wkey == 'res' or wkey == 'bc' or wkey == 'dat':

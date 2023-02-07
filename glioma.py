@@ -18,10 +18,21 @@ import tensorflow_probability as tfp
 class Gmodel:
     def __init__(self, opts) -> None:
 
-        self.dataset = DataSet(opts)
+        self.opts = opts
+
+        self.dataset = DataSet(opts['inv_dat_file'])
+        if self.opts.get('N') is not None:
+            self.dataset.downsample(self.opts.get('N'))
+        if opts.get('useupred') is not None:
+            # use upred at xdat from other training
+            tmpdataset = DataSet(opts['useupred'])
+            self.dataset.xdat = np.copy(tmpdataset.xdat)
+            self.dataset.udat = np.copy(tmpdataset.upredxdat)
+        
+
         self.dim = self.dataset.dim
         self.xdim = self.dataset.xdim
-        self.opts = opts
+        
 
         if opts.get('optimizer') == 'adamax':
             self.optim = tf.keras.optimizers.Adamax()
@@ -35,6 +46,10 @@ class Gmodel:
             print('use exat parameter from dataset')
             opts['D0'] = self.dataset.rDe
             opts['RHO0'] = self.dataset.rRHOe
+        
+        
+
+
 
         self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
@@ -214,12 +229,12 @@ class Gmodel:
         def fseg1loss(nn): 
             upred = nn(self.dataset.xdat)
             pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
-            return tf.reduce_mean((pu1-self.dataset.u1)**2)
+            return tf.reduce_mean((self.dataset.phidat*(pu1-self.dataset.u1))**2)
 
         def fseg2loss(nn): 
             upred = nn(self.dataset.xdat)
             pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
-            return tf.reduce_mean((pu2-self.dataset.u2)**2)
+            return tf.reduce_mean((self.dataset.phidat*(pu2-self.dataset.u2))**2)
 
         def fadcmseloss(nn):
             # error of adc prediction,
@@ -321,11 +336,26 @@ class Gmodel:
             loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
             return loss
         
+        # L2 loss
         def fresloss(nn):
-            
             r = pde(self.dataset.xr, nn)
             r2 = tf.math.square(r)
             return tf.reduce_mean(r2)
+        
+        def fresl1loss(nn):
+            r = pde(self.dataset.xr, nn)
+            r2 = tf.math.abs(r) # L1 norm
+            return tf.reduce_mean(r2)
+        
+        HUBER_DELTA = 0.001
+        def huberloss(y):
+            x = tf.math.abs(y)
+            x = tf.where(x < HUBER_DELTA, 0.5 * x ** 2, HUBER_DELTA * (x - 0.5 * HUBER_DELTA))
+            return  tf.reduce_mean(x)
+
+        def freshuberloss(nn):
+            r = pde(self.dataset.xr, nn)
+            return huberloss(r)
 
         def fresdtloss(nn):
             # compute residual by evalutaing at discrete time
@@ -358,7 +388,8 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fplfcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': fplfmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'bc':bcloss, 'dat': fdatloss,'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
+        flosses = {'res': fresloss, 'reshuber': freshuberloss, 'resl1': fresl1loss,
+         'bc':bcloss, 'dat': fdatloss,'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
         'area1':farea1loss,'area2':farea2loss,
         'dice1':fdice1loss,'dice2':fdice2loss,
         'seg1':fseg1loss,'seg2':fseg2loss,

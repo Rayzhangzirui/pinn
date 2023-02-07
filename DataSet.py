@@ -3,25 +3,21 @@ from config import *
 from scipy.io import loadmat
 import numpy as np
 
-
+# load .mat data
 class DataSet:
-    def __init__(self, opts) -> None:
-        self.opts = opts
+    def __init__(self, matfile) -> None:
         
+        assert os.path.exists(matfile), f'{matfile} not exist'
         
-        inv_dat_file = opts['inv_dat_file']
-
-        assert os.path.exists(inv_dat_file), f'{inv_dat_file} not exist'
-        
-        _ , ext = os.path.splitext(inv_dat_file)
-        
+        _ , ext = os.path.splitext(matfile)
         assert ext == '.mat', 'not reading mat file'
         
-
-        matdat = loadmat(inv_dat_file)
+        matdat = loadmat(matfile)
 
         for key, value in matdat.items():
+            
             if key.startswith("__"):
+                # skip meta data
                 continue
             if isinstance(value,np.ndarray):
                 if value.dtype.kind == 'f':
@@ -32,21 +28,25 @@ class DataSet:
                     value = value.item()
                 
                 setattr(self, key, value)
-        if self.opts.get('N') is not None:
-            self.downsample(self.opts.get('N'))
+
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
     
     def print(self):
+        '''print data set'''
         attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
         for a in attr:
             x = getattr(self, a)
             print(f"{a} {x}")
     
     def downsample(self,n):
+        ''' downsample data size
+        '''
+        # get variable name in .mat, remove meta info
         attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
         for a in attr:
             x = getattr(self, a)
+            # only work on variables with more than one rows
             if isinstance(x,np.ndarray) and x.shape[0]>n:
                 print(f'downsample {a} from {x.shape[0]} to {n} ')
                 x = x[:n,:]

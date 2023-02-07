@@ -203,7 +203,7 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
 
         # set up log
-        os.makedirs(options['model_dir'], exist_ok=False)
+        os.makedirs(options['model_dir'], exist_ok=True)
         
         logfile = os.path.join(options['model_dir'],'solver.log')
 
@@ -211,7 +211,9 @@ class PINNSolver():
         sys.stdout = sys.__stdout__ 
         if self.options.get('file_log'):
             # if log to file
-            if os.path.exists(logfile): print(f'{logfile} already exist') 
+            if os.path.exists(logfile): 
+                print(f'{logfile} already exist') 
+                sys.exit()
             
             sys.stdout = Logger(logfile)
             
