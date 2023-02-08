@@ -236,6 +236,21 @@ class Gmodel:
             pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
             return tf.reduce_mean((self.dataset.phidat*(pu2-self.dataset.u2))**2)
 
+        def neg_mse(x):
+            return tf.reduce_mean(tf.where(x > 0, 0.0, 0.5 * x**2))
+
+        def fseglower1loss(nn): 
+            # if upred>u1, no loss, otherwise, mse loss
+            upred = nn(self.dataset.xdat)
+            diff = self.dataset.phidat*(upred - self.dataset.u1)
+            return  neg_mse(diff)
+
+        def fseglower2loss(nn): 
+            # if upred>u1, no loss, otherwise, mse loss
+            upred = nn(self.dataset.xdat)
+            diff = self.dataset.phidat*(upred - self.dataset.u2)
+            return  neg_mse(diff)
+
         def fadcmseloss(nn):
             # error of adc prediction,
             # this adc is ratio w.r.t characteristic adc
@@ -393,6 +408,7 @@ class Gmodel:
         'area1':farea1loss,'area2':farea2loss,
         'dice1':fdice1loss,'dice2':fdice2loss,
         'seg1':fseg1loss,'seg2':fseg2loss,
+        'seglower1':fseglower1loss,'seglower2':fseglower2loss,
         'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
         'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,'mreg':fmregloss}
         

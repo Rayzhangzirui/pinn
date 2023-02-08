@@ -1,11 +1,11 @@
-import tensorflow as tf
+# import tensorflow as tf
 import numpy as np
 import sys
 
 class Weighting(object):
     def __init__(self, 
                 weights,
-                method = 'constant',
+                method,
                 mean_sort = 'full',
                 mean_decay_param = 0
                 ):
@@ -14,55 +14,40 @@ class Weighting(object):
         self.mean_decay = True if mean_sort == 'decay' else False
         self.mean_decay_param = mean_decay_param
 
-        self.current_iter = tf.zeros((1,))
+        self.current_iter = 0
         self.num_losses = 0
         self.weight_keys = []
         
-        self.alphas = []
+        # initialization
+        self.alphas = {}
         for key in weights:
-            if weights[key] is not None:
+            if weights[key] is not None :
                 self.weight_keys.append(key)
                 self.num_losses += 1
-                self.alphas.append(weights[key])
+                self.alphas[key] = weights[key]
         
-        self.unweighted_losses = tf.Variable(tf.zeros(self.num_losses), trainable=False)
-        
-        self.alphas = tf.convert_to_tensor(self.alphas)
-
-        if method == 'cov':
-            self.alphas = tf.ones((self.num_losses,))/self.num_losses
-        
-        self.running_mean_L = tf.zeros((self.num_losses,))
-        self.running_mean_l = tf.zeros((self.num_losses,))
-        self.running_S_l = tf.zeros((self.num_losses,))
+        self.unweighted_losses = np.zeros(self.num_losses)
+        self.running_mean_L = np.zeros((self.num_losses,))
+        self.running_mean_l = np.zeros((self.num_losses,))
+        self.running_S_l = np.zeros((self.num_losses,))
         self.running_std_l = None
     
-    def weighted_loss(self, unweighted_loss):
+    def update_weights(self, unweighted_loss):
         # different ways to update loss
         if self.method == 'cov':
             return self.cov_update(unweighted_loss)
-        return self.constant_update(unweighted_loss)
         
-
-    def constant_update(self, unweighted_loss):
-        # the weights alpha are constant
-        total_loss  = 0.0
-        for i, k in enumerate(self.weight_keys):
-            total_loss += self.alphas[i] * unweighted_loss[k]
-        return total_loss
 
     
     def cov_update(self, dict_unw_loss):
-        
+        # loss CANNOT be negative or zero
+        # only update weights
         # unweighted loss, collect alpha as list in same order
-        for i, k in enumerate(self.weight_keys):
-            self.unweighted_losses[i].assign(dict_unw_loss[k])
+        L = np.array([dict_unw_loss[k] for k in self.weight_keys])
         
-        L = self.unweighted_losses
-
         # equation 3. L0 is mu_L_{t-1}. L is L_{t}
         # If we are at the zero-th iteration, set L0 to L. Else use the running mean.
-        L0 = tf.identity(L) if self.current_iter == 0 else self.running_mean_L
+        L0 = L if self.current_iter == 0 else self.running_mean_L
         # Compute the loss ratios for the current iteration given the current loss L. 
         l = L / L0
 
@@ -71,12 +56,17 @@ class Weighting(object):
         # self.running_std_l = sigma_l_{it}
         # alphas = alpha_{it}
         # If we are in the first iteration set alphas to be the average
-        if self.current_iter >= 1:
+        if self.current_iter <= 1:
+            alphas = np.ones((self.num_losses,))/self.num_losses
+        else:
             ls = self.running_std_l / self.running_mean_l
-            self.alphas = ls / tf.reduce_sum(ls)
+            alphas = ls / np.sum(ls)
+        
+        for i, k in enumerate(self.weight_keys):
+            self.alphas[k] = alphas[i]
 
         # compute total loss
-        total_loss = tf.reduce_sum(tf.multiply(self.alphas, L))
+        # total_loss = np.dot(self.alphas, L)
         
         
         # Update alpha 
@@ -100,17 +90,15 @@ class Weighting(object):
 
         # The variance is S / (t - 1), but we have current_iter = t - 1
         running_variance_l = self.running_S_l / (self.current_iter + 1) # M_(lt) in equation 7
-        self.running_std_l = tf.sqrt(running_variance_l + 1e-8)
+        self.running_std_l = np.sqrt(running_variance_l + 1e-8)
 
         # 3. Update the statistics for L
         x_L = L
         self.running_mean_L = mean_param * self.running_mean_L + (1 - mean_param) * x_L
-        tf.print(mean_param)
-        tf.print(x_L)
-        tf.print(self.current_iter)
+
         # 
         self.current_iter +=1
-        return total_loss
+        
 
 
 
@@ -129,8 +117,12 @@ if __name__ == "__main__":
     w = Weighting(weight, method=sys.argv[1], mean_sort=sys.argv[2],mean_decay_param=eval(sys.argv[3]))
     
     for i in range(n):
-        loss = {'w2': tf.convert_to_tensor(np.random.exponential(1)), 'w1':tf.convert_to_tensor(np.random.exponential(10))}
-        loss['total']=w.weighted_loss(loss)
+        loss = {'w2': np.random.exponential(1), 'w1':np.random.exponential(10)}
+        w.update_weights(loss)
+        loss['total'] = 0.0
+        for k in w.weight_keys:
+            loss['total']+= w.alphas[k] * loss[k]
+        
         print(w.running_mean_L)
         print(w.running_mean_l)
         print(w.running_std_l)

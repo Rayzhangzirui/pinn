@@ -195,7 +195,7 @@ class PINNSolver():
             self.xtest = None
         
         # dynamic weighting
-        self.weighting = Weighting(self.options['weights'], self.options['weight_method'])
+        self.weighting = Weighting(self.options['weights'], self.options.get('weightmethod'))
 
          # weight of residual
         if wr is None:
@@ -276,13 +276,11 @@ class PINNSolver():
     def loss_fn(self):
         losses = {}
         total = 0.0
-        for i, key in enumerate(self.weighting.weight_keys):
+        for key in self.weighting.weight_keys:
             losses[key] = self.flosses[key](self.model)
+            total += self.weighting.alphas[key] * losses[key]
 
-        # update weights
-        total_loss = self.weighting.weighted_loss(losses)
-
-        losses['total'] = total_loss
+        losses['total'] = total
         return losses
     
     @tf.function
@@ -488,6 +486,7 @@ class PINNSolver():
         scipy.optimize.minimize require first arg to be parameters 
         """
         self.iter+=1
+        self.weighting.update_weights(self.current_loss)
         
         # in the first iteration, create header
         if self.iter == 1:
@@ -512,7 +511,7 @@ class PINNSolver():
             
             # convert losses to list
             losses = [v.numpy() for _,v in self.current_loss.items()]
-            alphas = self.weighting.alphas.numpy().tolist()
+            alphas = [v for _,v in self.weighting.alphas.items()]
 
             # record data        
             info = [self.iter] + losses + alphas
