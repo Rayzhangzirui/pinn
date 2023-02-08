@@ -18,7 +18,13 @@ from scipy.io import savemat
 from config import *
 from util import *
 
+from weight import Weighting
+
 tf.keras.backend.set_floatx(DTYPE)
+
+# debug, not compatible with tf.gradients
+# tf.config.run_functions_eagerly(True) 
+# RuntimeError: tf.gradients is not supported when eager execution is enabled. Use tf.GradientTape instead.
 
 # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
 class Logger(object):
@@ -62,7 +68,7 @@ class PINN(tf.keras.Model):
 
         # phyiscal parameters in the model
         self.param = param
-
+ 
         # Define NN architecture
         self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
                              activation=tf.keras.activations.get(activation),
@@ -188,6 +194,8 @@ class PINNSolver():
         else:
             self.xtest = None
         
+        # dynamic weighting
+        self.weighting = Weighting(self.options['weights'], self.options['weight_method'])
 
          # weight of residual
         if wr is None:
@@ -261,8 +269,6 @@ class PINNSolver():
                     l.trainable = False
                 k += 1
 
-        
-        
         self.model.summary()
 
 
@@ -270,12 +276,13 @@ class PINNSolver():
     def loss_fn(self):
         losses = {}
         total = 0.0
-        for key in self.flosses:
-            if self.options['weights'].get(key) is not None:
-                losses[key] = self.flosses[key](self.model)
-                total += losses[key] * self.options['weights'][key]
-            
-        losses['total'] = total
+        for i, key in enumerate(self.weighting.weight_keys):
+            losses[key] = self.flosses[key](self.model)
+
+        # update weights
+        total_loss = self.weighting.weighted_loss(losses)
+
+        losses['total'] = total_loss
         return losses
     
     @tf.function
@@ -295,7 +302,7 @@ class PINNSolver():
 
         return loss, g
     
-    # @tf.function
+    @tf.function
     def check_exact(self):
         """ check with exact solution if provided
         """
@@ -309,7 +316,7 @@ class PINNSolver():
     def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):
         """This method performs a gradient descent type optimization."""
 
-        # @tf.function
+        @tf.function
         def train_step():
             loss, grad_theta = self.get_grad()
             
@@ -487,7 +494,8 @@ class PINNSolver():
             trainable_params = []
             # create header
             str_losses = ', '.join('{:<10}'.format(k) for k in self.current_loss) 
-            header = '{:<5}, {}'.format('it',str_losses)
+            str_weight = ', '.join('W{:<10}'.format(k) for k in self.weighting.weight_keys) 
+            header = '{:<5}, {}, {}'.format('it',str_losses, str_weight)
             if self.model.param is not None:
                 # if not none, add to header
                 for pname,ptensor in self.model.param.items():
@@ -501,12 +509,13 @@ class PINNSolver():
         # write to file if iter==1 or print_res_every
         yeswrite = (self.iter % self.options['print_res_every'] == 0) or (self.iter==1)
         if yeswrite:
-
+            
             # convert losses to list
             losses = [v.numpy() for _,v in self.current_loss.items()]
+            alphas = self.weighting.alphas.numpy().tolist()
 
             # record data        
-            info = [self.iter] + losses
+            info = [self.iter] + losses + alphas
 
             if self.model.param is not None:
                 info.extend(np.array(list(self.model.param.values())))

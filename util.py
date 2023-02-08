@@ -163,7 +163,9 @@ def preprocess_option(opts):
     # quick test
     if opts['smalltest'] == True:
         opts['restore'] = None
+        opts['file_log'] = False
         opts['N'] = 100
         opts['num_init_train'] = 500
-        opts['num_hidden_unit'] = 8
+        opts['num_hidden_unit'] = 4
+        opts['num_hidden_layer'] = 2
         opts['lbfgs_opts']['maxfun'] = 200
