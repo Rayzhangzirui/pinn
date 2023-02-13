@@ -195,7 +195,7 @@ class PINNSolver():
             self.xtest = None
         
         # dynamic weighting
-        self.weighting = Weighting(self.options['weights'], self.options.get('weightmethod'))
+        self.weighting = Weighting(self.options['weights'], **self.options['weightopt'])
 
          # weight of residual
         if wr is None:

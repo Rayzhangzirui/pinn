@@ -2,18 +2,35 @@
 import numpy as np
 import sys
 
+# https://stackoverflow.com/questions/39166941/real-time-moving-averages-in-python
+class StreamingMovingAverage:
+    def __init__(self, window_size):
+        self.window_size = window_size
+        self.values = []
+        self.sum = 0
+
+    def process(self, value):
+        # assuming value is 1d numpy array
+        self.values.append(value)
+        self.sum += value
+        if len(self.values) > self.window_size:
+            self.sum -= self.values.pop(0)
+        
+        return self.sum / len(self.values)
+
 class Weighting(object):
     def __init__(self, 
                 weights,
-                method,
-                mean_sort = 'full',
-                mean_decay_param = 0
+                method = 'constant',
+                param = None,
+                whichloss = 'res',
+                factor = 1.0,
                 ):
 
         self.method = method
-        self.mean_decay = True if mean_sort == 'decay' else False
-        self.mean_decay_param = mean_decay_param
-
+        self.param = param
+        self.whichloss = whichloss
+        self.factor = factor
         self.current_iter = 0
         self.num_losses = 0
         self.weight_keys = []
@@ -26,17 +43,37 @@ class Weighting(object):
                 self.num_losses += 1
                 self.alphas[key] = weights[key]
         
-        self.unweighted_losses = np.zeros(self.num_losses)
-        self.running_mean_L = np.zeros((self.num_losses,))
-        self.running_mean_l = np.zeros((self.num_losses,))
-        self.running_S_l = np.zeros((self.num_losses,))
-        self.running_std_l = None
-    
+        if self.method == 'cov' or self.method == 'decay':
+            self.unweighted_losses = np.zeros(self.num_losses)
+            self.running_mean_L = np.zeros((self.num_losses,))
+            self.running_mean_l = np.zeros((self.num_losses,))
+            self.running_S_l = np.zeros((self.num_losses,))
+            self.running_std_l = None
+
+        if self.method == 'trackres':
+            print(f'moving avaerage with windown{self.param}')
+            self.stream = StreamingMovingAverage(self.param)
+
+
     def update_weights(self, unweighted_loss):
         # different ways to update loss
-        if self.method == 'cov':
+        if self.method == 'cov' or self.method == 'decay':
             return self.cov_update(unweighted_loss)
         
+        if self.method == 'trackres':
+            return self.trackres_update(unweighted_loss)
+        
+    def trackres_update(self, dict_unw_loss):
+        # keep losses same magnitude as residual
+        # alpha  =  average of residual loss/ loss average of other loss
+        L = np.array([dict_unw_loss[k] for k in self.weight_keys])
+        Lave = self.stream.process(L)
+        j = self.weight_keys.index(self.whichloss) #index of benchmark
+
+        for i,k in enumerate(self.weight_keys):
+            if i != j:
+                self.alphas[k] = Lave[j]/ Lave[i] * self.factor # weight of res/ weight of loss
+
 
     
     def cov_update(self, dict_unw_loss):
@@ -76,8 +113,9 @@ class Weighting(object):
         # 1. Compute the decay parameter the computing the mean.
         if self.current_iter == 0:
             mean_param = 0.0
-        elif self.current_iter > 0 and self.mean_decay:
-            mean_param = self.mean_decay_param
+        elif self.current_iter > 0 and self.method == 'decay':
+            # mean_param = 1-1/t, e.g. mean_param = 0.9 same as t=10
+            mean_param = self.param
         else:
             mean_param = (1. - 1 / (self.current_iter + 1))
 
@@ -111,21 +149,23 @@ if __name__ == "__main__":
     # alpha should be close to 0.5 0.5
     # 0<mean_decay_param<1, for mean_decay_param close to one, the result should be similar to no decay
 
-    n = eval(sys.argv[4])
+    weight = {'w1':1.0, 'w2': 1.0, 'res':1.0, 'w3':None}
 
-    weight = {'w1':1.0, 'w2': 1.0, 'w3':None}
-    w = Weighting(weight, method=sys.argv[1], mean_sort=sys.argv[2],mean_decay_param=eval(sys.argv[3]))
+    n = eval(sys.argv[1])
+    w = Weighting(weight, method=sys.argv[2], param=eval(sys.argv[3]))
     
+    
+
     for i in range(n):
-        loss = {'w2': np.random.exponential(1), 'w1':np.random.exponential(10)}
+        loss = {'w2': np.random.exponential(1), 'w1':np.random.exponential(10), 'res':np.random.exponential(1)}
         w.update_weights(loss)
         loss['total'] = 0.0
         for k in w.weight_keys:
             loss['total']+= w.alphas[k] * loss[k]
         
-        print(w.running_mean_L)
-        print(w.running_mean_l)
-        print(w.running_std_l)
+        # print(w.running_mean_L)
+        # print(w.running_mean_l)
+        # print(w.running_std_l)
         print(w.alphas)
         print(loss)
         
