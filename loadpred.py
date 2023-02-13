@@ -10,9 +10,9 @@ import json
 
 if __name__ == "__main__":
     
-    optfile = sys.argv[1]
-    tend = eval(sys.argv[2])
-    N = eval(sys.argv[3])
+    optfile = sys.argv[1] #option file, used to load model
+    tend = eval(sys.argv[2]) #final time
+    N = eval(sys.argv[3]) # interval
  
     # Opening JSON file
     with open(optfile) as json_file:
@@ -22,11 +22,13 @@ if __name__ == "__main__":
     for k, v in opts.items():
         print(k, v)
     
-    opts['restore'] = 1
+    # restore from ckpt-1
+    opts['restore'] = 2
     g = Gmodel(opts)
     g.solver.save_upred('scipylbfgs')
     g.solver.predtx('lbfgs', tend, N)
 
+    # restore from checkpoint 0
     del g
     opts['restore'] = 0
     g = Gmodel(opts)

@@ -57,6 +57,7 @@ class PINN(tf.keras.Model):
             param = None,
             resnet = False,
             regularizer = None,
+            userbf = False,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -68,13 +69,25 @@ class PINN(tf.keras.Model):
 
         # phyiscal parameters in the model
         self.param = param
- 
+
+        
         # Define NN architecture
         self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
                              activation=tf.keras.activations.get(activation),
                              kernel_initializer=kernel_initializer,
                              kernel_regularizer= regularizer)
                            for _ in range(self.num_hidden_layers)]
+        
+        if userbf == True:
+            rbf =  tf.keras.layers.experimental.RandomFourierFeatures(
+                output_dim=num_neurons_per_layer,
+                scale=1.,
+                trainable = True,
+                kernel_initializer='gaussian')
+            self.hidden =  self.hidden + [rbf]
+
+
+
         self.out = tf.keras.layers.Dense(output_dim)
         self.output_transform = output_transform
         self.paddings = [[0, 0], [0, self.num_neurons_per_layer - self.input_dim]]
@@ -84,20 +97,35 @@ class PINN(tf.keras.Model):
     def call(self, X):
         """Forward-pass through neural network."""
         Z = X
+
         if self.resnet != True:
-            for i in range(self.num_hidden_layers):
+            for i in range(len(self.hidden)):
                 Z = self.hidden[i](Z)
         else:
             # resnet implementation
             Z = self.hidden[0](Z)
-            for i in range(1,self.num_hidden_layers-1,2):
+            for i in range(1,len(self.hidden)-1,2):
                 Z = self.hidden[i+1](self.hidden[i](Z))+Z
-            if i + 2 < self.num_hidden_layers:
+            if i + 2 < len(self.hidden):
                 Z = self.hidden[i+2](Z)
             
         Z = self.out(Z)
         Z = self.output_transform(X,Z)
         return Z
+    
+    def lastlayer(self,X):
+        '''output last layer output, weights, bias'''
+        if self.resnet == True:
+            sys.exit('intermediate output not for resnet')
+        Z = X
+        Zout = []
+        for i in range(len(self.hidden)):
+                Z = self.hidden[i](Z)
+                Zout.append(Z)
+        return Zout, self.out.weights[0], self.out.weights[1]
+
+
+
 
 # copy from 
 # https://github.com/lululxvi/deepxde/blob/9f0d86dea2230478d8735615e2ad518c62efe6e2/deepxde/optimizers/tensorflow/tfp_optimizer.py#L103
@@ -224,6 +252,8 @@ class PINNSolver():
                 sys.exit()
             
             sys.stdout = Logger(logfile)
+        else:
+            print('skip file log')
             
 
         # set up check point

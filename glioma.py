@@ -394,10 +394,7 @@ class Gmodel:
 
         self.model = PINN(param=self.param,
                 input_dim=self.dim,
-                activation = opts['activation'],
-                num_hidden_layers=opts["num_hidden_layer"], 
-                num_neurons_per_layer=opts["num_hidden_unit"],
-                resnet=opts.get('resnet'),
+                **(self.opts['nn_opts']),
                 output_transform=ot,
                 regularizer=reg)
 
