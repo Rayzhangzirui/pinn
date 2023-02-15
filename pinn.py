@@ -20,8 +20,12 @@ from util import *
 
 from weight import Weighting
 from rbf_for_tf2.rbflayer import RBFLayer
+from tflbfgs import LossAndFlatGradient
 
 tf.keras.backend.set_floatx(DTYPE)
+
+glob_trainable_variables = []
+
 
 # debug, not compatible with tf.gradients
 # tf.config.run_functions_eagerly(True) 
@@ -131,12 +135,35 @@ class PINN(tf.keras.Model):
                 Z = self.hidden[i](Z)
                 Zout.append(Z)
         return Zout, self.out.weights[0], self.out.weights[1]
+    
+    def set_trainable_layer(self, arg):
+        '''Set trainable property of each layer
+        '''
+        if arg == False:
+            print("do not train NN")
+            # self.model.trainable = False
+            for l in self.layers:
+                l.trainable = False
+        
+        # set layer to be trainable
+        if isinstance(arg,int):
+            nlayer = arg
+            k = 0
+            print(f"do not train nn layer <= {nlayer} ")
+            # self.trainable = False
+            for l in self.layers:
+                if k > nlayer:
+                    l.trainable = True
+                else:
+                    l.trainable = False
+                k += 1
 
 
 class PINNSolver():
-    def __init__(self, model, geomodel, pde, 
+    def __init__(self, model, pde, 
                 flosses,
                 ftests,
+                geomodel=None, 
                 wr = None,
                 xr = None, 
                 xdat = None,
@@ -195,58 +222,54 @@ class PINNSolver():
         else:
             print('skip file log')
         
+        self.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.options['restore'])
+        if self.geomodel is not None:
+            self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.options['restore'])
 
-        # set up check point
-        self.checkpoint = tf.train.Checkpoint(model)
-        self.manager = tf.train.CheckpointManager(self.checkpoint, directory=os.path.join(self.options['model_dir'],'ckpt'), max_to_keep=4)
-        # self.manager.latest_checkpoint is None if no ckpt found
+        # may set some layer trainable = False
+        self.model.set_trainable_layer(self.options.get('trainweight'))
+
+        self.model.summary()
+
+        global glob_trainable_variables
+        glob_trainable_variables+=  self.model.trainable_variables
+        glob_trainable_variables +=  self.geomodel.trainable_variables
+
+    def setup_ckpt(self, model, ckptdir = 'ckpt', restore = None):
+         # set up check point
+        checkpoint = tf.train.Checkpoint(model)
+        manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.options['model_dir'],ckptdir), max_to_keep=4)
+        # manager.latest_checkpoint is None if no ckpt found
 
         if self.options['restore'] is not None:
+            # self.options['restore'] is a number or a path
             if isinstance(self.options['restore'],int):
                 # restore check point in the same directory by integer, 0 = ckpt-1
-                ckptpath = self.manager.checkpoints[self.options['restore']]
+                ckptpath = manager.checkpoints[self.options['restore']]
             else:
                 # restore checkpoint by path
                 ckptpath = self.options['restore']
-            self.checkpoint.restore(ckptpath)
+            checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
         else:
+            # self.options['restore'] is None
             # try to continue previous simulation
-            ckptpath = self.manager.latest_checkpoint
+            ckptpath = manager.latest_checkpoint
             if ckptpath is not None:
-                self.checkpoint.restore(ckptpath)
+                checkpoint.restore(ckptpath)
                 print("Restored from {}".format(ckptpath))
             else:
+                # if no previous ckpt
                 print("No restore")
 
-        
-        if self.options['trainnnweight'] == False:
-            print("do not train NN")
-            # self.model.trainable = False
-            for l in self.model.layers:
-                l.trainable = False
-        
-        # set layer to be trainable
-        if isinstance(self.options['trainnnweight'],int):
-            nlayer = self.options['trainnnweight']
-            k = 0
-            print(f"do not train nn layer <= {nlayer} ")
-            # self.model.trainable = False
-            for l in self.model.layers:
-                if k > nlayer:
-                    l.trainable = True
-                else:
-                    l.trainable = False
-                k += 1
-
-        self.model.summary()
+        return manager 
 
     @tf.function
     def loss_fn(self):
         uwlosses = {}
         total = 0.0
         for key in self.weighting.weight_keys:
-            uwlosses[key] = self.flosses[key](self.model)
+            uwlosses[key] = self.flosses[key]()
             total += self.weighting.alphas[key] * uwlosses[key]
 
         uwlosses['total'] = total
@@ -256,20 +279,20 @@ class PINNSolver():
     def get_grad(self):
         """ get loss, residual, gradient
         called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
-        args: x_dat: x data pts, u_dat: value at x.
         """
-        with tf.GradientTape(persistent=True) as tape:
+        with tf.GradientTape(persistent=True, watch_accessed_variables=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
-            tape.watch(self.model.trainable_variables)
+            # tape.watch(self.model.trainable_variables)
+            tape.watch(glob_trainable_variables)
             loss = self.loss_fn()
             
-        g = tape.gradient(loss['total'], self.model.trainable_variables)
+        g = tape.gradient(loss['total'], glob_trainable_variables)
         del tape
 
         return loss, g
     
-    @tf.function
+    # @tf.function
     def get_grad_by_loss(self):
         """ get gradient by each loss
         to study gradient, look at weighted loss
@@ -278,23 +301,23 @@ class PINNSolver():
         wlosses = {}
         grad = {}
         total = 0.0
-        with tf.GradientTape(persistent=True) as tape:
+        with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
-            tape.watch(self.model.trainable_variables)
+            # tape.watch(self.model.trainable_variables)
+            tape.watch(glob_trainable_variables)
             for key in self.weighting.weight_keys:
-                wlosses[key] = self.weighting.alphas[key]* self.flosses[key](self.model)
+                wlosses[key] = self.weighting.alphas[key]* self.flosses[key]()
                 total += wlosses[key]
-        
         wlosses['total'] = total
 
         for key in self.weighting.weight_keys:
-            grad[key] = tape.gradient(wlosses[key], self.model.trainable_variables)
+            grad[key] = tape.gradient(wlosses[key], glob_trainable_variables)
         
-        grad['total'] = tape.gradient(wlosses['total'], self.model.trainable_variables)
+        grad['total'] = tape.gradient(wlosses['total'], glob_trainable_variables)
 
         del tape
-
+        
         return wlosses, grad
     
     @tf.function
@@ -316,7 +339,7 @@ class PINNSolver():
             loss, grad_theta = self.get_grad()
             
             # Perform gradient descent step
-            optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
+            optimizer.apply_gradients(zip(grad_theta, glob_trainable_variables))
             return loss
         
         self.current_optimizer = self.options['optimizer']
@@ -379,7 +402,7 @@ class PINNSolver():
             shape_list = []
             
             # Loop over all variables, i.e. weight matrices, bias vectors and unknown parameters
-            for v in self.model.trainable_variables:
+            for v in glob_trainable_variables:
                 shape_list.append(v.shape)
                 weight_list.extend(v.numpy().flatten())
                 
@@ -389,7 +412,7 @@ class PINNSolver():
             """Function which sets list of weights
             to variables in the model."""
             idx = 0
-            for v in self.model.trainable_variables:
+            for v in glob_trainable_variables:
                 vs = v.shape
                 
                 # Weight matrices
@@ -461,8 +484,8 @@ class PINNSolver():
             return dloss['total']
 
 
-        func = LossAndFlatGradient(self.model.trainable_variables, bfgs_loss)
-        initial_position = func.to_flat_weights(self.model.trainable_variables)
+        func = LossAndFlatGradient(glob_trainable_variables, bfgs_loss)
+        initial_position = func.to_flat_weights(glob_trainable_variables)
         
         results = tfp.optimizer.lbfgs_minimize(
             func,
@@ -484,7 +507,7 @@ class PINNSolver():
             self.gradlog = open(fpath, "w")
             self.gradlog.write('iter, ')
             for losskey in graddict:
-                for i,v in enumerate(self.model.trainable_variables):
+                for i,v in enumerate(glob_trainable_variables):
                     self.gradlog.write(losskey + '/' + v.name.removesuffix(':0') + ',')
             self.gradlog.write('\n')
         
@@ -576,6 +599,9 @@ class PINNSolver():
         if self.options.get('saveckpt'):
             save_path = self.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))
+            if self.geomodel is not None:
+                save_path = self.managergeo.save()
+            
         else:
             print("checkpoint not saved")
 
@@ -634,6 +660,10 @@ class PINNSolver():
 
         resxr = self.pde(self.xr, self.model)
         savedat['resxr'] = t2n(resxr)
+
+        if self.geomodel is not None:
+            P = self.geomodel(self.xr[:,1:])
+            savedat['ppred'] = t2n(P)
         
         
         if self.xdat is not None:

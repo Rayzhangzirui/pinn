@@ -1,3 +1,4 @@
+import tensorflow as tf
 # copy from 
 # https://github.com/lululxvi/deepxde/blob/9f0d86dea2230478d8735615e2ad518c62efe6e2/deepxde/optimizers/tensorflow/tfp_optimizer.py#L103
 class LossAndFlatGradient(object):
