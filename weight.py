@@ -63,6 +63,8 @@ class Weighting(object):
         if self.method == 'trackres':
             return self.trackres_update(unweighted_loss)
         
+        
+        
     def trackres_update(self, dict_unw_loss):
         # keep losses same magnitude as residual
         # alpha  =  average of residual loss/ loss average of other loss
@@ -70,9 +72,12 @@ class Weighting(object):
         Lave = self.stream.process(L)
         j = self.weight_keys.index(self.whichloss) #index of benchmark
 
-        for i,k in enumerate(self.weight_keys):
-            if i != j:
-                self.alphas[k] = Lave[j]/ Lave[i] * self.factor # weight of res/ weight of loss
+        # initially keep constant, then start changing the weight
+        if self.current_iter > self.stream.window_size:
+            for i,k in enumerate(self.weight_keys):
+                if i != j:
+                    self.alphas[k] = Lave[j]/ Lave[i] * self.factor # weight of res/ weight of loss
+        self.current_iter +=1
 
 
     
@@ -133,9 +138,8 @@ class Weighting(object):
         # 3. Update the statistics for L
         x_L = L
         self.running_mean_L = mean_param * self.running_mean_L + (1 - mean_param) * x_L
-
-        # 
         self.current_iter +=1
+        
         
 
 

@@ -187,8 +187,9 @@ class Gmodel:
         def binarize(x, th):
             # https://stackoverflow.com/questions/37743574/hard-limiting-threshold-activation-function-in-tensorflow
             # return 1.0 if x > th
+            # this might give None gradient!
             cond = tf.greater(x, th)
-            out = tf.where(cond, 1.0, 0.0)
+            out = tf.where(cond, 1.0, 0.0) 
             return out
         
         def sigmoidbinarize(x, th):
@@ -197,10 +198,10 @@ class Gmodel:
 
         def smoothheaviside(x, th):
             # smooth heaviside function
-            # tfp.math.smootherstep S(x), transition 0 to 1
+            # tfp.math.smootherstep S(x), y goes from 0 to 1 as x goes from 0 1
             # F(x) = S((x+1)/2) = S(x/2+1/2), -1 to 1
             # G(x) = S(Kx/2+1/2), -1/K to 1/K
-            K = 50.0
+            K = 10.0
             return tfp.math.smootherstep(K * (x-th)/2.0 + 1.0/2.0)
              
 
@@ -229,11 +230,13 @@ class Gmodel:
         def fseg1loss(nn): 
             upred = nn(self.dataset.xdat)
             pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
+            # pu1 = smoothheaviside(upred, self.dataset.seg[0,0])
             return tf.reduce_mean((self.dataset.phidat*(pu1-self.dataset.u1))**2)
 
         def fseg2loss(nn): 
             upred = nn(self.dataset.xdat)
             pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
+            # pu2 = smoothheaviside(upred, self.dataset.seg[0,1])
             return tf.reduce_mean((self.dataset.phidat*(pu2-self.dataset.u2))**2)
 
         def neg_mse(x):
@@ -291,6 +294,7 @@ class Gmodel:
             #estimate area above some threshold, assuming the points are uniformly distributed
             # uth = smoothheaviside(upred, th)
             uth = sigmoidbinarize(upred, th)
+            # uth = binarize(upred, th)
             return tf.reduce_mean(uth)
 
         def farea1loss(nn):

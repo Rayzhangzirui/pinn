@@ -29,8 +29,10 @@ tf.keras.backend.set_floatx(DTYPE)
 # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
 class Logger(object):
     def __init__(self,fname):
+        
         self.terminal = sys.stdout
         self.log = open(fname, "a")
+        
    
     def write(self, message):
         self.terminal.write(message)
@@ -84,7 +86,7 @@ class PINN(tf.keras.Model):
                 scale=1.,
                 trainable = True,
                 kernel_initializer='gaussian')
-            self.hidden =  self.hidden + [rbf]
+            self.hidden =   [rbf] + self.hidden
 
 
 
@@ -237,6 +239,7 @@ class PINNSolver():
         self.header = ''
         self.paramhist = [] # history of trainable model params
         self.current_optimizer = None # current optimizer
+        self.gradlog = None #log for gradient
 
         # set up log
         os.makedirs(options['model_dir'], exist_ok=True)
@@ -304,14 +307,14 @@ class PINNSolver():
 
     @tf.function
     def loss_fn(self):
-        losses = {}
+        uwlosses = {}
         total = 0.0
         for key in self.weighting.weight_keys:
-            losses[key] = self.flosses[key](self.model)
-            total += self.weighting.alphas[key] * losses[key]
+            uwlosses[key] = self.flosses[key](self.model)
+            total += self.weighting.alphas[key] * uwlosses[key]
 
-        losses['total'] = total
-        return losses
+        uwlosses['total'] = total
+        return uwlosses
     
     @tf.function
     def get_grad(self):
@@ -329,6 +332,34 @@ class PINNSolver():
         del tape
 
         return loss, g
+    
+    @tf.function
+    def get_grad_by_loss(self):
+        """ get gradient by each loss
+        to study gradient, look at weighted loss
+        """
+        
+        wlosses = {}
+        grad = {}
+        total = 0.0
+        with tf.GradientTape(persistent=True) as tape:
+            # This tape is for derivatives with
+            # respect to trainable variables
+            tape.watch(self.model.trainable_variables)
+            for key in self.weighting.weight_keys:
+                wlosses[key] = self.weighting.alphas[key]* self.flosses[key](self.model)
+                total += wlosses[key]
+        
+        wlosses['total'] = total
+
+        for key in self.weighting.weight_keys:
+            grad[key] = tape.gradient(wlosses[key], self.model.trainable_variables)
+        
+        grad['total'] = tape.gradient(wlosses['total'], self.model.trainable_variables)
+
+        del tape
+
+        return wlosses, grad
     
     @tf.function
     def check_exact(self):
@@ -510,7 +541,30 @@ class PINNSolver():
 
         return results
 
-    
+    def process_grad(self, graddict):
+        '''grad is dict, key = loss name, value = list of gradient, param, weight, bias, etc'''
+        if self.iter == 1:
+            fpath=os.path.join(self.options['model_dir'],'grad.log')
+            self.gradlog = open(fpath, "w")
+            self.gradlog.write('iter, ')
+            for losskey in graddict:
+                for i,v in enumerate(self.model.trainable_variables):
+                    self.gradlog.write(losskey + '/' + v.name.removesuffix(':0') + ',')
+            self.gradlog.write('\n')
+        
+
+        self.gradlog.write(f'{self.iter},')
+        for losskey, gradlist in graddict.items():
+            
+            for grad in gradlist:
+                if grad is None:
+                    g = None
+                else:
+                    g = tf.reduce_sum(tf.square(grad)).numpy()
+                self.gradlog.write(f'{g},')
+        
+        self.gradlog.write('\n')
+
     def callback(self,xk=None):
         """ called after one step of iteration in bfgs and adam, 
         scipy.optimize.minimize require first arg to be parameters 
@@ -518,13 +572,16 @@ class PINNSolver():
         self.iter+=1
         self.weighting.update_weights(self.current_loss)
         
+
         # in the first iteration, create header
         if self.iter == 1:
             trainable_params = []
             # create header
-            str_losses = ', '.join('{:<10}'.format(k) for k in self.current_loss) 
-            str_weight = ', '.join('W{:<10}'.format(k) for k in self.weighting.weight_keys) 
-            header = '{:<5}, {}, {}'.format('it',str_losses, str_weight)
+            str_losses = ', '.join('{:<10}'.format(k) for k in self.current_loss)
+            header = '{:<5}, {:<10}'.format('it',str_losses)
+            if self.weighting.method != 'constant':
+                str_weight = ', '.join('W{:<10}'.format(k) for k in self.weighting.weight_keys) 
+                header += ', {}'.format(str_weight)
             if self.model.param is not None:
                 # if not none, add to header
                 for pname,ptensor in self.model.param.items():
@@ -538,13 +595,19 @@ class PINNSolver():
         # write to file if iter==1 or print_res_every
         yeswrite = (self.iter % self.options['print_res_every'] == 0) or (self.iter==1)
         if yeswrite:
-            
+
+            if self.options['gradnorm'] == True:
+                _, grad = self.get_grad_by_loss()
+                self.process_grad(grad)
+                
+
             # convert losses to list
             losses = [v.numpy() for _,v in self.current_loss.items()]
-            alphas = [v for _,v in self.weighting.alphas.items()]
+            info = [self.iter] + losses
 
-            # record data        
-            info = [self.iter] + losses + alphas
+            if self.weighting.method !='constant':
+                alphas = [v for _,v in self.weighting.alphas.items()]
+                info +=alphas
 
             if self.model.param is not None:
                 info.extend(np.array(list(self.model.param.values())))
@@ -553,6 +616,7 @@ class PINNSolver():
             if self.ftests is not None:
                 test_losses = self.check_exact()
                 info +=  [v.numpy() for _,v in test_losses.items()]
+            
 
             info_str = ', '.join('{:10.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
