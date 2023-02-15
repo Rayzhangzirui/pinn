@@ -120,13 +120,13 @@ class Gmodel:
                 #     return res
             else:
                 @tf.function
-                def pde(x_r, f):
+                def pde(x_r, nn):
                     t = x_r[:,0:1]
                     x = x_r[:,1:2]
                     y = x_r[:,2:3]
                     xr = tf.concat([t,x,y], axis=1)
                     
-                    u =  f(xr)
+                    u =  nn(xr)
                     
                     u_t = tf.gradients(u, t)[0]
 
@@ -173,13 +173,13 @@ class Gmodel:
                 return res
         
         @tf.function
-        def grad(X, f):
+        def grad(X, nn):
             # t,x,y normalized here
             t = X[:,0:1]
             x = X[:,1:2]
             y = X[:,2:3]
             Xcat = tf.concat([t,x,y], axis=1)
-            u =  f(Xcat)
+            u =  nn(Xcat)
             u_x = tf.gradients(u, x)[0]
             u_y = tf.gradients(u, y)[0]
             return u, u_x, u_y
@@ -448,16 +448,7 @@ class Gmodel:
     def saveopts(self):
         # save all options 
         z = self.opts | self.solver.info
-        def tensor2numpy(d):
-            # convert tf.variable in weight to numpy
-            for key in d:
-                if isinstance(d[key],dict):
-                    tensor2numpy(d[key])
-                if tf.is_tensor(d[key]):
-                    d[key] = float(d[key])
-        
         tensor2numpy(z)
-
         fpath = os.path.join(self.opts['model_dir'],'options.json')
         json.dump( z, open( fpath, 'w' ), indent=4 )
     

@@ -19,6 +19,7 @@ from config import *
 from util import *
 
 from weight import Weighting
+from rbf_for_tf2.rbflayer import RBFLayer
 
 tf.keras.backend.set_floatx(DTYPE)
 
@@ -59,6 +60,7 @@ class PINN(tf.keras.Model):
             param = None,
             resnet = False,
             regularizer = None,
+            userff = False,
             userbf = False,
             **kwargs):
         super().__init__(**kwargs)
@@ -80,12 +82,16 @@ class PINN(tf.keras.Model):
                              kernel_regularizer= regularizer)
                            for _ in range(self.num_hidden_layers)]
         
-        if userbf == True:
+        if userff == True:
             rbf =  tf.keras.layers.experimental.RandomFourierFeatures(
                 output_dim=num_neurons_per_layer,
                 scale=1.,
                 trainable = True,
                 kernel_initializer='gaussian')
+            self.hidden =   [rbf] + self.hidden
+        
+        if userbf == True:
+            rbf =  RBFLayer(num_neurons_per_layer, betas=1.)
             self.hidden =   [rbf] + self.hidden
 
 

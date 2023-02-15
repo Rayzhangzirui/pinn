@@ -145,6 +145,14 @@ def str_from_dict(d, prefix, keys):
         s+= str(flatd[k])
     return s
 
+def tensor2numpy(d):
+    # recursively convert tensor in dictionary to numpy
+    for key in d:
+        if isinstance(d[key],dict):
+            tensor2numpy(d[key])
+        if tf.is_tensor(d[key]):
+            d[key] = float(d[key])
+
 def preprocess_option(opts):
     # 
     if opts['exactfwd'] == True:
@@ -166,6 +174,6 @@ def preprocess_option(opts):
         opts['file_log'] = False
         opts['N'] = 100
         opts['num_init_train'] = 500
-        opts['num_hidden_unit'] = 4
-        opts['num_hidden_layer'] = 2
+        opts['nn_opts']['num_hidden_unit'] = 4
+        opts['nn_opts']['num_hidden_layer'] = 2
         opts['lbfgs_opts']['maxfun'] = 200
