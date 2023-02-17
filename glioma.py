@@ -57,6 +57,8 @@ class Gmodel:
         'm': tf.Variable(opts['m0'], trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
         'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
         'y0': tf.Variable(opts['y0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
+        'th1': tf.Variable(opts['th1'], trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
+        'th2': tf.Variable(opts['th2'], trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
         }
 
         self.ix = [[self.param['x0'],self.param['y0']]]
@@ -194,7 +196,7 @@ class Gmodel:
         
         def sigmoidbinarize(x, th):
             # smooth heaviside function using a sigmoid
-            return tf.math.sigmoid(50*(x-th))
+            return tf.math.sigmoid(20*(x-th))
 
         def smoothheaviside(x, th):
             # smooth heaviside function
@@ -216,27 +218,27 @@ class Gmodel:
         # maximize dice, minimize 1-dice
         def fdice1loss(nn): 
             upred = nn(self.dataset.xdat)
-            pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
+            pu1 = sigmoidbinarize(upred, self.dataset.th1)
             d1 = dice(self.dataset.u1, pu1)
             return 1.0-d1
 
         def fdice2loss(nn): 
             upred = nn(self.dataset.xdat)
-            pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
+            pu2 = sigmoidbinarize(upred, self.dataset.th2)
             d2 = dice(self.dataset.u2, pu2)
             return 1.0-d2
         
         # segmentation mse loss, mse of threholded u and data (patient geometry)
         def fseg1loss(nn): 
             upred = nn(self.dataset.xdat)
-            pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
-            # pu1 = smoothheaviside(upred, self.dataset.seg[0,0])
+            pu1 = sigmoidbinarize(upred, self.param['th1'])
+            # pu1 = smoothheaviside(upred, self.param['th1'])
             return tf.reduce_mean((self.dataset.phidat*(pu1-self.dataset.u1))**2)
 
         def fseg2loss(nn): 
             upred = nn(self.dataset.xdat)
-            pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
-            # pu2 = smoothheaviside(upred, self.dataset.seg[0,1])
+            pu2 = sigmoidbinarize(upred, self.param['th2'])
+            # pu2 = smoothheaviside(upred, self.param['th2'])
             return tf.reduce_mean((self.dataset.phidat*(pu2-self.dataset.u2))**2)
 
         def neg_mse(x):
@@ -285,9 +287,12 @@ class Gmodel:
             loss = tf.squeeze(loss)
             return loss
         
+        
         def fmregloss(nn):
-            # return (self.param['m']-1.0)**2
-            return tf.nn.relu(self.param['m']-1.0) + tf.nn.relu(-self.param['m'])
+            # 0 loss within [a,b], qudratic outside
+            a = 0.8
+            b = 1.2
+            return tf.nn.relu(self.param['m']-b)**2 + tf.nn.relu(a-self.param['m'])**2
 
 
         def area(upred,th):
@@ -299,12 +304,12 @@ class Gmodel:
 
         def farea1loss(nn):
             upred = nn(self.dataset.xdat)
-            a = area(upred, self.dataset.seg[0,0])
+            a = area(upred, self.param['th1'])
             return (a - self.dataset.area[0,0])**2
         
         def farea2loss(nn):
             upred = nn(self.dataset.xdat)
-            a = area(upred, self.dataset.seg[0,1])
+            a = area(upred, self.param['th2'])
             return (a - self.dataset.area[0,1])**2
 
         # loss function of data, difference of phi * u

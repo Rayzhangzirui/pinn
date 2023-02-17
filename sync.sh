@@ -33,7 +33,7 @@ cdir=$PWD/ #need trailing / for rsync
 
 remote=$server:$remotedir #create remote dir
 
-filelist=(--exclude={'.*','logs','__pycache__','tmp','matlabscript','sol*mat','*jpg'})
+filelist=(--exclude={'.*','logs','__pycache__','tmp','matlabscript','sol*mat','*jpg','*png'})
 if [ "$1" = "up" ]
 then
 	dest=$remote
