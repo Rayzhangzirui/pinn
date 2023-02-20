@@ -23,14 +23,15 @@ if __name__ == "__main__":
         print(k, v)
     
     # restore from ckpt-1
-    opts['restore'] = 2
+    opts['file_log'] = False
+    opts['restore'] = 1
     g = Gmodel(opts)
     g.solver.save_upred('scipylbfgs')
-    g.solver.predtx('lbfgs', tend, N)
+    # g.solver.predtx('lbfgs', tend, N)
 
     # restore from checkpoint 0
     del g
     opts['restore'] = 0
     g = Gmodel(opts)
     g.solver.save_upred('tfadam')
-    g.solver.predtx('adam', tend, N)
+    # g.solver.predtx('adam', tend, N)

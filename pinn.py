@@ -20,8 +20,12 @@ from util import *
 
 from weight import Weighting
 from rbf_for_tf2.rbflayer import RBFLayer
+from tflbfgs import LossAndFlatGradient
 
 tf.keras.backend.set_floatx(DTYPE)
+
+glob_trainable_variables = []
+
 
 # debug, not compatible with tf.gradients
 # tf.config.run_functions_eagerly(True) 
@@ -131,88 +135,42 @@ class PINN(tf.keras.Model):
                 Z = self.hidden[i](Z)
                 Zout.append(Z)
         return Zout, self.out.weights[0], self.out.weights[1]
-
-
-
-
-# copy from 
-# https://github.com/lululxvi/deepxde/blob/9f0d86dea2230478d8735615e2ad518c62efe6e2/deepxde/optimizers/tensorflow/tfp_optimizer.py#L103
-class LossAndFlatGradient(object):
-    """A helper class to create a function required by tfp.optimizer.lbfgs_minimize.
-    Args:
-        trainable_variables: Trainable variables.
-        build_loss: A function to build the loss function expression.
-    """
-
-    def __init__(self, trainable_variables, build_loss):
-        self.trainable_variables = trainable_variables
-        self.build_loss = build_loss
-
-        # Shapes of all trainable parameters
-        self.shapes = tf.shape_n(trainable_variables)
-        self.n_tensors = len(self.shapes)
-
-        # Information for tf.dynamic_stitch and tf.dynamic_partition later
-        count = 0
-        self.indices = []  # stitch indices
-        self.partitions = []  # partition indices
-        for i, shape in enumerate(self.shapes):
-            n = np.product(shape)
-            self.indices.append(
-                tf.reshape(tf.range(count, count + n, dtype=tf.int32), shape)
-            )
-            self.partitions.extend([i] * n)
-            count += n
-        self.partitions = tf.constant(self.partitions)
-
-    @tf.function
-    def __call__(self, weights_1d):
-        """A function that can be used by tfp.optimizer.lbfgs_minimize.
-        Args:
-           weights_1d: a 1D tf.Tensor.
-        Returns:
-            A scalar loss and the gradients w.r.t. the `weights_1d`.
-        """
-        # Set the weights
-        self.set_flat_weights(weights_1d)
-        with tf.GradientTape() as tape:
-            # Calculate the loss
-            loss = self.build_loss()
-        # Calculate gradients and convert to 1D tf.Tensor
-        grads = tape.gradient(loss, self.trainable_variables)
-        grads = tf.dynamic_stitch(self.indices, grads)
-        return loss, grads
-
-    def set_flat_weights(self, weights_1d):
-        """Sets the weights with a 1D tf.Tensor.
-        Args:
-            weights_1d: a 1D tf.Tensor representing the trainable variables.
-        """
-        weights = tf.dynamic_partition(weights_1d, self.partitions, self.n_tensors)
-        for i, (shape, weight) in enumerate(zip(self.shapes, weights)):
-            self.trainable_variables[i].assign(tf.reshape(weight, shape))
-
-    def to_flat_weights(self, weights):
-        """Returns a 1D tf.Tensor representing the `weights`.
-        Args:
-            weights: A list of tf.Tensor representing the weights.
-        Returns:
-            A 1D tf.Tensor representing the `weights`.
-        """
-        return tf.dynamic_stitch(self.indices, weights)
+    
+    def set_trainable_layer(self, arg):
+        '''Set trainable property of each layer
+        '''
+        if arg == False:
+            print("do not train NN")
+            # self.model.trainable = False
+            for l in self.layers:
+                l.trainable = False
+        
+        # set layer to be trainable
+        if isinstance(arg,int):
+            nlayer = arg
+            k = 0
+            print(f"do not train nn layer <= {nlayer} ")
+            # self.trainable = False
+            for l in self.layers:
+                if k > nlayer:
+                    l.trainable = True
+                else:
+                    l.trainable = False
+                k += 1
 
 
 class PINNSolver():
     def __init__(self, model, pde, 
                 flosses,
                 ftests,
+                geomodel=None, 
                 wr = None,
                 xr = None, 
                 xdat = None,
                 xtest = None,
                 options=None):
         self.model = model
-        
+        self.geomodel = geomodel
         self.pde = pde
         
         self.flosses = flosses
@@ -263,60 +221,55 @@ class PINNSolver():
             sys.stdout = Logger(logfile)
         else:
             print('skip file log')
-            
+        
+        self.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.options['restore'])
+        if self.geomodel is not None:
+            self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.options['restore'])
 
-        # set up check point
-        self.checkpoint = tf.train.Checkpoint(model)
-        self.manager = tf.train.CheckpointManager(self.checkpoint, directory=os.path.join(options['model_dir'],'ckpt'), max_to_keep=4)
-        # self.manager.latest_checkpoint is None if no ckpt found
-        
-        
-        if options['restore'] is not None:
-            if isinstance(options['restore'],int):
-                # restore check point in the same directory by integer, 0 = ckpt-1
-                ckptpath = self.manager.checkpoints[options['restore']]
-            else:
-                # restore checkpoint by path
-                ckptpath = options['restore']
-            self.checkpoint.restore(ckptpath)
-            print("Restored from {}".format(ckptpath))
-        else:
-            # try to continue previous simulation
-            ckptpath = self.manager.latest_checkpoint
-            if ckptpath is not None:
-                self.checkpoint.restore(ckptpath)
-                print("Restored from {}".format(ckptpath))
-            else:
-                print("No restore")
-
-        if self.options['trainnnweight'] == False:
-            print("do not train NN")
-            # self.model.trainable = False
-            for l in self.model.layers:
-                l.trainable = False
-        
-        # set layer to be trainable
-        if isinstance(self.options['trainnnweight'],int):
-            nlayer = self.options['trainnnweight']
-            k = 0
-            print(f"do not train nn layer <= {nlayer} ")
-            # self.model.trainable = False
-            for l in self.model.layers:
-                if k > nlayer:
-                    l.trainable = True
-                else:
-                    l.trainable = False
-                k += 1
+        # may set some layer trainable = False
+        self.model.set_trainable_layer(self.options.get('trainweight'))
 
         self.model.summary()
 
+        global glob_trainable_variables
+        glob_trainable_variables+=  self.model.trainable_variables
+        glob_trainable_variables +=  self.geomodel.trainable_variables
+
+    def setup_ckpt(self, model, ckptdir = 'ckpt', restore = None):
+         # set up check point
+        checkpoint = tf.train.Checkpoint(model)
+        manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.options['model_dir'],ckptdir), max_to_keep=4)
+        # manager.latest_checkpoint is None if no ckpt found
+
+        if self.options['restore'] is not None:
+            # self.options['restore'] is a number or a path
+            if isinstance(self.options['restore'],int):
+                # restore check point in the same directory by integer, 0 = ckpt-1
+                ckptpath = manager.checkpoints[self.options['restore']]
+            else:
+                # restore checkpoint by path
+                ckptpath = self.options['restore']
+            checkpoint.restore(ckptpath)
+            print("Restored from {}".format(ckptpath))
+        else:
+            # self.options['restore'] is None
+            # try to continue previous simulation
+            ckptpath = manager.latest_checkpoint
+            if ckptpath is not None:
+                checkpoint.restore(ckptpath)
+                print("Restored from {}".format(ckptpath))
+            else:
+                # if no previous ckpt
+                print("No restore")
+
+        return manager 
 
     @tf.function
     def loss_fn(self):
         uwlosses = {}
         total = 0.0
         for key in self.weighting.weight_keys:
-            uwlosses[key] = self.flosses[key](self.model)
+            uwlosses[key] = self.flosses[key]()
             total += self.weighting.alphas[key] * uwlosses[key]
 
         uwlosses['total'] = total
@@ -326,20 +279,20 @@ class PINNSolver():
     def get_grad(self):
         """ get loss, residual, gradient
         called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
-        args: x_dat: x data pts, u_dat: value at x.
         """
-        with tf.GradientTape(persistent=True) as tape:
+        with tf.GradientTape(persistent=True, watch_accessed_variables=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
-            tape.watch(self.model.trainable_variables)
+            # tape.watch(self.model.trainable_variables)
+            tape.watch(glob_trainable_variables)
             loss = self.loss_fn()
             
-        g = tape.gradient(loss['total'], self.model.trainable_variables)
+        g = tape.gradient(loss['total'], glob_trainable_variables)
         del tape
 
         return loss, g
     
-    @tf.function
+    # @tf.function
     def get_grad_by_loss(self):
         """ get gradient by each loss
         to study gradient, look at weighted loss
@@ -348,23 +301,23 @@ class PINNSolver():
         wlosses = {}
         grad = {}
         total = 0.0
-        with tf.GradientTape(persistent=True) as tape:
+        with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
-            tape.watch(self.model.trainable_variables)
+            # tape.watch(self.model.trainable_variables)
+            tape.watch(glob_trainable_variables)
             for key in self.weighting.weight_keys:
-                wlosses[key] = self.weighting.alphas[key]* self.flosses[key](self.model)
+                wlosses[key] = self.weighting.alphas[key]* self.flosses[key]()
                 total += wlosses[key]
-        
         wlosses['total'] = total
 
         for key in self.weighting.weight_keys:
-            grad[key] = tape.gradient(wlosses[key], self.model.trainable_variables)
+            grad[key] = tape.gradient(wlosses[key], glob_trainable_variables)
         
-        grad['total'] = tape.gradient(wlosses['total'], self.model.trainable_variables)
+        grad['total'] = tape.gradient(wlosses['total'], glob_trainable_variables)
 
         del tape
-
+        
         return wlosses, grad
     
     @tf.function
@@ -386,7 +339,7 @@ class PINNSolver():
             loss, grad_theta = self.get_grad()
             
             # Perform gradient descent step
-            optimizer.apply_gradients(zip(grad_theta, self.model.trainable_variables))
+            optimizer.apply_gradients(zip(grad_theta, glob_trainable_variables))
             return loss
         
         self.current_optimizer = self.options['optimizer']
@@ -449,7 +402,7 @@ class PINNSolver():
             shape_list = []
             
             # Loop over all variables, i.e. weight matrices, bias vectors and unknown parameters
-            for v in self.model.trainable_variables:
+            for v in glob_trainable_variables:
                 shape_list.append(v.shape)
                 weight_list.extend(v.numpy().flatten())
                 
@@ -459,7 +412,7 @@ class PINNSolver():
             """Function which sets list of weights
             to variables in the model."""
             idx = 0
-            for v in self.model.trainable_variables:
+            for v in glob_trainable_variables:
                 vs = v.shape
                 
                 # Weight matrices
@@ -531,8 +484,8 @@ class PINNSolver():
             return dloss['total']
 
 
-        func = LossAndFlatGradient(self.model.trainable_variables, bfgs_loss)
-        initial_position = func.to_flat_weights(self.model.trainable_variables)
+        func = LossAndFlatGradient(glob_trainable_variables, bfgs_loss)
+        initial_position = func.to_flat_weights(glob_trainable_variables)
         
         results = tfp.optimizer.lbfgs_minimize(
             func,
@@ -554,7 +507,7 @@ class PINNSolver():
             self.gradlog = open(fpath, "w")
             self.gradlog.write('iter, ')
             for losskey in graddict:
-                for i,v in enumerate(self.model.trainable_variables):
+                for i,v in enumerate(glob_trainable_variables):
                     self.gradlog.write(losskey + '/' + v.name.removesuffix(':0') + ',')
             self.gradlog.write('\n')
         
@@ -665,6 +618,9 @@ class PINNSolver():
         if self.options.get('saveckpt'):
             save_path = self.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))
+            if self.geomodel is not None:
+                save_path = self.managergeo.save()
+            
         else:
             print("checkpoint not saved")
 
@@ -722,7 +678,11 @@ class PINNSolver():
         savedat['upredxr'] = t2n(upredxr)
 
         resxr = self.pde(self.xr, self.model)
-        savedat['resxr'] = t2n(resxr['residual'])
+        savedat['resxr'] = t2n(resxr)
+
+        if self.geomodel is not None:
+            P = self.geomodel(self.xr[:,1:])
+            savedat['ppred'] = t2n(P)
         
         
         if self.xdat is not None:

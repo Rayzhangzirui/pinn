@@ -163,7 +163,7 @@ def preprocess_option(opts):
         opts['trainx0'] = False
         opts['restore'] = None
         for wkey in opts['weights']:
-            if wkey == 'res' or wkey == 'bc' or wkey == 'dat':
+            if wkey == 'res' or wkey == 'bc' or wkey == 'dat' or wkey == 'geomse':
                 continue
             else:
                 opts['weights'][wkey] = None
