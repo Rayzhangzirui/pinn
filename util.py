@@ -174,6 +174,6 @@ def preprocess_option(opts):
         opts['file_log'] = False
         opts['N'] = 100
         opts['num_init_train'] = 500
-        opts['nn_opts']['num_hidden_unit'] = 4
-        opts['nn_opts']['num_hidden_layer'] = 2
+        opts['nn_opts']['num_neurons_per_layer'] = 4
+        opts['nn_opts']['num_hidden_layers'] = 2
         opts['lbfgs_opts']['maxfun'] = 200

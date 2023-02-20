@@ -22,7 +22,10 @@ class Gmodel:
 
         self.dataset = DataSet(opts['inv_dat_file'])
         if self.opts.get('N') is not None:
-            self.dataset.downsample(self.opts.get('N'))
+            total = self.opts.get('N') + self.opts.get('Ntest')
+            self.dataset.downsample(total)
+            self.trainidx = np.arange(self.opts['N'])
+            self.testidx = np.arange(self.opts['N'],self.opts['Ntest'])
         if opts.get('useupred') is not None:
             # use upred at xdat from other training
             tmpdataset = DataSet(opts['useupred'])
@@ -138,42 +141,44 @@ class Gmodel:
                     u_xx = tf.gradients(u_x, x)[0]
                     u_yy = tf.gradients(u_y, y)[0]
 
-                    prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+                    proliferation =  self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
 
-                    diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
-                    res = self.dataset.phiq * u_t - ( diffusion +  prolif)
-                    return res
+                    diffusion =  self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
+                    residual = self.dataset.phiq * u_t - ( self.param['rD'] * diffusion +  self.param['rRHO']* proliferation)
+                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
 
             
             
-        else:
-            @tf.function
-            def pde(x_r, f):
-                 # t,x,y normalized here
-                t = x_r[:,0:1]
-                x = x_r[:,1:2]
-                y = x_r[:,2:3]
-                z = x_r[:,3:4]
-                xr = tf.concat([t,x,y,z], axis=1)
-                u =  f(xr)
+        # else:
+            # @tf.function
+            # def pde(x_r, f):
+                # TODO: need update for 3d residual
+                # t,x,y normalized here
+                # t = x_r[:,0:1]
+                # x = x_r[:,1:2]
+                # y = x_r[:,2:3]
+                # z = x_r[:,3:4]
+                # xr = tf.concat([t,x,y,z], axis=1)
+                # u =  f(xr)
                 
-                u_t = tf.gradients(u, t)[0]
-                u_x = tf.gradients(u, x)[0]
-                u_xx = tf.gradients(u_x, x)[0]
+                # u_t = tf.gradients(u, t)[0]
+                # u_x = tf.gradients(u, x)[0]
+                # u_xx = tf.gradients(u_x, x)[0]
                 
-                u_y = tf.gradients(u, y)[0]
-                u_yy = tf.gradients(u_y, y)[0]
+                # u_y = tf.gradients(u, y)[0]
+                # u_yy = tf.gradients(u_y, y)[0]
                 
-                u_z = tf.gradients(u, z)[0]
-                u_zz = tf.gradients(u_z, z)[0]
+                # u_z = tf.gradients(u, z)[0]
+                # u_zz = tf.gradients(u_z, z)[0]
 
-                prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
-                diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy + u_zz) 
-                + self.dataset.L* (self.dataset.DxPphi * u_x + self.dataset.DyPphi * u_y + self.dataset.DzPphi * u_z))
+                # prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+                # diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy + u_zz) 
+                # + self.dataset.L* (self.dataset.DxPphi * u_x + self.dataset.DyPphi * u_y + self.dataset.DzPphi * u_z))
 
-                res = self.dataset.phiq * u_t - ( diffusion +  prolif)
-                return res
-        
+                # res = self.dataset.phiq * u_t - ( diffusion +  prolif)
+                # return res
+
+
         @tf.function
         def grad(X, nn):
             # t,x,y normalized here
@@ -197,6 +202,13 @@ class Gmodel:
         def sigmoidbinarize(x, th):
             # smooth heaviside function using a sigmoid
             return tf.math.sigmoid(20*(x-th))
+        
+
+        def double_logistic_sigmoid(x, th):
+            # smooth heaviside function using a sigmoid
+            z = x-th
+            sigma2 = 0.05
+            return 0.5 + 0.5 * tf.math.sign(z) * (1.0 - tf.exp(-z**2/sigma2))
 
         def smoothheaviside(x, th):
             # smooth heaviside function
@@ -255,6 +267,21 @@ class Gmodel:
             upred = nn(self.dataset.xdat)
             diff = self.dataset.phidat*(upred - self.dataset.u2)
             return  neg_mse(diff)
+        
+        def flike1loss(nn):
+            # minimize 1-likelihood, equation 4 Lipkova personalized ...
+            upred = nn(self.dataset.xdat)
+            alpha = sigmoidbinarize(upred, self.param['th1'])
+            P = tf.pow(alpha,self.dataset.u1)*tf.pow(1.0 - alpha, 1.0-self.dataset.u1)
+            return 1 - tf.reduce_prod(P)
+        
+        def flike2loss(nn):
+            # minimize 1-likelihood, equation 4 Lipkova personalized ...
+            upred = nn(self.dataset.xdat)
+            alpha = sigmoidbinarize(upred, self.param['th2'])
+            P = tf.pow(alpha,self.dataset.u2)*tf.pow(1.0 - alpha, 1.0-self.dataset.u2)
+            return 1 - tf.reduce_prod(P)
+
 
         def fadcmseloss(nn):
             # error of adc prediction,
@@ -362,9 +389,10 @@ class Gmodel:
         
         # L2 loss
         def fresloss(nn):
-            r = pde(self.dataset.xr, nn)
-            r2 = tf.math.square(r)
+            r = pde(self.dataset.xr[self.trainidx,:], nn)
+            r2 = tf.math.square(r['residual'])
             return tf.reduce_mean(r2)
+
         
         def fresl1loss(nn):
             r = pde(self.dataset.xr, nn)
@@ -415,8 +443,10 @@ class Gmodel:
         'dice1':fdice1loss,'dice2':fdice2loss,
         'seg1':fseg1loss,'seg2':fseg2loss,
         'seglower1':fseglower1loss,'seglower2':fseglower2loss,
+        'like1':flike1loss,'like2':flike2loss,
         'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
-        'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,'mreg':fmregloss}
+        'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,'mreg':fmregloss
+        }
         
         ftest = {'test':ftestloss} 
         

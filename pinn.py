@@ -571,6 +571,22 @@ class PINNSolver():
         
         self.gradlog.write('\n')
 
+
+    def process_pde(self, pdedict):
+        ''' ouput individual terms of the pde as .mat file. named by iteration number
+        '''
+        pdedict = {k: t2n(v) for k, v in pdedict.items()}
+        pdedict['xr'] = self.xr
+        
+        dirpath = os.path.join(self.options['model_dir'], 'pde')
+        if self.iter == 1:
+            os.makedirs(dirpath, exist_ok=True)
+
+        predfile = os.path.join(dirpath,f'pde_{self.iter}.mat')
+        savemat(predfile,pdedict)
+        return None
+
+
     def callback(self,xk=None):
         """ called after one step of iteration in bfgs and adam, 
         scipy.optimize.minimize require first arg to be parameters 
@@ -605,7 +621,10 @@ class PINNSolver():
             if self.options['gradnorm'] == True:
                 _, grad = self.get_grad_by_loss()
                 self.process_grad(grad)
-                
+            
+            if self.options['outputderiv'] == True:
+                pde = self.pde(self.xr,self.model)
+                self.process_pde(pde)
 
             # convert losses to list
             losses = [v.numpy() for _,v in self.current_loss.items()]
@@ -682,7 +701,7 @@ class PINNSolver():
             restxr = self.pde(xr, self.model)
             
             upredts.append(t2n(upredtxr))
-            rests.append(t2n(restxr))
+            rests.append(t2n(restxr['residual']))
     
         savedat['upredts'] = np.concatenate([*upredts],axis=1)
         savedat['rests'] = np.concatenate([*rests],axis=1)
@@ -703,7 +722,7 @@ class PINNSolver():
         savedat['upredxr'] = t2n(upredxr)
 
         resxr = self.pde(self.xr, self.model)
-        savedat['resxr'] = t2n(resxr)
+        savedat['resxr'] = t2n(resxr['residual'])
         
         
         if self.xdat is not None:
