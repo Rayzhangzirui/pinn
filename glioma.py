@@ -51,16 +51,17 @@ class Gmodel:
             opts['RHO0'] = self.dataset.rRHOe
         
         
+        self.geomodel = None
         # model for probability
         # input is spatial coordiante, output Pwm, Pgm, phi
-        
-        self.geomodel = tf.keras.Sequential(
-                            [
-                                tf.keras.layers.Dense(32, activation="tanh", input_shape=(2,)),
-                                tf.keras.layers.Dense(32, activation="tanh"),
-                                tf.keras.layers.Dense(3, activation="sigmoid"),
-                            ]
-                        )
+        if opts['usegeo'] is True:
+            self.geomodel = tf.keras.Sequential(
+                                [
+                                    tf.keras.layers.Dense(32, activation="tanh", input_shape=(self.xdim,)),
+                                    tf.keras.layers.Dense(32, activation="tanh"),
+                                    tf.keras.layers.Dense(3, activation="sigmoid"),
+                                ]
+                            )
 
         self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
@@ -95,64 +96,33 @@ class Gmodel:
             def ot(x,u):
                 return u* x[:, 0:1]+ ic(x)
 
-        if self.xdim == 2:
-            if self.opts.get('exactres') == True:
-                exit();
-                # NEED update residual
-                # print('use exact residual')
-                # @tf.function
-                # def pde(x_r, f):
-                #     t = x_r[:,0:1]
-                #     x = x_r[:,1:2]
-                #     y = x_r[:,2:3]
-                #     xr = tf.concat([t,x,y], axis=1)
+        if self.xdim == 2 and self.geomodel is None:
+                # geometry is provided by data
+                @tf.function
+                def pde(xr, nn):
+                    t = xr[:,0:1]
+                    x = xr[:,1:2]
+                    y = xr[:,2:3]
+                    xr = tf.concat([t,x,y], axis=1)
                     
-                #     r = tf.sqrt((x*self.dataset.L)**2+(y*self.dataset.L)**2)
-                #     phi = 0.5 + 0.5*tf.tanh((50.0 - r)/1.0)
-                #     P = 0.9*( 0.5 + 0.5*tf.tanh((20.0 - r)/1.0)) + 0.1
+                    u =  nn(xr)
+                    
+                    u_t = tf.gradients(u, t)[0]
 
-                #     u =  f(xr)
+                    u_x = tf.gradients(u, x)[0]
+                    u_y = tf.gradients(u, y)[0]
                     
-                #     u_t = tf.gradients(u, t)[0]
+                    u_xx = tf.gradients(u_x, x)[0]
+                    u_yy = tf.gradients(u_y, y)[0]
 
-                #     u_x = tf.gradients(u, x)[0]
-                #     u_y = tf.gradients(u, y)[0]
-                    
-                #     u_xx = tf.gradients( u_x, x)[0]
-                #     u_yy = tf.gradients( u_y, y)[0]
-                    
-                #     DxPphi = tf.gradients( P * phi, x)[0]
-                #     DyPphi = tf.gradients( P * phi, y)[0]
+                    proliferation = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
 
-                #     diffusion =  self.param['rD'] * self.dataset.DW *( P * phi * (u_xx + u_yy) + DxPphi * u_x + DyPphi * u_y)
-                    
-                #     prolif = self.param['rRHO'] * self.dataset.RHO * phi * u * (1-u)
+                    diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
+                    residual = self.dataset.phiq * u_t - ( diffusion +  proliferation)
+                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
 
-                #     res = phi * u_t - ( diffusion + prolif)
-                #     return res
-            else:
-                # @tf.function
-                # def pde(xr, nn):
-                #     t = xr[:,0:1]
-                #     x = xr[:,1:2]
-                #     y = xr[:,2:3]
-                #     xr = tf.concat([t,x,y], axis=1)
-                    
-                #     u =  nn(xr)
-                    
-                #     u_t = tf.gradients(u, t)[0]
-
-                #     u_x = tf.gradients(u, x)[0]
-                #     u_y = tf.gradients(u, y)[0]
-                    
-                #     u_xx = tf.gradients(u_x, x)[0]
-                #     u_yy = tf.gradients(u_y, y)[0]
-
-                #     prolif = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
-
-                #     diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
-                #     res = self.dataset.phiq * u_t - ( diffusion +  prolif)
-                #     return res
+        if self.xdim == 2 and self.geomodel is not None:
+            # geometry is represented by neural net
                 @tf.function
                 def pde(xr, nn):
                     t = xr[:,0:1]

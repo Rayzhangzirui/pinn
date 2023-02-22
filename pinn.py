@@ -233,7 +233,8 @@ class PINNSolver():
 
         global glob_trainable_variables
         glob_trainable_variables+=  self.model.trainable_variables
-        glob_trainable_variables +=  self.geomodel.trainable_variables
+        if self.geomodel is not None:
+            glob_trainable_variables +=  self.geomodel.trainable_variables
 
     def setup_ckpt(self, model, ckptdir = 'ckpt', restore = None):
          # set up check point
