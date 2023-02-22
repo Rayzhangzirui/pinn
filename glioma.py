@@ -61,12 +61,10 @@ class Gmodel:
                                 tf.keras.layers.Dense(3, activation="sigmoid"),
                             ]
                         )
-        # self.geomodel.build(input_shape=(2,))
-        
-
 
         self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
         'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
+        # 'factor': tf.Variable(opts['r0'], trainable=opts.get('trainfactor'),dtype = DTYPE,name="r"),
         'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
         'm': tf.Variable(opts['m0'], trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
         'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
@@ -164,8 +162,7 @@ class Gmodel:
                     xxr = tf.concat([x,y], axis=1)
 
                     geo = self.geomodel(xxr)
-                    # Pwm + Pgm/factor
-                    P = geo[:,0:1] + geo[:,1:2]/self.dataset.factor
+                    P = geo[:,0:1] + geo[:,1:2]/self.dataset.factor # Pwm + Pgm/factor
                     phi = geo[:,2:3]
 
                     u =  nn(xr)
@@ -350,11 +347,17 @@ class Gmodel:
             return loss
         
         
-        def fmregloss(nn):
+        def fmregloss():
             # 0 loss within [a,b], qudratic outside
             a = 0.8
             b = 1.2
             return tf.nn.relu(self.param['m']-b)**2 + tf.nn.relu(a-self.param['m'])**2
+        
+        def frDregloss():
+            # 0 loss within [a,b], qudratic outside
+            a = 0.1
+            b = 1.0
+            return tf.nn.relu(self.param['rD']-b)**2 + tf.nn.relu(a-self.param['rD'])**2
 
 
         def area(upred,th):
@@ -423,14 +426,14 @@ class Gmodel:
             return loss
         
         # L2 loss
-        def fresloss(nn):
-            r = pde(self.dataset.xr[self.trainidx,:], nn)
+        def fresloss():
+            r = pde(self.dataset.xr[self.trainidx,:], self.model)
             r2 = tf.math.square(r['residual'])
             return tf.reduce_mean(r2)
         
         def fresl1loss():
-            r = pde(self.dataset.xr, self.model)
-            r2 = tf.math.abs(r) # L1 norm
+            r = pde(self.dataset.xr[self.trainidx,:], self.model)
+            r2 = tf.math.abs(r['residual']) # L1 norm
             return tf.reduce_mean(r2)
         
         HUBER_DELTA = 0.001
@@ -486,7 +489,8 @@ class Gmodel:
         'seglower1':fseglower1loss,'seglower2':fseglower2loss,
         'like1':flike1loss,'like2':flike2loss,
         'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
-        'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,'mreg':fmregloss,
+        'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,
+        'mreg':fmregloss, 'rDreg':frDregloss,
         'geomse':geomseloss}
         
         ftest = {'test':ftestloss} 

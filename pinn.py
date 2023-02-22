@@ -248,7 +248,7 @@ class PINNSolver():
                 ckptpath = manager.checkpoints[self.options['restore']]
             else:
                 # restore checkpoint by path
-                ckptpath = self.options['restore']
+                ckptpath = os.path.join(self.options['restore'],ckptdir,'ckpt-2')
             checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
         else:
@@ -636,6 +636,7 @@ class PINNSolver():
         fmt = '%d'+' %.6e'*(col-1) #int for iter, else float
         np.savetxt(fpath, hist, fmt, header = self.header, comments = '')
         print(f'save training hist to {fpath}')
+    
 
     def predtx(self, suffix, tend = 1.0, n = 21):
         # evalute at residual points. not data points. 
@@ -678,7 +679,7 @@ class PINNSolver():
         savedat['upredxr'] = t2n(upredxr)
 
         resxr = self.pde(self.xr, self.model)
-        savedat['resxr'] = t2n(resxr)
+        savedat['resxr'] = t2n(resxr['residual'])
 
         if self.geomodel is not None:
             P = self.geomodel(self.xr[:,1:])

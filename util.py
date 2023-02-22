@@ -161,7 +161,6 @@ def preprocess_option(opts):
         opts['trainM'] = False
         opts['trainm'] = False
         opts['trainx0'] = False
-        opts['restore'] = None
         for wkey in opts['weights']:
             if wkey == 'res' or wkey == 'bc' or wkey == 'dat' or wkey == 'geomse':
                 continue
@@ -170,7 +169,6 @@ def preprocess_option(opts):
     
     # quick test
     if opts['smalltest'] == True:
-        opts['restore'] = None
         opts['file_log'] = False
         opts['N'] = 100
         opts['num_init_train'] = 500
