@@ -34,6 +34,7 @@ class Weighting(object):
         self.current_iter = 0
         self.num_losses = 0
         self.weight_keys = []
+        self.skip_weights = {'mreg'} #weights to skip
         
         # initialization
         self.alphas = {}
@@ -75,6 +76,9 @@ class Weighting(object):
         # initially keep constant, then start changing the weight
         if self.current_iter > self.stream.window_size:
             for i,k in enumerate(self.weight_keys):
+                if k in self.skip_weights:
+                    # skip some weights,
+                    continue
                 if i != j:
                     self.alphas[k] = Lave[j]/ Lave[i] * self.factor # weight of res/ weight of loss
         self.current_iter +=1
