@@ -205,7 +205,7 @@ class Gmodel:
         
         def sigmoidbinarize(x, th):
             # smooth heaviside function using a sigmoid
-            return tf.math.sigmoid(20*(x-th))
+            return tf.math.sigmoid(50*(x-th))
         
 
         def double_logistic_sigmoid(x, th):
@@ -233,42 +233,43 @@ class Gmodel:
         # maximize dice, minimize 1-dice
         def fdice1loss(): 
             upred = self.model(self.dataset.xdat)
-            pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
+            pu1 = sigmoidbinarize(upred, self.param['th1'])
             d1 = dice(self.dataset.u1, pu1)
             return 1.0-d1
 
         def fdice2loss(): 
             upred = self.model(self.dataset.xdat)
-            pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
+            pu2 = sigmoidbinarize(upred, self.param['th2'])
             d2 = dice(self.dataset.u2, pu2)
             return 1.0-d2
         
         # segmentation mse loss, mse of threholded u and data (patient geometry)
         def fseg1loss(): 
             upred = self.model(self.dataset.xdat)
-            pu1 = sigmoidbinarize(upred, self.dataset.seg[0,0])
-            # pu1 = smoothheaviside(upred, self.dataset.seg[0,0])
+            pu1 = sigmoidbinarize(upred, self.param['th1'])
+            # pu1 = smoothheaviside(upred, self.param['th1'])
             return tf.reduce_mean((self.dataset.phidat*(pu1-self.dataset.u1))**2)
 
         def fseg2loss(): 
             upred = self.model(self.dataset.xdat)
-            pu2 = sigmoidbinarize(upred, self.dataset.seg[0,1])
-            # pu2 = smoothheaviside(upred, self.dataset.seg[0,1])
+            pu2 = sigmoidbinarize(upred, self.param['th2'])
+            # pu2 = smoothheaviside(upred, self.param['th2'])
             return tf.reduce_mean((self.dataset.phidat*(pu2-self.dataset.u2))**2)
 
         def neg_mse(x):
-            return tf.reduce_mean(tf.where(x > 0, 0.0, 0.5 * x**2))
+            # if x<0, 0, otherwise 0.5x^2
+            return tf.reduce_mean(0.5*tf.nn.relu(x)**2)
 
         def fseglower1loss(): 
             # if upred>u1, no loss, otherwise, mse loss
             upred = self.model(self.dataset.xdat)
-            diff = self.dataset.phidat*(upred - self.dataset.u1)
+            diff = self.dataset.phidat*(self.dataset.u1 * self.param['th1'] - upred)
             return  neg_mse(diff)
 
         def fseglower2loss(): 
             # if upred>u1, no loss, otherwise, mse loss
             upred = self.model(self.dataset.xdat)
-            diff = self.dataset.phidat*(upred - self.dataset.u2)
+            diff = self.dataset.phidat*(self.dataset.u2 * self.param['th2'] - upred)
             return  neg_mse(diff)
 
         def flike1loss():
@@ -339,12 +340,12 @@ class Gmodel:
 
         def farea1loss():
             upred = self.model(self.dataset.xdat)
-            a = area(upred, self.dataset.seg[0,0])
+            a = area(upred, self.param['th1'])
             return (a - self.dataset.area[0,0])**2
         
         def farea2loss():
             upred = self.model(self.dataset.xdat)
-            a = area(upred, self.dataset.seg[0,1])
+            a = area(upred, self.param['th2'])
             return (a - self.dataset.area[0,1])**2
 
         # loss function of data, difference of phi * u
@@ -376,8 +377,10 @@ class Gmodel:
         def fplfcorloss():
             # correlation of proliferation 4u(1-u)
             upred = self.model(self.dataset.xdat)
-            prolif = 4 * upred * (1-upred)
-            loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+            # prolif = 4 * upred * (1-upred)
+            # loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+
+            loss =  - tfp.stats.correlation(self.dataset.petdat*self.dataset.phidat, upred*self.dataset.phidat)
             loss = tf.squeeze(loss)
             return loss
         
