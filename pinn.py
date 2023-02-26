@@ -292,6 +292,36 @@ class PINNSolver():
 
         return loss, g
     
+
+    @tf.function
+    def get_grad_separate(self):
+        """ Apply residual grad to all trainable. Apply data loss grad to last layer
+        """
+        wlosses = {}
+        grad = {}
+        total = 0.0
+        with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
+            tape.watch(glob_trainable_variables)
+            for key in self.weighting.weight_keys:
+                wlosses[key] = self.weighting.alphas[key]* self.flosses[key]()
+                total += wlosses[key]
+        wlosses['total'] = total
+
+        grad = tape.gradient(wlosses, glob_trainable_variables) # return a dictionary of gradient
+        
+
+        for key in self.weighting.weight_keys:
+            if key.startswith('res'):
+                continue
+            grad[key] += tape.gradient(wlosses[key], glob_last_layer)
+        
+        
+        
+
+        del tape
+        
+        return wlosses, grad
+    
     # @tf.function
     def get_grad_by_loss(self):
         """ get gradient by each loss
