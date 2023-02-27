@@ -318,18 +318,15 @@ class Gmodel:
             return loss
         
         
-        def fmregloss():
-            # 0 loss within [a,b], qudratic outside
-            a = 0.8
-            b = 1.2
-            return tf.nn.relu(self.param['m']-b)**2 + tf.nn.relu(a-self.param['m'])**2
+        # def fmregloss():
+        #     # 0 loss within [a,b], qudratic outside
+        #     a = 0.8
+        #     b = 1.2
+        #     return tf.nn.relu(self.param['m']-b)**2 + tf.nn.relu(a-self.param['m'])**2
         
-        def frDregloss():
-            # 0 loss within [a,b], qudratic outside
-            a = 0.1
-            b = 1.0
-            return tf.nn.relu(self.param['rD']-b)**2 + tf.nn.relu(a-self.param['rD'])**2
-
+        mregloss = lambda: mse(self.param['m'], self.opts['m0'])
+        rDregloss = lambda: mse(self.param['rD'], self.opts['D0'])
+        rRHOregloss = lambda: mse(self.param['rRHO'], self.opts['RHO0'])
 
         def area(upred,th):
             #estimate area above some threshold, assuming the points are uniformly distributed
@@ -463,7 +460,7 @@ class Gmodel:
         'like1':flike1loss,'like2':flike2loss,
         'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
         'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,
-        'mreg':fmregloss, 'rDreg':frDregloss,
+        'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss,
         'geomse':geomseloss}
         
         ftest = {'test':ftestloss} 
