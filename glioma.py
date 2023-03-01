@@ -205,7 +205,7 @@ class Gmodel:
         
         def sigmoidbinarize(x, th):
             # smooth heaviside function using a sigmoid
-            return tf.math.sigmoid(50*(x-th))
+            return tf.math.sigmoid(20*(x-th))
         
 
         def double_logistic_sigmoid(x, th):
@@ -272,19 +272,25 @@ class Gmodel:
             diff = self.dataset.phidat*(self.dataset.u2 * self.param['th2'] - upred)
             return  neg_mse(diff)
 
+        def loglikely(alpha, y):
+            # equation 4, Jana 
+            # negative log-likelihood
+            P = tf.pow(alpha, y)*tf.pow(1 - alpha, 1.0 - y)
+            return - tf.reduce_mean(tf.math.log(P))
+
         def flike1loss():
             # minimize 1-likelihood, equation 4 Lipkova personalized ...
-            upred = self.model(self.dataset.xdat)
+            upred = self.model(self.dataset.xdat) *self.dataset.phidat
+            # alpha = double_logistic_sigmoid(upred, self.param['th1'])
             alpha = sigmoidbinarize(upred, self.param['th1'])
-            P = tf.pow(alpha,self.dataset.u1)*tf.pow(1.0 - alpha, 1.0-self.dataset.u1)
-            return 1 - tf.reduce_prod(P)
+            return loglikely(alpha, self.dataset.u1)
         
         def flike2loss():
             # minimize 1-likelihood, equation 4 Lipkova personalized ...
-            upred = self.model(self.dataset.xdat)
+            upred = self.model(self.dataset.xdat) *self.dataset.phidat
+            # alpha = double_logistic_sigmoid(upred, self.param['th2'])
             alpha = sigmoidbinarize(upred, self.param['th2'])
-            P = tf.pow(alpha,self.dataset.u2)*tf.pow(1.0 - alpha, 1.0-self.dataset.u2)
-            return 1 - tf.reduce_prod(P)
+            return loglikely(alpha, self.dataset.u2)
 
         def fadcmseloss():
             # error of adc prediction,
@@ -317,16 +323,18 @@ class Gmodel:
             loss = tf.squeeze(loss)
             return loss
         
+
+        def relusqr(p, a, b):
+            # square of relu function
+            return tf.nn.relu(a-p)**2 + tf.nn.relu(p-b)**2
         
-        # def fmregloss():
-        #     # 0 loss within [a,b], qudratic outside
-        #     a = 0.8
-        #     b = 1.2
-        #     return tf.nn.relu(self.param['m']-b)**2 + tf.nn.relu(a-self.param['m'])**2
-        
-        mregloss = lambda: mse(self.param['m'], self.opts['m0'])
-        rDregloss = lambda: mse(self.param['rD'], self.opts['D0'])
-        rRHOregloss = lambda: mse(self.param['rRHO'], self.opts['RHO0'])
+        # mregloss = lambda: mse(self.param['m'], self.opts['m0'])
+        # rDregloss = lambda: mse(self.param['rD'], self.opts['D0'])
+        # rRHOregloss = lambda: mse(self.param['rRHO'], self.opts['RHO0'])
+
+        mregloss = lambda: relusqr(self.param['m'], 0.9, 2.0)
+        rDregloss = lambda: relusqr(self.param['rD'], self.opts['D0'] * 0.1, self.opts['D0'] * 1.9)
+        rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['RHO0'] * 0.1, self.opts['RHO0'] * 1.9)
 
         def area(upred,th):
             #estimate area above some threshold, assuming the points are uniformly distributed

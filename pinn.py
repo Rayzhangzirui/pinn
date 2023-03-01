@@ -242,7 +242,8 @@ class PINNSolver():
         manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.options['model_dir'],ckptdir), max_to_keep=4)
         # manager.latest_checkpoint is None if no ckpt found
 
-        if self.options['restore'] is not None:
+        if self.options['restore'] is not None and (self.options['restore']):
+            # not None and not empty
             # self.options['restore'] is a number or a path
             if isinstance(self.options['restore'],int):
                 # restore check point in the same directory by integer, 0 = ckpt-1
@@ -311,14 +312,13 @@ class PINNSolver():
                 wlosses[key] = self.weighting.alphas[key]* self.flosses[key]()
                 total += wlosses[key]
         wlosses['total'] = total
-
+        
         for key in self.weighting.weight_keys:
             grad[key] = tape.gradient(wlosses[key], glob_trainable_variables)
-        
+                
         grad['total'] = tape.gradient(wlosses['total'], glob_trainable_variables)
 
         del tape
-        
         return wlosses, grad
     
     @tf.function
