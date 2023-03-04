@@ -34,7 +34,7 @@ class Weighting(object):
         self.current_iter = 0
         self.num_losses = 0
         self.weight_keys = []
-        self.skip_weights = {'mreg','rDreg','rRHOreg'} #weights to skip
+        self.skip_weights = {'mreg','rDreg','rRHOreg','Areg'} #weights to skip
         
         # initialization
         self.alphas = {}

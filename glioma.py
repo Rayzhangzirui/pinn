@@ -32,6 +32,12 @@ class Gmodel:
             self.dataset.xdat = np.copy(tmpdataset.xdat)
             self.dataset.udat = np.copy(tmpdataset.upredxdat)
         
+        if opts.get('datmask') is not None:
+            # mask for data loss
+            self.mask = getattr(self.dataset, opts.get('datmask'))
+            print(f"use {opts.get('datmask')} as mask")
+        else:
+            self.mask = 1.0
 
         self.dim = self.dataset.dim
         self.xdim = self.dataset.xdim
@@ -68,6 +74,7 @@ class Gmodel:
         # 'factor': tf.Variable(opts['r0'], trainable=opts.get('trainfactor'),dtype = DTYPE,name="r"),
         'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
         'm': tf.Variable(opts['m0'], trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
+        'A': tf.Variable(opts['A0'], trainable=opts.get('trainA'),dtype = DTYPE,name="A"),
         'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
         'y0': tf.Variable(opts['y0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
         'th1': tf.Variable(opts['th1'], trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
@@ -256,7 +263,7 @@ class Gmodel:
             # pu2 = smoothheaviside(upred, self.param['th2'])
             return tf.reduce_mean((self.dataset.phidat*(pu2-self.dataset.u2))**2)
 
-        def neg_mse(x):
+        def relumse(x):
             # if x<0, 0, otherwise 0.5x^2
             return tf.reduce_mean(0.5*tf.nn.relu(x)**2)
 
@@ -264,13 +271,13 @@ class Gmodel:
             # if upred>u1, no loss, otherwise, mse loss
             upred = self.model(self.dataset.xdat)
             diff = self.dataset.phidat*(self.dataset.u1 * self.param['th1'] - upred)
-            return  neg_mse(diff)
+            return  relumse(diff)
 
         def fseglower2loss(): 
             # if upred>u1, no loss, otherwise, mse loss
             upred = self.model(self.dataset.xdat)
             diff = self.dataset.phidat*(self.dataset.u2 * self.param['th2'] - upred)
-            return  neg_mse(diff)
+            return  relumse(diff)
 
         def loglikely(alpha, y):
             # equation 4, Jana 
@@ -302,13 +309,10 @@ class Gmodel:
         
         def fpetmseloss():
             # assuming mu ~ pet
-            upred = self.model(self.dataset.xdat)
-            predpet = self.param['m']* upred
-            diff = (predpet - self.dataset.petdat)
-            return tf.reduce_mean((diff*self.dataset.phidat)**2)
+            phiupred = self.model(self.dataset.xdat) * self.dataset.phidat 
+            predpet = self.param['m']* phiupred - self.param['A']
+            return mse(predpet, self.dataset.petdat, w = self.mask)
         
-        
-
         def fadcnlmseloss():
             # adc nonlinear relation: a = 1 / (1 + 4 m u)
             upred = self.model(self.dataset.xdat)
@@ -332,9 +336,10 @@ class Gmodel:
         # rDregloss = lambda: mse(self.param['rD'], self.opts['D0'])
         # rRHOregloss = lambda: mse(self.param['rRHO'], self.opts['RHO0'])
 
-        mregloss = lambda: relusqr(self.param['m'], 0.9, 2.0)
+        mregloss = lambda: relusqr(self.param['m'], self.opts['mrange'][0], self.opts['mrange'][1])
         rDregloss = lambda: relusqr(self.param['rD'], self.opts['D0'] * 0.1, self.opts['D0'] * 1.9)
         rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['RHO0'] * 0.1, self.opts['RHO0'] * 1.9)
+        Aregloss = lambda: relusqr(self.param['A'], 0.0, 1.0)
 
         def area(upred,th):
             #estimate area above some threshold, assuming the points are uniformly distributed
@@ -344,13 +349,13 @@ class Gmodel:
             return tf.reduce_mean(uth)
 
         def farea1loss():
-            upred = self.model(self.dataset.xdat)
-            a = area(upred, self.param['th1'])
+            phiupred = self.model(self.dataset.xdat) *self.dataset.phidat
+            a = area(phiupred, self.param['th1'])
             return (a - self.dataset.area[0,0])**2
         
         def farea2loss():
-            upred = self.model(self.dataset.xdat)
-            a = area(upred, self.param['th2'])
+            phiupred = self.model(self.dataset.xdat) *self.dataset.phidat
+            a = area(phiupred, self.param['th2'])
             return (a - self.dataset.area[0,1])**2
 
         # loss function of data, difference of phi * u
@@ -440,8 +445,8 @@ class Gmodel:
             r = pde(self.dataset.xr0, self.model)
             return tf.reduce_mean(r**2)
         
-        def mse(x,y):
-            return tf.reduce_mean((x-y)**2)
+        def mse(x,y,w=1.0):
+            return tf.reduce_mean((x-y)**2 *w)
 
         def geomseloss():
             P = self.geomodel(self.dataset.xr[:,1:self.xdim+1])
@@ -468,7 +473,7 @@ class Gmodel:
         'like1':flike1loss,'like2':flike2loss,
         'adcmse':fadcmseloss, 'adcnlmse':fadcnlmseloss, 
         'plfmse':fplfmseloss, 'plfcor':fplfcorloss,'petmse':fpetmseloss,
-        'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss,
+        'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
         'geomse':geomseloss}
         
         ftest = {'test':ftestloss} 

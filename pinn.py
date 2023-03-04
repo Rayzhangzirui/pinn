@@ -227,7 +227,7 @@ class PINNSolver():
             self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.options['restore'])
 
         # may set some layer trainable = False
-        self.model.set_trainable_layer(self.options.get('trainweight'))
+        self.model.set_trainable_layer(self.options.get('trainnnweight'))
 
         self.model.summary()
 
@@ -250,7 +250,10 @@ class PINNSolver():
                 ckptpath = manager.checkpoints[self.options['restore']]
             else:
                 # restore checkpoint by path
-                ckptpath = os.path.join(self.options['restore'],ckptdir,'ckpt-2')
+                if "/ckpt" in self.options['restore']:
+                    ckptpath = os.path.join(self.options['restore'])
+                else:
+                    ckptpath = os.path.join(self.options['restore'],ckptdir,'ckpt-2')
             checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
         else:
