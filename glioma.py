@@ -81,11 +81,17 @@ class Gmodel:
         'th2': tf.Variable(opts['th2'], trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
         }
 
+        # initial
         self.ix = [[self.param['x0'],self.param['y0']]]
 
         # for computing residual at initial time
-        self.dataset.xr0 = np.copy(self.dataset.xr)
-        self.dataset.xr0[:,0] = 0.0
+        # self.dataset.xrt0 = np.copy(self.dataset.xr)
+        # self.dataset.xrt0[:,0] = 0.0
+
+        # for computing residual at final time
+        self.dataset.xrt1 = np.copy(self.dataset.xr)
+        self.dataset.xrt1[:,0] = 1.0
+        
 
         def ic(x):
             L = self.dataset.L
@@ -416,8 +422,8 @@ class Gmodel:
         
         def fresl1loss():
             r = pde(self.dataset.xr[self.trainidx,:], self.model)
-            r2 = tf.math.abs(r['residual']) # L1 norm
-            return tf.reduce_mean(r2)
+            rl1 = tf.math.abs(r['residual']) # L1 norm
+            return tf.reduce_mean(rl1)
         
         HUBER_DELTA = 0.001
         def huberloss(y):
@@ -443,7 +449,12 @@ class Gmodel:
         def frest0loss():
             # compute residual at time 0
             r = pde(self.dataset.xr0, self.model)
-            return tf.reduce_mean(r**2)
+            return tf.reduce_mean(r['residual']**2)
+        
+        def fresl1t1loss():
+            # compute residual at time 1
+            r = pde(self.dataset.xrt1[self.trainidx,:], self.model)
+            return tf.reduce_mean(tf.math.abs(r['residual']))
         
         def mse(x,y,w=1.0):
             return tf.reduce_mean((x-y)**2 *w)
@@ -464,7 +475,7 @@ class Gmodel:
 
 
         # flosses = {'res': fresloss, 'gradcor': fgradcorloss ,'bc':bcloss, 'cor':fplfcorloss, 'dat': fdatloss, 'dice1':fdice1loss,'dice2':fdice2loss,'area1':farea1loss,'area2':farea2loss, 'pmse': fplfmseloss, 'adc':fadcmseloss}
-        flosses = {'res': fresloss, 'reshuber': freshuberloss, 'resl1': fresl1loss,
+        flosses = {'res': fresloss, 'reshuber': freshuberloss, 'resl1': fresl1loss, 'resl1t1': fresl1t1loss,
          'bc':bcloss, 'dat': fdatloss,'adccor': fadccorloss,'resdt':fresdtloss,'rest0':frest0loss,
         'area1':farea1loss,'area2':farea2loss,
         'dice1':fdice1loss,'dice2':fdice2loss,
