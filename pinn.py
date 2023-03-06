@@ -377,7 +377,7 @@ class PINNSolver():
                 no_improvement_counter = 0 # reset counter
             else:
                 no_improvement_counter+=1
-                if patience is not None and no_improvement_counter == patience:
+                if no_improvement_counter == patience:
                     print('No improvement for {} interation'.format(patience))
                     break
         end = time()
@@ -386,6 +386,9 @@ class PINNSolver():
         self.info['tfadamtime'] = (end-start)
         print('adam It:{:05d}, loss {:10.4e}, time {}'.format(i, loss['total'].numpy(), end-start))
         
+        self.weighting.active = False
+        print('turn off dynamic weighting after Adam')
+
         self.callback_train_end()
 
 

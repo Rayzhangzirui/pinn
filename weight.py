@@ -24,20 +24,23 @@ class Weighting(object):
     def __init__(self, 
                 weights0,
                 method = 'constant',
-                param = None,
+                window = 100,
+                beta = 0.9, 
                 whichloss = 'res',
                 factor = 1.0,
                 ):
         ''' weights0 = initial weights
         '''
         self.method = method
-        self.param = param
+        self.window = window
+        self.beta = beta
         self.whichloss = whichloss
         self.factor = factor
         self.current_iter = 0
         self.num_losses = 0
         self.weight_keys = []
         self.skip_weights = {'mreg','rDreg','rRHOreg','Areg'} #weights to skip
+        self.active = True
         
         # initialization, alpha is dict of loss-weight
         self.alphas = {}
@@ -55,13 +58,18 @@ class Weighting(object):
             self.running_std_l = None
         
 
-        if self.method == 'trackres':
-            print(f'moving avaerage with windown{self.param}')
-            self.stream = StreamingMovingAverage(self.param)
+        if self.method == 'trackres' or self.method == 'start0':
+            print(f'moving avaerage with windown{self.window}')
+            self.stream = StreamingMovingAverage(self.window)
 
 
     def update_weights(self, unweighted_loss):
         # different ways to update loss
+        
+        if self.active == False:
+            # do not update
+            return
+
         if self.method == 'cov' or self.method == 'decay':
             self.cov_update(unweighted_loss)
         
@@ -99,14 +107,17 @@ class Weighting(object):
         '''
         # m_i = 0, l_i = beta m(i-1) + (1-beta) l_i
         L = np.array([dict_unw_loss[k] for k in self.weight_keys])
-        beta = self.param
+        Lave = self.stream.process(L)
         itrack = self.weight_keys.index(self.whichloss) #index of loss being tracked, usually residual loss
+
+        
+
         for i,k in enumerate(self.weight_keys):
             if k in self.skip_weights:
                 # skip some weights,
                 continue
             if i != itrack:
-                self.alphas[k] = beta * self.alphas[k] + (1-beta) * L[itrack]/ L[i]
+                self.alphas[k] = self.beta * self.alphas[k] + (1-self.beta) * Lave[itrack]/ Lave[i]
         
 
         
@@ -152,7 +163,7 @@ class Weighting(object):
             mean_param = 0.0
         elif self.current_iter > 0 and self.method == 'decay':
             # mean_param = 1-1/t, e.g. mean_param = 0.9 same as t=10
-            mean_param = self.param
+            mean_param = self.beta
         else:
             mean_param = (1. - 1 / (self.current_iter + 1))
 
