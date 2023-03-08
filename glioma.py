@@ -77,12 +77,13 @@ class Gmodel:
         'A': tf.Variable(opts['A0'], trainable=opts.get('trainA'),dtype = DTYPE,name="A"),
         'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
         'y0': tf.Variable(opts['y0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
+        'z0': tf.Variable(opts['z0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="z0"),
         'th1': tf.Variable(opts['th1'], trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
         'th2': tf.Variable(opts['th2'], trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
         }
 
         # initial
-        self.ix = [[self.param['x0'],self.param['y0']]]
+        self.ix = [[self.param['x0'],self.param['y0'],self.param['z0']]]
 
         # for computing residual at initial time
         # self.dataset.xrt0 = np.copy(self.dataset.xr)
@@ -133,6 +134,37 @@ class Gmodel:
                     diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
                     residual = self.dataset.phiq * u_t - ( diffusion +  proliferation)
                     return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
+        
+        if self.xdim == 3 and self.geomodel is None:
+            @tf.function
+            def pde(x_r, nn):
+                
+                t = x_r[:,0:1]
+                x = x_r[:,1:2]
+                y = x_r[:,2:3]
+                z = x_r[:,3:4]
+                xr = tf.concat([t,x,y,z], axis=1)
+                u = nn(xr)
+                
+                u_t = tf.gradients(u, t)[0]
+                u_x = tf.gradients(u, x)[0]
+                u_xx = tf.gradients(u_x, x)[0]
+                
+                u_y = tf.gradients(u, y)[0]
+                u_yy = tf.gradients(u_y, y)[0]
+                
+                u_z = tf.gradients(u, z)[0]
+                u_zz = tf.gradients(u_z, z)[0]
+
+                proliferation = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+
+                diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy + u_zz) + 
+                                                                  self.dataset.L* self.dataset.DxPphi * u_x +
+                                                                    self.dataset.L* self.dataset.DyPphi * u_y +
+                                                                    self.dataset.L* self.dataset.DzPphi * u_z )
+                
+                residual = self.dataset.phiq * u_t - ( diffusion +  proliferation)
+                return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
 
         if self.xdim == 2 and self.geomodel is not None:
             # geometry is represented by neural net

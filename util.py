@@ -162,6 +162,8 @@ def preprocess_option(opts):
         opts['trainm'] = False
         opts['trainA'] = False
         opts['trainx0'] = False
+        opts['trainth1'] = False
+        opts['trainth2'] = False
         for wkey in opts['weights']:
             if wkey == 'res' or wkey == 'bc' or wkey == 'dat' or wkey == 'geomse':
                 continue
