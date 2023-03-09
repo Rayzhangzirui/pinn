@@ -38,7 +38,7 @@ class Weighting(object):
         self.factor = factor
         self.current_iter = 0
         self.num_losses = 0
-        self.weight_keys = []
+        self.weight_keys = [] # list of active losses
         self.skip_weights = {'mreg','rDreg','rRHOreg','Areg'} #weights to skip
         self.active = True
         

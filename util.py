@@ -179,8 +179,19 @@ def preprocess_option(opts):
     # quick test
     if opts['smalltest'] == True:
         opts['file_log'] = False
-        opts['N'] = 100
         opts['num_init_train'] = 500
         opts['nn_opts']['num_neurons_per_layer'] = 4
         opts['nn_opts']['num_hidden_layers'] = 2
         opts['lbfgs_opts']['maxfun'] = 200
+    
+    if opts['synthetic'] == True:
+        opts['trainD'] = True
+        opts['trainRHO'] = True
+        opts['trainM'] = False
+        opts['trainm'] = False
+        opts['trainA'] = False
+        opts['trainx0'] = False
+        opts['trainth1'] = False
+        opts['trainth2'] = False
+            
+

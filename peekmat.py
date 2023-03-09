@@ -6,9 +6,11 @@ import numpy as np
 
 if __name__ == "__main__":
     matdat = loadmat(sys.argv[1])
+    detail = eval(sys.argv[2])
     for k,v in matdat.items():
         if isinstance(v, np.ndarray):
             print(f'{k} {v.shape}')
-            print(f'{v}')
+            if detail:
+                print(f'{v}')
 
     
