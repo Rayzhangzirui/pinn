@@ -5,6 +5,7 @@ import tensorflow as tf
 from time import time
 from scipy.io import loadmat
 import collections
+import json
 
 # decorator for timing
 def timer(func):
@@ -152,6 +153,11 @@ def tensor2numpy(d):
             tensor2numpy(d[key])
         if tf.is_tensor(d[key]):
             d[key] = float(d[key])
+
+def savedict(dict, fpath):
+        # save all options 
+        tensor2numpy(dict)
+        json.dump( dict, open( fpath, 'w' ), indent=4 )
 
 def preprocess_option(opts):
     # 

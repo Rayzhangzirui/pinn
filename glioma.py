@@ -5,7 +5,7 @@ from re import S
 import sys
 sys.path.insert(1, '/home/ziruz16/pinn')
 
-import json
+
 
 from config import *
 from pinn import *
@@ -22,10 +22,16 @@ class Gmodel:
 
         self.dataset = DataSet(opts['inv_dat_file'])
         if self.opts.get('N') is not None:
+            # down sample dataset
             total = self.opts.get('N') + self.opts.get('Ntest')
             self.dataset.downsample(total)
-            self.trainidx = np.arange(self.opts['N'])
-            self.testidx = np.arange(self.opts['N'],self.opts['Ntest'])
+
+            self.dattrainidx = np.arange(self.opts['Ndat'])
+            self.dattestidx = np.arange(self.opts['Ndat'], self.opts['Ndat'] + self.opts['Ndattest'])
+
+            self.restrainidx = np.arange(self.opts['N'])
+            self.restestidx = np.arange(self.opts['N'], total)
+        
         if opts.get('useupred') is not None:
             # use upred at xdat from other training
             tmpdataset = DataSet(opts['useupred'])
@@ -77,13 +83,17 @@ class Gmodel:
         'A': tf.Variable(opts['A0'], trainable=opts.get('trainA'),dtype = DTYPE,name="A"),
         'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
         'y0': tf.Variable(opts['y0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
-        'z0': tf.Variable(opts['z0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="z0"),
         'th1': tf.Variable(opts['th1'], trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
         'th2': tf.Variable(opts['th2'], trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
         }
 
+        self.ix = [[self.param['x0'],self.param['y0']]]
+
+        if self.xdim == 3:
+            self.param['z0'] = tf.Variable(opts['z0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="z0")
+            self.ix = [[self.param['x0'],self.param['y0'],self.param['z0']]]
         # initial
-        self.ix = [[self.param['x0'],self.param['y0'],self.param['z0']]]
+        
 
         # for computing residual at initial time
         # self.dataset.xrt0 = np.copy(self.dataset.xr)
@@ -113,7 +123,7 @@ class Gmodel:
         if self.xdim == 2 and self.geomodel is None:
                 # geometry is provided by data
                 @tf.function
-                def pde(xr, nn):
+                def pde(xr, nn, phi, P, DxPphi, DyPphi):
                     t = xr[:,0:1]
                     x = xr[:,1:2]
                     y = xr[:,2:3]
@@ -129,15 +139,15 @@ class Gmodel:
                     u_xx = tf.gradients(u_x, x)[0]
                     u_yy = tf.gradients(u_y, y)[0]
 
-                    proliferation = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+                    proliferation = self.param['rRHO'] * self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
 
-                    diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
-                    residual = self.dataset.phiq * u_t - ( diffusion +  proliferation)
-                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
+                    diffusion = self.param['rD'] * self.dataset.DW * (P *phi * (u_xx + u_yy) + self.dataset.L* DxPphi * u_x + self.dataset.L* DyPphi * u_y)
+                    residual = phi * u_t - ( diffusion +  proliferation)
+                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
         
         if self.xdim == 3 and self.geomodel is None:
             @tf.function
-            def pde(x_r, nn):
+            def pde(x_r, nn, phi, P, DxPphi, DyPphi, DzPphi):
                 
                 t = x_r[:,0:1]
                 x = x_r[:,1:2]
@@ -156,15 +166,15 @@ class Gmodel:
                 u_z = tf.gradients(u, z)[0]
                 u_zz = tf.gradients(u_z, z)[0]
 
-                proliferation = self.param['rRHO'] * self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+                proliferation = self.param['rRHO'] * self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
 
-                diffusion = self.param['rD'] * self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy + u_zz) + 
-                                                                  self.dataset.L* self.dataset.DxPphi * u_x +
-                                                                    self.dataset.L* self.dataset.DyPphi * u_y +
-                                                                    self.dataset.L* self.dataset.DzPphi * u_z )
+                diffusion = self.param['rD'] * self.dataset.DW * (P * phi * (u_xx + u_yy + u_zz) + 
+                                                                  self.dataset.L* DxPphi * u_x +
+                                                                    self.dataset.L* DyPphi * u_y +
+                                                                    self.dataset.L* DzPphi * u_z )
                 
-                residual = self.dataset.phiq * u_t - ( diffusion +  proliferation)
-                return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
+                residual = phi * u_t - ( diffusion +  proliferation)
+                return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
 
         if self.xdim == 2 and self.geomodel is not None:
             # geometry is represented by neural net
@@ -396,11 +406,17 @@ class Gmodel:
             a = area(phiupred, self.param['th2'])
             return (a - self.dataset.area[0,1])**2
 
+        def datloss(idx):
+            upred = self.model(self.dataset.xdat[idx,:])
+            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat[idx,:] - upred)*self.dataset.phidat[idx,:]))
+            return loss
+        
         # loss function of data, difference of phi * u
         def fdatloss(): 
-            upred = self.model(self.dataset.xdat)
-            loss = tf.math.reduce_mean(tf.math.square((self.dataset.udat - upred)*self.dataset.phidat))
-            return loss
+            return datloss(self.dattrainidx)
+        
+        def fdattestloss():
+            return datloss(self.dattestidx)
 
         # proliferation loss
         def fplfmseloss():
@@ -441,19 +457,26 @@ class Gmodel:
             loss = tf.squeeze(loss)
             return loss
         
-        def ftestloss():
-            upred = self.model(self.dataset.xtest)
-            loss = tf.math.reduce_mean(tf.math.square((self.dataset.utest - upred)*self.dataset.phitest))
-            return loss
         
-        # L2 loss
-        def fresloss():
-            r = pde(self.dataset.xr[self.trainidx,:], self.model)
+
+        def resloss(idx):
+            if self.xdim == 2:
+                r = pde(self.dataset.xr[idx,:], self.model, self.dataset.phiq[idx,:], self.dataset.Pq[idx,:], self.dataset.DxPphi[idx,:], self.dataset.DyPphi[idx,:])
+            else:
+                r = pde(self.dataset.xr[idx,:], self.model, self.dataset.phiq[idx,:], self.dataset.Pq[idx,:], self.dataset.DxPphi[idx,:], self.dataset.DyPphi[idx,:], self.dataset.DzPphi[idx,:])
+        
             r2 = tf.math.square(r['residual'])
             return tf.reduce_mean(r2)
         
+        # L2 loss
+        def fresloss():
+            return resloss(self.restrainidx)
+        
+        def frestestloss():
+            return resloss(self.restestidx)
+        
         def fresl1loss():
-            r = pde(self.dataset.xr[self.trainidx,:], self.model)
+            r = pde(self.dataset.xr[self.restrainidx,:], self.model)
             rl1 = tf.math.abs(r['residual']) # L1 norm
             return tf.reduce_mean(rl1)
         
@@ -485,7 +508,7 @@ class Gmodel:
         
         def fresl1t1loss():
             # compute residual at time 1
-            r = pde(self.dataset.xrt1[self.trainidx,:], self.model)
+            r = pde(self.dataset.xrt1[self.restrainidx,:], self.model)
             return tf.reduce_mean(tf.math.abs(r['residual']))
         
         def mse(x,y,w=1.0):
@@ -519,20 +542,17 @@ class Gmodel:
         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
         'geomse':geomseloss}
         
-        ftest = {'test':ftestloss} 
+        ftest = {'dattest':fdattestloss,'restest':frestestloss} 
         
-        if not hasattr(self.dataset,'xtest'):
-            self.dataset.xtest = None
+        if self.opts['Ntest']<= 0:
             ftest = None
 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
                                 flosses,
                                 ftest,
+                                self.dataset,
                                 geomodel = self.geomodel,
-                                xr = self.dataset.xr,
-                                xdat = self.dataset.xdat,
-                                xtest = self.dataset.xtest,
                                 options = opts)
 
         if opts.get('exactfwd') == True:
@@ -540,22 +560,26 @@ class Gmodel:
             self.param['rRHO'].assign(self.dataset.rRHOe)
 
         if opts.get('resetparam') == True:
+            self.param['rD'].assign(self.opts['D0'])
+            self.param['rRHO'].assign(self.opts['RHO0'])
             self.param['M'].assign(self.opts['M0'])
             self.param['m'].assign(self.opts['m0'])
 
     def solve(self):
+
+        # save option
+        savedict(self.opts, os.path.join(self.opts['model_dir'],'options.json') )
+
         if self.opts["num_init_train"] > 0:
             self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"], patience = self.opts["patience"])
+            
 
         if self.opts['lbfgs_opts'] is not None:
             results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])
-        
-        self.saveopts()
-        
-    def saveopts(self):
-        # save all options 
-        z = self.opts | self.solver.info
-        tensor2numpy(z)
-        fpath = os.path.join(self.opts['model_dir'],'options.json')
-        json.dump( z, open( fpath, 'w' ), indent=4 )
+            
+
+        # save time info 
+        savedict(self.solver.info, os.path.join(self.opts['model_dir'],'solverinfo.json') )
+    
+
     

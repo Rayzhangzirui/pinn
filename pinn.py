@@ -163,15 +163,14 @@ class PINNSolver():
     def __init__(self, model, pde, 
                 flosses,
                 ftests,
+                dataset,
                 geomodel=None, 
                 wr = None,
-                xr = None, 
-                xdat = None,
-                xtest = None,
                 options=None):
         self.model = model
         self.geomodel = geomodel
         self.pde = pde
+        self.dataset = dataset
         
         self.flosses = flosses
         self.ftests = ftests
@@ -181,19 +180,16 @@ class PINNSolver():
         self.info = {} #empty dictionary to store information
 
         # set up data
-        self.xr =    (xr).astype(DTYPE) # collocation point
-        self.xdat =  (xdat).astype(DTYPE) # data point
-        if xtest is not None: 
-            self.xtest = (xtest).astype(DTYPE) # test point
-        else:
-            self.xtest = None
+        # self.dataset.xr =    (xr).astype(DTYPE) # collocation point
+        # self.dataset.xdat =  (xdat).astype(DTYPE) # data point
+        
         
         # dynamic weighting
         self.weighting = Weighting(self.options['weights'], **self.options['weightopt'])
 
          # weight of residual
         if wr is None:
-            self.wr = tf.ones([tf.shape(xr)[0],1], dtype = DTYPE)
+            self.wr = tf.ones([tf.shape(self.dataset.xr)[0],1], dtype = DTYPE)
         else:
             self.wr = wr
 
@@ -330,7 +326,7 @@ class PINNSolver():
         """
         testlosses = {}
         for key in self.ftests:
-            testlosses[key] = self.ftests[key](self.model)
+            testlosses[key] = self.ftests[key]()
 
         return testlosses
     
@@ -359,16 +355,16 @@ class PINNSolver():
             # change t
             if self.options.get('randomt') > 0 and i % 10 == 0:
                 tend = self.options.get('randomt')
-                nrow = self.xr.shape[0]
-                self.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
+                nrow = self.dataset.xr.shape[0]
+                self.dataset.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
             
             # randomly set half of the res time to be final time
             if self.options.get('randomtfinal') == True and i % 10 == 0:
-                self.xr[:,0:1] = 1.0
-                nrow = self.xr.shape[0]
+                self.dataset.xr[:,0:1] = 1.0
+                nrow = self.dataset.xr.shape[0]
                 half = nrow//2
                 idx = np.random.choice(nrow, size=half,replace=False)
-                self.xr[idx,0:1] = np.random.uniform(size=(half,1))
+                self.dataset.xr[idx,0:1] = np.random.uniform(size=(half,1))
 
 
             # early stopping, 
@@ -536,7 +532,7 @@ class PINNSolver():
         ''' ouput individual terms of the pde as .mat file. named by iteration number
         '''
         pdedict = {k: t2n(v) for k, v in pdedict.items()}
-        pdedict['xr'] = self.xr
+        pdedict['xr'] = self.dataset.xr
         
         dirpath = os.path.join(self.options['model_dir'], 'pde')
         if self.iter == 1:
@@ -583,7 +579,7 @@ class PINNSolver():
                 self.process_grad(grad)
             
             if self.options['outputderiv'] == True:
-                pde = self.pde(self.xr,self.model)
+                pde = self.pde(self.dataset.xr,self.model)
                 self.process_pde(pde)
 
             # convert losses to list
@@ -631,8 +627,9 @@ class PINNSolver():
         else:
             print("checkpoint not saved")
 
-        self.save_upred(self.current_optimizer)
         self.predtx(self.current_optimizer, 1.0)
+        self.save_upred(self.current_optimizer)
+        
 
     def save_history(self):
         ''' save training history as txt
@@ -657,12 +654,12 @@ class PINNSolver():
         
         predfile = os.path.join(self.options['model_dir'],f'upred_txr_{suffix}.mat')
         ts = np.linspace(0, tend, n)
-        xr = np.copy(self.xr)
+        xr = np.copy(self.dataset.xr)
         for t in ts:
             xr[:,0] = t
 
             upredtxr = self.model(xr)
-            restxr = self.pde(xr, self.model)
+            restxr = self.pde(self.dataset.xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
             
             upredts.append(t2n(upredtxr))
             rests.append(t2n(restxr['residual']))
@@ -681,29 +678,23 @@ class PINNSolver():
         '''
         savedat = {}
 
-        upredxr = self.model(self.xr)
-        savedat['xr'] = t2n(self.xr)
+        upredxr = self.model(self.dataset.xr)
+        savedat['xr'] = t2n(self.dataset.xr)
         savedat['upredxr'] = t2n(upredxr)
 
-        resxr = self.pde(self.xr, self.model)
-        savedat['resxr'] = t2n(resxr['residual'])
+        # resxr = self.pde(self.dataset.xr, self.model)
+        # savedat['resxr'] = t2n(resxr['residual'])
 
         if self.geomodel is not None:
-            P = self.geomodel(self.xr[:,1:])
+            P = self.geomodel(self.dataset.xr[:,1:])
             savedat['ppred'] = t2n(P)
         
         
-        if self.xdat is not None:
-            upredxdat = self.model(self.xdat)
-            savedat['xdat'] = t2n(self.xdat)
+        if self.dataset.xdat is not None:
+            upredxdat = self.model(self.dataset.xdat)
+            savedat['xdat'] = t2n(self.dataset.xdat)
             savedat['upredxdat'] = t2n(upredxdat)
-
-        # can not evaluate residual at xtest, need Pwm Pwg
-        if self.xtest is not None:
-            upredxtest = self.model(self.xtest)
-            savedat['xtest'] = t2n(self.xtest)
-            savedat['upredxtest'] = t2n(upredxtest)
-
+        
         for key in self.model.param:
             savedat[key] = self.model.param[key].numpy()
 
@@ -713,7 +704,8 @@ class PINNSolver():
         savemat(predfile,savedat)
 
     def reweight(self, topk):
-        res = np.abs(self.pde(self.xr, self.model).numpy().flatten()) # compute residual
+        sys.exit('outdated')
+        res = np.abs(self.pde(self.dataset.xr, self.model).numpy().flatten()) # compute residual
         wres = self.wr
         # get topk idx
         # https://stackoverflow.com/questions/6910641/how-do-i-get-indices-of-n-maximum-values-in-a-numpy-array
@@ -722,14 +714,15 @@ class PINNSolver():
         self.wr = np.reshape(wres,(-1,1))
     
     def resample(self, topk, xxr):
+        sys.exit('outdated')
         ''' compute residual on xxr, add topk points to collocation pts
         '''
         res = np.abs(self.pde(xxr, self.model).numpy().flatten())
         ind = np.argpartition(res, -topk)[-topk:]
         xxr = xxr.numpy()[ind,:]
         newx = tf.convert_to_tensor(xxr)
-        self.xr = tf.concat([self.xr, newx],axis=0)
-        self.wr = np.ones([tf.shape(self.xr)[0],1])
+        self.dataset.xr = tf.concat([self.dataset.xr, newx],axis=0)
+        self.wr = np.ones([tf.shape(self.dataset.xr)[0],1])
         return xxr
 
         
