@@ -49,6 +49,34 @@ class Logger(object):
         # you might want to specify some extra behavior here.
         pass
 
+
+class EarlyStopping:
+    def __init__(self, monitor_losses, patience=100):
+        self.monitor_losses = monitor_losses
+        self.patience = patience
+        self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
+        self.wait = {loss: 0 for loss in self.monitor_losses}
+    
+    def reset(self):
+        self.wait = {loss: 0 for loss in self.monitor_losses}
+        
+    def check_stop(self, loss_dict):
+        
+        # Determine the largest improvement across all monitored losses
+        max_delta = -float('inf')
+        for loss in self.monitor_losses:
+            loss_value = loss_dict[loss]
+            # Check if the largest improvement exceeds the min_delta threshold
+            if loss_value < self.best_losses[loss]:
+                self.best_losses[loss] = loss_value
+                self.wait[loss] = 0
+            else:
+                self.wait[loss] += 1
+                if self.wait[loss] >= self.patience:
+                    print(f'Early stopping after {self.patience} due to {loss}')
+                    return True
+        return False
+    
 # Define model architecture
 class PINN(tf.keras.Model):
     """ Set basic architecture of the PINN model."""
@@ -195,7 +223,7 @@ class PINNSolver():
         self.paramhist = [] # history of trainable model params
         self.current_optimizer = None # current optimizer
         self.gradlog = None #log for gradient
-
+        self.earlystop = EarlyStopping(['total','pdattest'], self.options['patience'])
         # set up log
         os.makedirs(options['model_dir'], exist_ok=True)
         
@@ -333,20 +361,20 @@ class PINNSolver():
         @tf.function
         def train_step():
             loss, grad_theta = self.get_grad()
-            
             # Perform gradient descent step
             optimizer.apply_gradients(zip(grad_theta, glob_trainable_variables))
             return loss
         
         self.current_optimizer = self.options['optimizer']
-        best_loss = 1e6
-        no_improvement_counter = 0
         start = time()
         
         for i in range(N):
             loss = train_step()
-            self.current_loss = loss
-            self.callback()
+            self.current_loss = loss # before applying gradient
+
+            earlystop = self.callback()
+            if earlystop:
+                break
             
             # change t
             if self.options.get('randomt') > 0 and i % 10 == 0:
@@ -362,24 +390,14 @@ class PINNSolver():
                 idx = np.random.choice(nrow, size=half,replace=False)
                 self.dataset.xr[idx,0:1] = np.random.uniform(size=(half,1))
 
-
-            # early stopping, 
-            if self.current_loss['total'].numpy() < best_loss:
-                best_loss = self.current_loss['total']
-                no_improvement_counter = 0 # reset counter
-            else:
-                no_improvement_counter+=1
-                if no_improvement_counter == patience:
-                    print('No improvement for {} interation'.format(patience))
-                    break
         end = time()
 
         self.info['tfadamiter'] = i
         self.info['tfadamtime'] = (end-start)
         print('adam It:{:05d}, loss {:10.4e}, time {}'.format(i, loss['total'].numpy(), end-start))
         
-        self.losses.weighting.active = False
-        print('turn off dynamic weighting after Adam')
+        # self.losses.weighting.active = False
+        # print('turn off dynamic weighting after Adam')
 
         self.callback_train_end()
 
@@ -445,7 +463,7 @@ class PINNSolver():
             
             # Store current loss for callback function            
             loss = loss_dict['total'].numpy().astype(np.float64)
-            self.current_loss = loss_dict
+            self.current_loss = loss_dict # before applying gradient in lbfgs
             
             # Flatten gradient
             grad_flat = []
@@ -543,28 +561,39 @@ class PINNSolver():
     def callback(self,xk=None):
         """ called after one step of iteration in bfgs and adam, 
         scipy.optimize.minimize require first arg to be parameters 
+        if callback return true, ealy stop
+        after application of gradient
         """
         self.iter+=1
         self.losses.weighting.update_weights(self.current_loss)
+
+        self.losses.testmode()
+        test_losses = self.losses.getloss()
+        test_monitor = 0.
+        for x in self.losses.data_test_loss:
+            test_monitor += test_losses[x]
         
+        monitor_loss = {'total':self.current_loss['total'], 'pdattest': test_monitor}
+        earlystop = self.earlystop.check_stop(monitor_loss)
 
         # in the first iteration, create header
         if self.iter == 1:
             trainable_params = []
             # create header
-            str_losses = ', '.join('{:<10}'.format(k) for k in self.current_loss)
-            header = '{:<5}, {:<10}'.format('it',str_losses)
+            str_losses = ','.join('{:<12}'.format(k) for k in self.current_loss)
+            header = '{:<6}, {:<12}'.format('it',str_losses)
             if self.losses.weighting.method != 'constant':
-                str_weight = ', '.join('W{:<10}'.format(k) for k in self.losses.weighting.weight_keys) 
+                str_weight = ','.join('W{:<12}'.format(k) for k in self.losses.weighting.weight_keys) 
                 header += ', {}'.format(str_weight)
             if self.model.param is not None:
                 # if not none, add to header
                 for pname,ptensor in self.model.param.items():
                     if ptensor.trainable == True:
-                        header+= ", {:<10}".format(f'{pname}')
+                        header+= ", {:<12}".format(f'{pname}')
             if self.losses.hastest == True:
                 for lname in self.losses.all_test_losses:
-                    header+= ", {:<10}".format(lname+'test')
+                    header+= ",{:<12}".format(lname+'test')
+                header+= ",{:<12}".format('pdattest') # patient data loss
             self.header = header
             print(header)
         
@@ -597,15 +626,15 @@ class PINNSolver():
             
             # if provide test data, output test mse
             if self.losses.hastest == True:
-                self.losses.testmode()
-                test_losses = self.losses.getloss()
                 for lname in self.losses.all_test_losses:
                     info.append(test_losses[lname].numpy())
+                info.append(test_monitor.numpy())
             
-
-            info_str = ', '.join('{:10.4e}'.format(k) for k in info[1:])
+            info_str = ','.join('{:<12.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
             self.hist.append(info)
+        
+        return earlystop
 
         # save residual to file with interval save_res_every
         # if self.options['save_res_every'] is not None and self.iter % self.options['save_res_every'] == 0:
@@ -622,6 +651,7 @@ class PINNSolver():
     def callback_train_end(self):
         # at the end of training of each optimizer, save prediction on xr, xdat
         # also make prediction of xr at various time
+        self.earlystop.reset()
         if self.options.get('saveckpt'):
             save_path = self.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))

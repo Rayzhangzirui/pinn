@@ -180,8 +180,6 @@ def preprocess_option(opts):
     if opts['smalltest'] == True:
         opts['file_log'] = False
         opts['num_init_train'] = 500
-        opts['nn_opts']['num_neurons_per_layer'] = 4
-        opts['nn_opts']['num_hidden_layers'] = 2
         opts['lbfgs_opts']['maxfun'] = 200
     
     if opts['synthetic'] == True:

@@ -126,10 +126,14 @@ class Losses():
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                         'petmse': self.fpetmseloss,
-                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss}
+                        'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss}
 
-        self.all_test_losses = self.weighting.weight_keys + ['total']
-        self.all_test_losses = [x for x in self.all_test_losses if 'reg' not in x]
+        # all training losses
+        self.all_losses = self.weighting.weight_keys + ['total'] 
+        # all testing loss, exclude reg loss
+        self.all_test_losses = [x for x in self.all_losses if 'reg' not in x]
+        # all losses exclude residual loss
+        self.data_test_loss = [x for x in self.weighting.weight_keys if ('res' not in x and 'bc' not in x)]
 
         
     def trainmode(self):
@@ -151,18 +155,21 @@ class Losses():
 
     # @tf.function
     def getloss(self):
+        # compute train or test loss, depending on mode
         self.getpdeterm()
         self.getupred()
 
-        uwlosses = {} # un weighted losses
+        wlosses = {} # dict of weighted loss
         total = 0.0
         for key in self.weighting.weight_keys:
             f = self.lossdict[key] # get loss function
-            uwlosses[key] = f() # eval loss
-            total += self.weighting.alphas[key] * uwlosses[key]
+            wlosses[key] = f() # eval loss
+            total += self.weighting.alphas[key] * wlosses[key]
 
-        uwlosses['total'] = total
-        return uwlosses
+        wlosses['total'] = total
+        return wlosses
+
+
 
 
     
