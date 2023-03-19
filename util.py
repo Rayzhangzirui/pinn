@@ -159,37 +159,4 @@ def savedict(dict, fpath):
         tensor2numpy(dict)
         json.dump( dict, open( fpath, 'w' ), indent=4 )
 
-def preprocess_option(opts):
-    # 
-    if opts['exactfwd'] == True:
-        opts['trainD'] = False
-        opts['trainRHO'] = False
-        opts['trainM'] = False
-        opts['trainm'] = False
-        opts['trainA'] = False
-        opts['trainx0'] = False
-        opts['trainth1'] = False
-        opts['trainth2'] = False
-        for wkey in opts['weights']:
-            if wkey == 'res' or wkey == 'bc' or wkey == 'dat' or wkey == 'geomse':
-                continue
-            else:
-                opts['weights'][wkey] = None
-    
-    # quick test
-    if opts['smalltest'] == True:
-        opts['file_log'] = False
-        opts['num_init_train'] = 500
-        opts['lbfgs_opts']['maxfun'] = 200
-    
-    if opts['synthetic'] == True:
-        opts['trainD'] = True
-        opts['trainRHO'] = True
-        opts['trainM'] = False
-        opts['trainm'] = False
-        opts['trainA'] = False
-        opts['trainx0'] = False
-        opts['trainth1'] = False
-        opts['trainth2'] = False
-            
 
