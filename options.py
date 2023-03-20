@@ -4,45 +4,46 @@ lbfgs_opts = {"maxcor": 100, 'ftol':0.0, 'gtol':0.0, 'maxfun': 10000, "maxiter":
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False}
 
-weights = {'res':1.0, 'resl1':None, 'geomse':1.0, 'petmse': None, 'bc':1.0, 'dat':None, 
+weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'dat':None, 
     'plfcor':None,
     'area1':None, 'area2':None,'mreg':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
 
-weight_opts =  {'method': 'constant','param': None, 'whichloss': 'res', 'factor':1.0}
-
 opts = {
-    "tag" : 'mri2d_char',
-    "model_dir": 'tmp',
+   "tag" : '',
+    "model_dir": '',
     "num_init_train" : 100000, # initial traning iteration
-    "N" : 10000, # number of residual point
+    "N" : 20000, # number of residual point
     "Ntest":20000,
     "Ndat":20000,
     "Ndattest":20000,
-    "Ntest":0,
     "nn_opts": nn_opts,
     "print_res_every" : 100, # print residual
     "save_res_every" : None, # save residual
-    "weights": weights, # weight of data, weight of res is 1
-    "weightopt": weight_opts,
+    "weights" : weights, # weight of data, weight of res is 1
     "ckpt_every": 20000,
     "patience":1000,
     "file_log":True,
     "saveckpt":True,
-    "D0":0.5,
+    "D0":1.0,
     "trainD":True,
-    "RHO0":0.5,
+    "RHO0":1.0,
     "trainRHO":True,
     "M0":1.0,
     "trainM":False,
     "m0":1.0,
     "trainm":False,
+    "datmask":'u1',
+    "mrange":[0.8,2.0],
+    "A0":0.0,
+    "trainA":False,
     "x0":0.0,
     "y0":0.0,
+    "z0":0.0,
     "th1":0.25,
     "th2":0.7,
     "trainth1":False,
     "trainth2":False,
-    "trainx0":True,
+    "trainx0":False,
     'inv_dat_file': '',
     "lbfgs_opts":lbfgs_opts,
     "randomt": -1.0,
@@ -50,15 +51,17 @@ opts = {
     "optimizer":'adam',
     "restore": '',
     "trainnnweight":None,
-    "resetparam":True,
+    "resetparam":False,
     "exactfwd":False,
     "lr": 1e-3,
     "smalltest":False,
     "useupred": None,
+    "synthetic": False,
     "gradnorm":False,
     "outputderiv":False,
-    "usegeo":True,
-    "synthetic":False,
+    "usegeo":False,
+    "patient":False,
+    "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
     }
 
 
@@ -147,6 +150,24 @@ class Options(object):
             self.opts['weights']['res'] = 1.0
             self.opts['weights']['dat'] = 1.0
             self.opts['weights']['bc'] = 1.0
+        
+        if self.opts['patient'] is not False:
+            w = self.opts['patient']
+            self.opts['trainD'] = True
+            self.opts['trainRHO'] = True
+            self.opts['trainm'] = True
+            self.opts['trainA'] = True
+            self.opts['trainx0'] = True
+            self.opts['trainth1'] = True
+            self.opts['trainth2'] = True
+            self.opts['weights']['res'] = 1.0
+            self.opts['weights']['bc'] = 1.0
+            self.opts['weights']['petmse'] = w
+            self.opts['weights']['seg1'] = w
+            self.opts['weights']['seg2'] = w
+            self.opts['weights']['Areg'] = 1.0
+            self.opts['weights']['mreg'] = 1.0
+
 
             
 

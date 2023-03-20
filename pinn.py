@@ -23,6 +23,8 @@ from util import *
 from weight import Weighting
 from rbf_for_tf2.rbflayer import RBFLayer
 from tflbfgs import LossAndFlatGradient
+import warnings
+
 
 tf.keras.backend.set_floatx(DTYPE)
 
@@ -58,24 +60,24 @@ class EarlyStopping:
         self.patience = patience
         self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
         self.wait = {loss: 0 for loss in self.monitor_losses}
+        self.stop_loss = None
     
     def reset(self):
         self.wait = {loss: 0 for loss in self.monitor_losses}
         
     def check_stop(self, loss_dict):
-        
         # Determine the largest improvement across all monitored losses
-        max_delta = -float('inf')
+        
         for loss in self.monitor_losses:
             loss_value = loss_dict[loss]
-            # Check if the largest improvement exceeds the min_delta threshold
+            # Check if the largest improvement exceeds the
             if loss_value < self.best_losses[loss]:
                 self.best_losses[loss] = loss_value
                 self.wait[loss] = 0
             else:
                 self.wait[loss] += 1
                 if self.wait[loss] >= self.patience:
-                    print(f'Early stopping after {self.patience} due to {loss}')
+                    self.stop_loss = loss
                     return True
         return False
 
@@ -259,10 +261,12 @@ class PINNSolver():
         for i in range(N):
             loss = train_step()
             self.current_loss = loss # before applying gradient
-
-            earlystop = self.callback()
-            if earlystop:
+            
+            try:
+                self.callback()
+            except Exception:
                 break
+            
             
             # change t
             if self.options.get('randomt') > 0 and i % 10 == 0:
@@ -367,20 +371,32 @@ class PINNSolver():
         self.current_optimizer = 'scipylbfgs'
         x0, shape_list = get_weight_tensor()
         start = time()
-        results = scipy.optimize.minimize(fun=get_loss_and_grad,
+        
+        # the output of callback is not used in lbfgsb
+        # use exception
+        # https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py
+        try:
+            results = scipy.optimize.minimize(fun=get_loss_and_grad,
                                        x0=x0,
                                        jac=True,
                                        method=method,
                                        callback=self.callback,
                                        **kwargs)
+            self.info['scipylbfgsiter'] = results.nit
+            print('lbfgs(scipy) It:{:05d}, loss {:10.4e}, {}.'.format(results.nit, results.fun, results.message ))
+        except Exception:
+            print('lbfgs(scipy) stop early')
+            pass
+        
         end = time()
-        self.info['scipylbfgsiter'] = results.nit
+        
         self.info['scipylbfgstime'] = (end-start)
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html#scipy.optimize.OptimizeResult
-        print('lbfgs(scipy) It:{:05d}, loss {:10.4e}, time {}, {}.'.format(results.nit, results.fun, end-start, results.message ))
+        print(f'lbfgs(scipy) time {end-start}')
         self.callback_train_end()
-        return results
 
+
+    # not used
     @timer
     def solve_with_tfbfgs(self,**kwargs):
         
@@ -448,13 +464,14 @@ class PINNSolver():
 
     def callback(self,xk=None):
         """ called after one step of iteration in bfgs and adam, 
+        after application of gradient.
         scipy.optimize.minimize require first arg to be parameters 
         if callback return true, ealy stop
-        after application of gradient
         """
         self.iter+=1
         self.losses.weighting.update_weights(self.current_loss)
 
+        # compute all patient data loss
         self.losses.testmode()
         test_losses = self.losses.getloss()
         test_monitor = 0.
@@ -463,6 +480,13 @@ class PINNSolver():
         
         monitor_loss = {'total':self.current_loss['total'], 'pdattest': test_monitor}
         earlystop = self.earlystop.check_stop(monitor_loss)
+        if earlystop:
+            print(f'Early stopping after {self.earlystop.patience} due to {self.earlystop.stop_loss}')
+            raise Exception
+            # https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py#L48-L207
+            # lbfgs returning true in callback does not stop the mnimizer
+        
+            
 
         # in the first iteration, create header
         if self.iter == 1:
@@ -521,8 +545,7 @@ class PINNSolver():
             info_str = ','.join('{:<12.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
             self.hist.append(info)
-        
-        return earlystop
+
 
         # save residual to file with interval save_res_every
         # if self.options['save_res_every'] is not None and self.iter % self.options['save_res_every'] == 0:
