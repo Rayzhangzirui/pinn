@@ -122,11 +122,16 @@ class Losses():
         rDregloss = lambda: relusqr(self.param['rD'], self.opts['D0'] * 0.1, self.opts['D0'] * 1.9)
         rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['RHO0'] * 0.1, self.opts['RHO0'] * 1.9)
         Aregloss = lambda: relusqr(self.param['A'], 0.0, 1.0)
+        th1regloss = lambda: relusqr(self.param['th1'], 0.1, 0.9)
+        th2regloss = lambda: relusqr(self.param['th2'], 0.1, 0.9)
+
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                         'petmse': self.fpetmseloss,
-                        'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss}
+                        'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
+                        'th1reg':th1regloss, 'th2reg':th2regloss
+                        }
 
         # all training losses
         self.all_losses = self.weighting.weight_keys + ['total'] 

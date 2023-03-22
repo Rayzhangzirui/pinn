@@ -61,6 +61,7 @@ opts = {
     "outputderiv":False,
     "usegeo":False,
     "patient":False,
+    "monitor":['total'],
     "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
     }
 
@@ -115,6 +116,9 @@ class Options(object):
     
     def preprocess_option(self):
         
+        # trim weights
+        self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
+        
         # exact fix trainable paramter
         if self.opts['exactfwd'] == True:
             self.opts['trainD'] = False
@@ -167,6 +171,11 @@ class Options(object):
             self.opts['weights']['seg2'] = w
             self.opts['weights']['Areg'] = 1.0
             self.opts['weights']['mreg'] = 1.0
+            self.opts['weights']['th1reg'] = 1.0
+            self.opts['weights']['th2reg'] = 1.0
+            self.opts['monitor'] = ['pdattest']
+
+        
 
 
             

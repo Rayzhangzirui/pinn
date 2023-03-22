@@ -55,21 +55,23 @@ class Logger(object):
 
 
 class EarlyStopping:
-    def __init__(self, monitor_losses, patience=100):
+    def __init__(self, monitor_losses:list, patience=100):
         self.monitor_losses = monitor_losses
         self.patience = patience
         self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
         self.wait = {loss: 0 for loss in self.monitor_losses}
         self.stop_loss = None
+        print(f'monitor losses:')
+        print(monitor_losses)
     
     def reset(self):
         self.wait = {loss: 0 for loss in self.monitor_losses}
         
-    def check_stop(self, loss_dict):
+    def check_stop(self, loss_dict:dict):
         # Determine the largest improvement across all monitored losses
-        
         for loss in self.monitor_losses:
             loss_value = loss_dict[loss]
+
             # Check if the largest improvement exceeds the
             if loss_value < self.best_losses[loss]:
                 self.best_losses[loss] = loss_value
@@ -113,7 +115,12 @@ class PINNSolver():
         self.paramhist = [] # history of trainable model params
         self.current_optimizer = None # current optimizer
         self.gradlog = None #log for gradient
-        self.earlystop = EarlyStopping(['total','pdattest'], self.options['patience'])
+
+    
+        
+        print(f"earlystop monitor {self.options['monitor']}")
+
+        self.earlystop = EarlyStopping(self.options['monitor'], self.options['patience'])
         # set up log
         os.makedirs(options['model_dir'], exist_ok=True)
         
@@ -264,7 +271,8 @@ class PINNSolver():
             
             try:
                 self.callback()
-            except Exception:
+            except Exception as e:
+                print(e)
                 break
             
             
@@ -384,7 +392,8 @@ class PINNSolver():
                                        **kwargs)
             self.info['scipylbfgsiter'] = results.nit
             print('lbfgs(scipy) It:{:05d}, loss {:10.4e}, {}.'.format(results.nit, results.fun, results.message ))
-        except Exception:
+        except Exception as e:
+            print(e)
             print('lbfgs(scipy) stop early')
             pass
         
@@ -477,9 +486,10 @@ class PINNSolver():
         test_monitor = 0.
         for x in self.losses.data_test_loss:
             test_monitor += test_losses[x]
+        test_losses['pdattest'] = test_monitor
         
-        monitor_loss = {'total':self.current_loss['total'], 'pdattest': test_monitor}
-        earlystop = self.earlystop.check_stop(monitor_loss)
+        all_losses = self.current_loss | test_losses
+        earlystop = self.earlystop.check_stop(all_losses)
         if earlystop:
             print(f'Early stopping after {self.earlystop.patience} due to {self.earlystop.stop_loss}')
             raise Exception
