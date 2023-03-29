@@ -97,7 +97,8 @@ class Losses():
         self.irestest = np.arange(self.opts['N'], self.opts['N'] + self.opts['Ntest'])
 
         self.pdeterm = None
-        self.upred = None
+        self.upredxdat = None
+        self.upredxr = None
         
         # compute testing loss
         self.hastest = False
@@ -127,6 +128,7 @@ class Losses():
 
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
+                         'uxr':self.uxrloss,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                         'petmse': self.fpetmseloss,
                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
@@ -153,8 +155,11 @@ class Losses():
         self.idat = self.idattest
         
     # evaluate upred at xdat
-    def getupred(self):
-        self.upred = self.model(self.dataset.xdat[self.idat,:])
+    def getupredxdat(self):
+        self.upredxdat = self.model(self.dataset.xdat[self.idat,:])
+    
+    def getupredxr(self):
+        self.upredxr = self.model(self.dataset.xr[self.ires,:])
 
     
 
@@ -162,7 +167,10 @@ class Losses():
     def getloss(self):
         # compute train or test loss, depending on mode
         self.getpdeterm()
-        self.getupred()
+        self.getupredxdat()
+        if 'uxr' in self.weighting.weight_keys:
+            self.getupredxr()
+        
 
         wlosses = {} # dict of weighted loss
         total = 0.0
@@ -174,10 +182,6 @@ class Losses():
         wlosses['total'] = total
         return wlosses
 
-
-
-
-    
     def getpdeterm(self):
         if self.dataset.xdim == 2:
             self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
@@ -186,20 +190,24 @@ class Losses():
 
     # segmentation mse loss, mse of threholded u and data (patient geometry)
     def fseg1loss(self): 
-        return segmseloss(self.upred, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
+        return segmseloss(self.upredxdat, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
 
     def fseg2loss(self): 
-        return segmseloss(self.upred, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
+        return segmseloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
 
     def fpetmseloss(self):
         # assuming mu ~ pet
-        phiupred = self.upred * self.dataset.phidat[self.idat,:]
+        phiupred = self.upredxdat * self.dataset.phidat[self.idat,:]
         predpet = self.param['m']* phiupred - self.param['A']
         return mse(predpet, self.dataset.petdat[self.idat,:], w = self.mask[self.idat,:])
     
     def fdatloss(self):
-        '''data loss of u'''
-        return phimse(self.dataset.udat[self.idat,:], self.upred, self.dataset.phidat[self.idat,:])
+        '''mse of u at Xdat'''
+        return phimse(self.dataset.udat[self.idat,:], self.upredxdat, self.dataset.phidat[self.idat,:])
+    
+    def uxrloss(self):
+        '''mse of u at Xr'''
+        return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phixr[self.ires,:])
         
 
     #  boundary condition loss

@@ -60,28 +60,31 @@ class EarlyStopping:
         self.patience = patience
         self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
         self.wait = {loss: 0 for loss in self.monitor_losses}
-        self.stop_loss = None
-        print(f'monitor losses:')
-        print(monitor_losses)
+        self.stop_loss = None  # stop due to which loss
+        
     
     def reset(self):
+        self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
         self.wait = {loss: 0 for loss in self.monitor_losses}
         
     def check_stop(self, loss_dict:dict):
         # Determine the largest improvement across all monitored losses
+        stop = False
         for loss in self.monitor_losses:
-            loss_value = loss_dict[loss]
-
+            cur_loss = loss_dict[loss]
+            best_cur_loss = self.best_losses[loss]
             # Check if the largest improvement exceeds the
-            if loss_value < self.best_losses[loss]:
-                self.best_losses[loss] = loss_value
+            if cur_loss < best_cur_loss:
+                self.best_losses[loss] = cur_loss
                 self.wait[loss] = 0
             else:
                 self.wait[loss] += 1
                 if self.wait[loss] >= self.patience:
+                    stop = True
                     self.stop_loss = loss
-                    return True
-        return False
+                    break
+
+        return stop
 
 class PINNSolver():
     def __init__(self, model, pde, 
@@ -479,13 +482,15 @@ class PINNSolver():
         """
         self.iter+=1
         self.losses.weighting.update_weights(self.current_loss)
-
-        # compute all patient data loss
+        
+        # compute all patient data loss 
         self.losses.testmode()
         test_losses = self.losses.getloss()
+        test_losses = {key + 'test': value for key, value in test_losses.items()}
+
         test_monitor = 0.
         for x in self.losses.data_test_loss:
-            test_monitor += test_losses[x]
+            test_monitor += test_losses[x + 'test']
         test_losses['pdattest'] = test_monitor
         
         all_losses = self.current_loss | test_losses
@@ -549,7 +554,7 @@ class PINNSolver():
             # if provide test data, output test mse
             if self.losses.hastest == True:
                 for lname in self.losses.all_test_losses:
-                    info.append(test_losses[lname].numpy())
+                    info.append(test_losses[lname + 'test'].numpy())
                 info.append(test_monitor.numpy())
             
             info_str = ','.join('{:<12.4e}'.format(k) for k in info[1:])

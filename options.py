@@ -1,12 +1,15 @@
 import sys
+import ast
+
 
 lbfgs_opts = {"maxcor": 100, 'ftol':0.0, 'gtol':0.0, 'maxfun': 10000, "maxiter": 10000, "maxls": 50}
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False}
 
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'dat':None, 
-    'plfcor':None,
-    'area1':None, 'area2':None,'mreg':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
+    'plfcor':None, 'uxr':None,
+    'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
+    'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
 
 opts = {
    "tag" : '',
@@ -100,6 +103,7 @@ class Options(object):
             
     def parse_args(self, *args):
         # parse args according to dictionary
+        
         i = 0
         while i < len(args):
             key = args[i]
@@ -107,12 +111,16 @@ class Options(object):
             default_val = get_nested_dict(self.opts, key)
             if isinstance(default_val,str):
                 val = args[i+1]
+            elif isinstance(default_val,list):
+                val = (args[i+1]).split()
             else:
-                val = eval(args[i+1])
+                val = ast.literal_eval(args[i+1])
+            
             update_nested_dict(self.opts, key, val)
             i +=2
         
         self.preprocess_option()
+        
     
     def preprocess_option(self):
         
@@ -129,11 +137,6 @@ class Options(object):
             self.opts['trainx0'] = False
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
-            for wkey in self.opts['weights']:
-                if wkey == 'res' or wkey == 'bc' or wkey == 'dat' or wkey == 'geomse':
-                    continue
-                else:
-                    self.opts['weights'][wkey] = None
         
         # quick test
         if self.opts['smalltest'] == True:
