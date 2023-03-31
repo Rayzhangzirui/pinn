@@ -1,8 +1,8 @@
 import sys
 import ast
 
-
-lbfgs_opts = {"maxcor": 100, 'ftol':0.0, 'gtol':0.0, 'maxfun': 10000, "maxiter": 10000, "maxls": 50}
+# default ftol 2.2204460492503131e-09 from  https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py#L48-L207
+lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun': 10000, "maxiter": 10000, "maxls": 50}
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False}
 
@@ -15,10 +15,10 @@ opts = {
    "tag" : '',
     "model_dir": '',
     "num_init_train" : 100000, # initial traning iteration
-    "N" : 20000, # number of residual point
-    "Ntest":20000,
-    "Ndat":20000,
-    "Ndattest":20000,
+    "N" : 40000, # number of residual point
+    "Ntest":40000,
+    "Ndat":40000,
+    "Ndattest":40000,
     "nn_opts": nn_opts,
     "print_res_every" : 100, # print residual
     "save_res_every" : None, # save residual
@@ -56,7 +56,8 @@ opts = {
     "trainnnweight":None,
     "resetparam":False,
     "exactfwd":False,
-    "lr": 1e-3,
+    "schedule_type":'Exponential',
+    "lr": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
     "smalltest":False,
     "useupred": None,
     "synthetic": False,
@@ -97,11 +98,19 @@ def get_nested_dict(nested_dict, key):
         elif isinstance(v, dict):
             get_nested_dict(v, key)
 
+
 class Options(object):
     def __init__(self, opts = opts):
         self.opts = opts
-            
+        
     def parse_args(self, *args):
+        # first pass, parse args according to dictionary
+        self.parse_nest_args(*args)
+        self.preprocess_option()
+        # second pass, might modify the dictionary, especially for weights
+        self.parse_nest_args(*args)
+
+    def parse_nest_args(self, *args):
         # parse args according to dictionary
         
         i = 0
@@ -119,7 +128,8 @@ class Options(object):
             update_nested_dict(self.opts, key, val)
             i +=2
         
-        self.preprocess_option()
+        
+        
         
     
     def preprocess_option(self):
@@ -137,6 +147,7 @@ class Options(object):
             self.opts['trainx0'] = False
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
+            self.opts['monitor'] = ['total','totaltest']
         
         # quick test
         if self.opts['smalltest'] == True:

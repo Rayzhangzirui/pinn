@@ -46,13 +46,25 @@ class Gmodel:
         self.xdim = self.dataset.xdim
         
 
+        # choose learning rate schedule
+        schedule_type = self.opts['schedule_type']
+        if schedule_type == "Constant":
+            learning_rate_schedule = self.opts['lr']
+
+        elif schedule_type == "Exponential":
+            learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(**(opts['lr']))
+        else:
+            raise ValueError("Unsupported schedule_type")
+
+
+        # choose optimizer
         if opts.get('optimizer') == 'adamax':
-            self.optim = tf.keras.optimizers.Adamax()
+            self.optim = tf.keras.optimizers.Adamax(learning_rate=learning_rate_schedule)
         elif opts.get('optimizer') == 'rmsprop':
-            self.optim = tf.keras.optimizers.RMSprop()
+            self.optim = tf.keras.optimizers.RMSprop(learning_rate=learning_rate_schedule)
         else:
             self.opts['optimizer'] = 'adam'
-            self.optim = tf.keras.optimizers.Adam(learning_rate=opts['lr'])
+            self.optim = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
 
         if opts.get('exactfwd') == True:
             print('use exat parameter from dataset')

@@ -61,6 +61,7 @@ class EarlyStopping:
         self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
         self.wait = {loss: 0 for loss in self.monitor_losses}
         self.stop_loss = None  # stop due to which loss
+        self.detla = 1e-6 # minimum improvement to be considered as improvement
         
     
     def reset(self):
@@ -74,7 +75,7 @@ class EarlyStopping:
             cur_loss = loss_dict[loss]
             best_cur_loss = self.best_losses[loss]
             # Check if the largest improvement exceeds the
-            if cur_loss < best_cur_loss:
+            if cur_loss < best_cur_loss - self.detla:
                 self.best_losses[loss] = cur_loss
                 self.wait[loss] = 0
             else:

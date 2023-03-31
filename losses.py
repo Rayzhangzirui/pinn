@@ -28,7 +28,7 @@ def smoothheaviside(x, th):
     # tfp.math.smootherstep S(x), y goes from 0 to 1 as x goes from 0 1
     # F(x) = S((x+1)/2) = S(x/2+1/2), -1 to 1
     # G(x) = S(Kx/2+1/2), -1/K to 1/K
-    K = 10.0
+    K = 20.0
     return tfp.math.smootherstep(K * (x-th)/2.0 + 1.0/2.0)
         
 def mse(x,y,w=1.0):
@@ -54,8 +54,8 @@ def diceloss(upred, udat, phi, th):
     return 1.0-d
 
 def segmseloss(upred, udat, phi, th):    
-    uth = sigmoidbinarize(upred, th)
-    # pu1 = smoothheaviside(upred, self.param['th1'])
+    # uth = sigmoidbinarize(upred, th)
+    uth = smoothheaviside(upred, th)
     return phimse(uth, udat, phi)
 
 def loglikely(alpha, y):
@@ -113,7 +113,7 @@ class Losses():
         if self.opts['datmask'] is not None:
             # mask for data loss
             self.mask = getattr(self.dataset, self.opts['datmask'])
-            print(f"use {self.opts['datmask']} as mask")
+            print(f"use {self.opts['datmask']} as mask for pet data loss")
         else:
             self.mask = 1.0        
 
@@ -207,7 +207,7 @@ class Losses():
     
     def uxrloss(self):
         '''mse of u at Xr'''
-        return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phixr[self.ires,:])
+        return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phiq[self.ires,:])
         
 
     #  boundary condition loss
