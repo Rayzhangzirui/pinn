@@ -36,6 +36,7 @@ opts = {
     "m0":1.0,
     "trainm":False,
     "datmask":'u1',
+    "udatsource":'udat',
     "mrange":[0.8,2.0],
     "A0":0.0,
     "trainA":False,
@@ -55,7 +56,8 @@ opts = {
     "restore": '',
     "trainnnweight":None,
     "resetparam":False,
-    "exactfwd":False,
+    "exactfwd":False,   # use exact forward model
+    "solvechar":False, # solve characteristic equation
     "schedule_type":'Exponential',
     "lr": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
     "smalltest":False,
@@ -147,6 +149,19 @@ class Options(object):
             self.opts['trainx0'] = False
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
+            self.opts['monitor'] = ['total','totaltest']
+        
+        if self.opts['solvechar'] == True:
+            self.opts['trainD'] = False
+            self.opts['trainRHO'] = False
+            self.opts['trainM'] = False
+            self.opts['trainm'] = False
+            self.opts['trainA'] = False
+            self.opts['trainx0'] = False
+            self.opts['trainth1'] = False
+            self.opts['trainth2'] = False
+            self.opts['D0'] = 1.0
+            self.opts['RHO0'] = 1.0
             self.opts['monitor'] = ['total','totaltest']
         
         # quick test

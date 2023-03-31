@@ -100,6 +100,11 @@ class Losses():
         self.upredxdat = None
         self.upredxr = None
         
+        # set data source 
+        print(f"udatsource: {self.opts['udatsource']}") 
+        self.opts['udatsource']
+        self.dataset.udat = getattr(self.dataset, self.opts['udatsource'])
+        
         # compute testing loss
         self.hastest = False
         if self.opts['Ntest'] > 0:
