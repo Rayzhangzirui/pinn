@@ -12,6 +12,8 @@ import tensorflow_probability as tfp
 import scipy.optimize
 import sys
 
+from nn import PINN
+
 # make prediction and save
 from scipy.io import savemat
 
@@ -21,6 +23,8 @@ from util import *
 from weight import Weighting
 from rbf_for_tf2.rbflayer import RBFLayer
 from tflbfgs import LossAndFlatGradient
+import warnings
+
 
 tf.keras.backend.set_floatx(DTYPE)
 
@@ -49,151 +53,62 @@ class Logger(object):
         # you might want to specify some extra behavior here.
         pass
 
-# Define model architecture
-class PINN(tf.keras.Model):
-    """ Set basic architecture of the PINN model."""
 
-    def __init__(self,
-            output_dim=1,
-            input_dim=1,
-            num_hidden_layers=3, 
-            num_neurons_per_layer=100,
-            activation='tanh',
-            kernel_initializer='glorot_normal',
-            output_transform = lambda x,u:u,
-            param = None,
-            resnet = False,
-            regularizer = None,
-            userff = False,
-            userbf = False,
-            **kwargs):
-        super().__init__(**kwargs)
-
-        self.num_hidden_layers = num_hidden_layers
-        self.output_dim = output_dim
-        self.input_dim = input_dim
-        self.num_neurons_per_layer = num_neurons_per_layer
-        self.resnet = resnet
-
-        # phyiscal parameters in the model
-        self.param = param
-
+class EarlyStopping:
+    def __init__(self, monitor_losses:list, patience=100):
+        self.monitor_losses = monitor_losses
+        self.patience = patience
+        self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
+        self.wait = {loss: 0 for loss in self.monitor_losses}
+        self.stop_loss = None  # stop due to which loss
+        self.detla = 1e-6 # minimum improvement to be considered as improvement
         
-        # Define NN architecture
-        self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
-                             activation=tf.keras.activations.get(activation),
-                             kernel_initializer=kernel_initializer,
-                             kernel_regularizer= regularizer)
-                           for _ in range(self.num_hidden_layers)]
-        
-        if userff == True:
-            rbf =  tf.keras.layers.experimental.RandomFourierFeatures(
-                output_dim=num_neurons_per_layer,
-                scale=1.,
-                trainable = True,
-                kernel_initializer='gaussian')
-            self.hidden =   [rbf] + self.hidden
-        
-        if userbf == True:
-            rbf =  RBFLayer(num_neurons_per_layer, betas=1.)
-            self.hidden =   [rbf] + self.hidden
-
-
-
-        self.out = tf.keras.layers.Dense(output_dim)
-        self.output_transform = output_transform
-        self.paddings = [[0, 0], [0, self.num_neurons_per_layer - self.input_dim]]
-
-        self.build(input_shape=(None,input_dim))
-        
-    def call(self, X):
-        """Forward-pass through neural network."""
-        Z = X
-
-        if self.resnet != True:
-            for i in range(len(self.hidden)):
-                Z = self.hidden[i](Z)
-        else:
-            # resnet implementation
-            Z = self.hidden[0](Z)
-            for i in range(1,len(self.hidden)-1,2):
-                Z = self.hidden[i+1](self.hidden[i](Z))+Z
-            if i + 2 < len(self.hidden):
-                Z = self.hidden[i+2](Z)
-            
-        Z = self.out(Z)
-        Z = self.output_transform(X,Z)
-        return Z
     
-    def lastlayer(self,X):
-        '''output last layer output, weights, bias'''
-        if self.resnet == True:
-            sys.exit('intermediate output not for resnet')
-        Z = X
-        Zout = []
-        for i in range(len(self.hidden)):
-                Z = self.hidden[i](Z)
-                Zout.append(Z)
-        return Zout, self.out.weights[0], self.out.weights[1]
-    
-    def set_trainable_layer(self, arg):
-        '''Set trainable property of each layer
-        '''
-        if arg == False:
-            print("do not train NN")
-            # self.model.trainable = False
-            for l in self.layers:
-                l.trainable = False
+    def reset(self):
+        self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
+        self.wait = {loss: 0 for loss in self.monitor_losses}
         
-        # set layer to be trainable
-        if isinstance(arg,int):
-            nlayer = arg
-            k = 0
-            print(f"do not train nn layer <= {nlayer} ")
-            # self.trainable = False
-            for l in self.layers:
-                if k > nlayer:
-                    l.trainable = True
-                else:
-                    l.trainable = False
-                k += 1
+    def check_stop(self, loss_dict:dict):
+        # Determine the largest improvement across all monitored losses
+        stop = False
+        for loss in self.monitor_losses:
+            cur_loss = loss_dict[loss]
+            best_cur_loss = self.best_losses[loss]
+            # Check if the largest improvement exceeds the
+            if cur_loss < best_cur_loss - self.detla:
+                self.best_losses[loss] = cur_loss
+                self.wait[loss] = 0
+            else:
+                self.wait[loss] += 1
+                if self.wait[loss] >= self.patience:
+                    stop = True
+                    self.stop_loss = loss
+                    break
 
+        return stop
 
 class PINNSolver():
     def __init__(self, model, pde, 
-                flosses,
-                ftests,
+                losses,
+                dataset,
                 geomodel=None, 
                 wr = None,
-                xr = None, 
-                xdat = None,
-                xtest = None,
                 options=None):
         self.model = model
         self.geomodel = geomodel
         self.pde = pde
+        self.dataset = dataset
         
-        self.flosses = flosses
-        self.ftests = ftests
+        self.losses = losses
+        
 
         self.options = options
         
         self.info = {} #empty dictionary to store information
 
-        # set up data
-        self.xr =    (xr).astype(DTYPE) # collocation point
-        self.xdat =  (xdat).astype(DTYPE) # data point
-        if xtest is not None: 
-            self.xtest = (xtest).astype(DTYPE) # test point
-        else:
-            self.xtest = None
-        
-        # dynamic weighting
-        self.weighting = Weighting(self.options['weights'], **self.options['weightopt'])
-
          # weight of residual
         if wr is None:
-            self.wr = tf.ones([tf.shape(xr)[0],1], dtype = DTYPE)
+            self.wr = tf.ones([tf.shape(self.dataset.xr)[0],1], dtype = DTYPE)
         else:
             self.wr = wr
 
@@ -205,6 +120,11 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
         self.gradlog = None #log for gradient
 
+    
+        
+        print(f"earlystop monitor {self.options['monitor']}")
+
+        self.earlystop = EarlyStopping(self.options['monitor'], self.options['patience'])
         # set up log
         os.makedirs(options['model_dir'], exist_ok=True)
         
@@ -227,13 +147,14 @@ class PINNSolver():
             self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.options['restore'])
 
         # may set some layer trainable = False
-        self.model.set_trainable_layer(self.options.get('trainweight'))
+        self.model.set_trainable_layer(self.options.get('trainnnweight'))
 
         self.model.summary()
 
         global glob_trainable_variables
         glob_trainable_variables+=  self.model.trainable_variables
-        glob_trainable_variables +=  self.geomodel.trainable_variables
+        if self.geomodel is not None:
+            glob_trainable_variables +=  self.geomodel.trainable_variables
 
     def setup_ckpt(self, model, ckptdir = 'ckpt', restore = None):
          # set up check point
@@ -241,14 +162,18 @@ class PINNSolver():
         manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.options['model_dir'],ckptdir), max_to_keep=4)
         # manager.latest_checkpoint is None if no ckpt found
 
-        if self.options['restore'] is not None:
+        if self.options['restore'] is not None and (self.options['restore']):
+            # not None and not empty
             # self.options['restore'] is a number or a path
             if isinstance(self.options['restore'],int):
                 # restore check point in the same directory by integer, 0 = ckpt-1
                 ckptpath = manager.checkpoints[self.options['restore']]
             else:
                 # restore checkpoint by path
-                ckptpath = self.options['restore']
+                if "/ckpt" in self.options['restore']:
+                    ckptpath = os.path.join(self.options['restore'])
+                else:
+                    ckptpath = os.path.join(self.options['restore'],ckptdir,'ckpt-2')
             checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
         else:
@@ -264,28 +189,29 @@ class PINNSolver():
 
         return manager 
 
-    @tf.function
-    def loss_fn(self):
-        uwlosses = {}
-        total = 0.0
-        for key in self.weighting.weight_keys:
-            uwlosses[key] = self.flosses[key]()
-            total += self.weighting.alphas[key] * uwlosses[key]
+    # @tf.function
+    # def loss_fn(self):
+    #     uwlosses = {}
+    #     total = 0.0
+    #     for key in self.losses.weighting.weight_keys:
+    #         uwlosses[key] = self.flosses[key]()
+    #         total += self.losses.weighting.alphas[key] * uwlosses[key]
 
-        uwlosses['total'] = total
-        return uwlosses
+    #     uwlosses['total'] = total
+    #     return uwlosses
     
     @tf.function
     def get_grad(self):
         """ get loss, residual, gradient
         called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
         """
+        self.losses.trainmode()
         with tf.GradientTape(persistent=True, watch_accessed_variables=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
             # tape.watch(self.model.trainable_variables)
             tape.watch(glob_trainable_variables)
-            loss = self.loss_fn()
+            loss = self.losses.getloss()
             
         g = tape.gradient(loss['total'], glob_trainable_variables)
         del tape
@@ -323,42 +249,41 @@ class PINNSolver():
         return wlosses, grad
     
     # @tf.function
-    def get_grad_by_loss(self):
-        """ get gradient by each loss
-        to study gradient, look at weighted loss
-        """
+    # def get_grad_by_loss(self):
+    #     """ get gradient by each loss
+    #     to study gradient, look at weighted loss
+    #     """
         
-        wlosses = {}
-        grad = {}
-        total = 0.0
-        with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
-            # This tape is for derivatives with
-            # respect to trainable variables
-            # tape.watch(self.model.trainable_variables)
-            tape.watch(glob_trainable_variables)
-            for key in self.weighting.weight_keys:
-                wlosses[key] = self.weighting.alphas[key]* self.flosses[key]()
-                total += wlosses[key]
-        wlosses['total'] = total
+    #     wlosses = {}
+    #     grad = {}
+    #     total = 0.0
+    #     with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
+    #         # This tape is for derivatives with
+    #         # respect to trainable variables
+    #         # tape.watch(self.model.trainable_variables)
+    #         tape.watch(glob_trainable_variables)
+    #         for key in self.losses.weighting.weight_keys:
+    #             wlosses[key] = self.losses.weighting.alphas[key]* self.flosses[key]()
+    #             total += wlosses[key]
+    #     wlosses['total'] = total
+        
+    #     for key in self.losses.weighting.weight_keys:
+    #         grad[key] = tape.gradient(wlosses[key], glob_trainable_variables)
+                
+    #     grad['total'] = tape.gradient(wlosses['total'], glob_trainable_variables)
 
-        for key in self.weighting.weight_keys:
-            grad[key] = tape.gradient(wlosses[key], glob_trainable_variables)
-        
-        grad['total'] = tape.gradient(wlosses['total'], glob_trainable_variables)
-
-        del tape
-        
-        return wlosses, grad
+    #     del tape
+    #     return wlosses, grad
     
-    @tf.function
-    def check_exact(self):
-        """ check with exact solution if provided
-        """
-        testlosses = {}
-        for key in self.ftests:
-            testlosses[key] = self.ftests[key](self.model)
+    # @tf.function
+    # def check_exact(self):
+    #     """ check with exact solution if provided
+    #     """
+    #     testlosses = {}
+    #     for key in self.ftests:
+    #         testlosses[key] = self.ftests[key]()
 
-        return testlosses
+    #     return testlosses
     
     
     def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):
@@ -367,51 +292,47 @@ class PINNSolver():
         @tf.function
         def train_step():
             loss, grad_theta = self.get_grad()
-            
             # Perform gradient descent step
             optimizer.apply_gradients(zip(grad_theta, glob_trainable_variables))
             return loss
         
         self.current_optimizer = self.options['optimizer']
-        best_loss = 1e6
-        no_improvement_counter = 0
         start = time()
         
         for i in range(N):
             loss = train_step()
-            self.current_loss = loss
-            self.callback()
+            self.current_loss = loss # before applying gradient
+            
+            try:
+                self.callback()
+            except Exception as e:
+                print(e)
+                break
+            
             
             # change t
             if self.options.get('randomt') > 0 and i % 10 == 0:
                 tend = self.options.get('randomt')
-                nrow = self.xr.shape[0]
-                self.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
+                nrow = self.dataset.xr.shape[0]
+                self.dataset.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
             
             # randomly set half of the res time to be final time
             if self.options.get('randomtfinal') == True and i % 10 == 0:
-                self.xr[:,0:1] = 1.0
-                nrow = self.xr.shape[0]
+                self.dataset.xr[:,0:1] = 1.0
+                nrow = self.dataset.xr.shape[0]
                 half = nrow//2
                 idx = np.random.choice(nrow, size=half,replace=False)
-                self.xr[idx,0:1] = np.random.uniform(size=(half,1))
+                self.dataset.xr[idx,0:1] = np.random.uniform(size=(half,1))
 
-
-            # early stopping, 
-            if self.current_loss['total'].numpy() < best_loss:
-                best_loss = self.current_loss['total']
-                no_improvement_counter = 0 # reset counter
-            else:
-                no_improvement_counter+=1
-                if patience is not None and no_improvement_counter == patience:
-                    print('No improvement for {} interation'.format(patience))
-                    break
         end = time()
 
         self.info['tfadamiter'] = i
         self.info['tfadamtime'] = (end-start)
         print('adam It:{:05d}, loss {:10.4e}, time {}'.format(i, loss['total'].numpy(), end-start))
         
+        # self.losses.weighting.active = False
+        # print('turn off dynamic weighting after Adam')
+
         self.callback_train_end()
 
 
@@ -476,7 +397,7 @@ class PINNSolver():
             
             # Store current loss for callback function            
             loss = loss_dict['total'].numpy().astype(np.float64)
-            self.current_loss = loss_dict
+            self.current_loss = loss_dict # before applying gradient in lbfgs
             
             # Flatten gradient
             grad_flat = []
@@ -492,25 +413,39 @@ class PINNSolver():
         self.current_optimizer = 'scipylbfgs'
         x0, shape_list = get_weight_tensor()
         start = time()
-        results = scipy.optimize.minimize(fun=get_loss_and_grad,
+        
+        # the output of callback is not used in lbfgsb
+        # use exception
+        # https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py
+        try:
+            results = scipy.optimize.minimize(fun=get_loss_and_grad,
                                        x0=x0,
                                        jac=True,
                                        method=method,
                                        callback=self.callback,
                                        **kwargs)
+            self.info['scipylbfgsiter'] = results.nit
+            print('lbfgs(scipy) It:{:05d}, loss {:10.4e}, {}.'.format(results.nit, results.fun, results.message ))
+        except Exception as e:
+            print(e)
+            print('lbfgs(scipy) stop early')
+            pass
+        
         end = time()
-        self.info['scipylbfgsiter'] = results.nit
+        
         self.info['scipylbfgstime'] = (end-start)
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html#scipy.optimize.OptimizeResult
-        print('lbfgs(scipy) It:{:05d}, loss {:10.4e}, time {}, {}.'.format(results.nit, results.fun, end-start, results.message ))
+        print(f'lbfgs(scipy) time {end-start}')
         self.callback_train_end()
-        return results
 
+
+    # not used
     @timer
     def solve_with_tfbfgs(self,**kwargs):
         
         def bfgs_loss():
-            dloss = self.loss_fn()
+            self.losses.trainmode()
+            dloss = self.losses.getloss()
             return dloss['total']
 
 
@@ -554,30 +489,69 @@ class PINNSolver():
         
         self.gradlog.write('\n')
 
+
+    def process_pde(self, pdedict):
+        ''' ouput individual terms of the pde as .mat file. named by iteration number
+        '''
+        pdedict = {k: t2n(v) for k, v in pdedict.items()}
+        pdedict['xr'] = self.dataset.xr
+        
+        dirpath = os.path.join(self.options['model_dir'], 'pde')
+        if self.iter == 1:
+            os.makedirs(dirpath, exist_ok=True)
+
+        predfile = os.path.join(dirpath,f'pde_{self.iter}.mat')
+        savemat(predfile,pdedict)
+        return None
+
+
     def callback(self,xk=None):
         """ called after one step of iteration in bfgs and adam, 
+        after application of gradient.
         scipy.optimize.minimize require first arg to be parameters 
+        if callback return true, ealy stop
         """
         self.iter+=1
-        self.weighting.update_weights(self.current_loss)
+        self.losses.weighting.update_weights(self.current_loss)
         
+        # compute all patient data loss 
+        self.losses.testmode()
+        test_losses = self.losses.getloss()
+        test_losses = {key + 'test': value for key, value in test_losses.items()}
+
+        test_monitor = 0.
+        for x in self.losses.data_test_loss:
+            test_monitor += test_losses[x + 'test']
+        test_losses['pdattest'] = test_monitor
+        
+        all_losses = self.current_loss | test_losses
+        earlystop = self.earlystop.check_stop(all_losses)
+        if earlystop:
+            print(f'Early stopping after {self.earlystop.patience} due to {self.earlystop.stop_loss}')
+            raise Exception
+            # https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py#L48-L207
+            # lbfgs returning true in callback does not stop the mnimizer
+        
+            
 
         # in the first iteration, create header
         if self.iter == 1:
             trainable_params = []
             # create header
-            str_losses = ', '.join('{:<10}'.format(k) for k in self.current_loss)
-            header = '{:<5}, {:<10}'.format('it',str_losses)
-            if self.weighting.method != 'constant':
-                str_weight = ', '.join('W{:<10}'.format(k) for k in self.weighting.weight_keys) 
+            str_losses = ','.join('{:<12}'.format(k) for k in self.current_loss)
+            header = '{:<6}, {:<12}'.format('it',str_losses)
+            if self.losses.weighting.method != 'constant':
+                str_weight = ','.join('W{:<12}'.format(k) for k in self.losses.weighting.weight_keys) 
                 header += ', {}'.format(str_weight)
             if self.model.param is not None:
                 # if not none, add to header
                 for pname,ptensor in self.model.param.items():
-                    header+= ", {:<10}".format(f'{pname}')
-            if self.ftests is not None:
-                for key in self.ftests:
-                    header+= ", {:<10}".format(key)
+                    if ptensor.trainable == True:
+                        header+= ", {:<12}".format(f'{pname}')
+            if self.losses.hastest == True:
+                for lname in self.losses.all_test_losses:
+                    header+= ",{:<12}".format(lname+'test')
+                header+= ",{:<12}".format('pdattest') # patient data loss
             self.header = header
             print(header)
         
@@ -586,30 +560,38 @@ class PINNSolver():
         if yeswrite:
 
             if self.options['gradnorm'] == True:
+                sys.exit('not updated when introducing losses class')
                 _, grad = self.get_grad_by_loss()
                 self.process_grad(grad)
-                
+            
+            if self.options['outputderiv'] == True:
+                sys.exit('not updated when introducing losses class')
+                pde = self.pde(self.dataset.xr,self.model)
+                self.process_pde(pde)
 
             # convert losses to list
             losses = [v.numpy() for _,v in self.current_loss.items()]
             info = [self.iter] + losses
 
-            if self.weighting.method !='constant':
-                alphas = [v for _,v in self.weighting.alphas.items()]
-                info +=alphas
+            if self.losses.weighting.method !='constant':
+                alphas = [v for _,v in self.losses.weighting.alphas.items()]
+                info += alphas
 
             if self.model.param is not None:
-                info.extend(np.array(list(self.model.param.values())))
+                for pname,ptensor in self.model.param.items():
+                    if ptensor.trainable == True:
+                        info.append(ptensor.numpy())
             
             # if provide test data, output test mse
-            if self.ftests is not None:
-                test_losses = self.check_exact()
-                info +=  [v.numpy() for _,v in test_losses.items()]
+            if self.losses.hastest == True:
+                for lname in self.losses.all_test_losses:
+                    info.append(test_losses[lname + 'test'].numpy())
+                info.append(test_monitor.numpy())
             
-
-            info_str = ', '.join('{:10.4e}'.format(k) for k in info[1:])
+            info_str = ','.join('{:<12.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
             self.hist.append(info)
+
 
         # save residual to file with interval save_res_every
         # if self.options['save_res_every'] is not None and self.iter % self.options['save_res_every'] == 0:
@@ -626,6 +608,7 @@ class PINNSolver():
     def callback_train_end(self):
         # at the end of training of each optimizer, save prediction on xr, xdat
         # also make prediction of xr at various time
+        self.earlystop.reset()
         if self.options.get('saveckpt'):
             save_path = self.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))
@@ -635,8 +618,9 @@ class PINNSolver():
         else:
             print("checkpoint not saved")
 
-        self.save_upred(self.current_optimizer)
         self.predtx(self.current_optimizer, 1.0)
+        self.save_upred(self.current_optimizer)
+        
 
     def save_history(self):
         ''' save training history as txt
@@ -647,6 +631,7 @@ class PINNSolver():
         fmt = '%d'+' %.6e'*(col-1) #int for iter, else float
         np.savetxt(fpath, hist, fmt, header = self.header, comments = '')
         print(f'save training hist to {fpath}')
+    
 
     def predtx(self, suffix, tend = 1.0, n = 21):
         # evalute at residual points. not data points. 
@@ -660,15 +645,18 @@ class PINNSolver():
         
         predfile = os.path.join(self.options['model_dir'],f'upred_txr_{suffix}.mat')
         ts = np.linspace(0, tend, n)
-        xr = np.copy(self.xr)
+        xr = np.copy(self.dataset.xr)
         for t in ts:
             xr[:,0] = t
 
             upredtxr = self.model(xr)
-            restxr = self.pde(xr, self.model)
+            if self.dataset.xdim == 2:
+                restxr = self.pde(self.dataset.xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
+            else:
+                restxr = self.pde(self.dataset.xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi, self.dataset.DzPphi)
             
             upredts.append(t2n(upredtxr))
-            rests.append(t2n(restxr))
+            rests.append(t2n(restxr['residual']))
     
         savedat['upredts'] = np.concatenate([*upredts],axis=1)
         savedat['rests'] = np.concatenate([*rests],axis=1)
@@ -684,29 +672,23 @@ class PINNSolver():
         '''
         savedat = {}
 
-        upredxr = self.model(self.xr)
-        savedat['xr'] = t2n(self.xr)
+        upredxr = self.model(self.dataset.xr)
+        savedat['xr'] = t2n(self.dataset.xr)
         savedat['upredxr'] = t2n(upredxr)
 
-        resxr = self.pde(self.xr, self.model)
-        savedat['resxr'] = t2n(resxr)
+        # resxr = self.pde(self.dataset.xr, self.model)
+        # savedat['resxr'] = t2n(resxr['residual'])
 
         if self.geomodel is not None:
-            P = self.geomodel(self.xr[:,1:])
+            P = self.geomodel(self.dataset.xr[:,1:])
             savedat['ppred'] = t2n(P)
         
         
-        if self.xdat is not None:
-            upredxdat = self.model(self.xdat)
-            savedat['xdat'] = t2n(self.xdat)
+        if self.dataset.xdat is not None:
+            upredxdat = self.model(self.dataset.xdat)
+            savedat['xdat'] = t2n(self.dataset.xdat)
             savedat['upredxdat'] = t2n(upredxdat)
-
-        # can not evaluate residual at xtest, need Pwm Pwg
-        if self.xtest is not None:
-            upredxtest = self.model(self.xtest)
-            savedat['xtest'] = t2n(self.xtest)
-            savedat['upredxtest'] = t2n(upredxtest)
-
+        
         for key in self.model.param:
             savedat[key] = self.model.param[key].numpy()
 
@@ -716,7 +698,8 @@ class PINNSolver():
         savemat(predfile,savedat)
 
     def reweight(self, topk):
-        res = np.abs(self.pde(self.xr, self.model).numpy().flatten()) # compute residual
+        sys.exit('outdated')
+        res = np.abs(self.pde(self.dataset.xr, self.model).numpy().flatten()) # compute residual
         wres = self.wr
         # get topk idx
         # https://stackoverflow.com/questions/6910641/how-do-i-get-indices-of-n-maximum-values-in-a-numpy-array
@@ -725,14 +708,15 @@ class PINNSolver():
         self.wr = np.reshape(wres,(-1,1))
     
     def resample(self, topk, xxr):
+        sys.exit('outdated')
         ''' compute residual on xxr, add topk points to collocation pts
         '''
         res = np.abs(self.pde(xxr, self.model).numpy().flatten())
         ind = np.argpartition(res, -topk)[-topk:]
         xxr = xxr.numpy()[ind,:]
         newx = tf.convert_to_tensor(xxr)
-        self.xr = tf.concat([self.xr, newx],axis=0)
-        self.wr = np.ones([tf.shape(self.xr)[0],1])
+        self.dataset.xr = tf.concat([self.dataset.xr, newx],axis=0)
+        self.wr = np.ones([tf.shape(self.dataset.xr)[0],1])
         return xxr
 
         

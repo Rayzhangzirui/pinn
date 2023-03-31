@@ -5,6 +5,7 @@ import tensorflow as tf
 from time import time
 from scipy.io import loadmat
 import collections
+import json
 
 # decorator for timing
 def timer(func):
@@ -153,27 +154,9 @@ def tensor2numpy(d):
         if tf.is_tensor(d[key]):
             d[key] = float(d[key])
 
-def preprocess_option(opts):
-    # 
-    if opts['exactfwd'] == True:
-        opts['trainD'] = False
-        opts['trainRHO'] = False
-        opts['trainM'] = False
-        opts['trainm'] = False
-        opts['trainx0'] = False
-        opts['restore'] = None
-        for wkey in opts['weights']:
-            if wkey == 'res' or wkey == 'bc' or wkey == 'dat' or wkey == 'geomse':
-                continue
-            else:
-                opts['weights'][wkey] = None
-    
-    # quick test
-    if opts['smalltest'] == True:
-        opts['restore'] = None
-        opts['file_log'] = False
-        opts['N'] = 100
-        opts['num_init_train'] = 500
-        opts['nn_opts']['num_neurons_per_layer'] = 8
-        opts['nn_opts']['num_hidden_layers'] = 2
-        opts['lbfgs_opts']['maxfun'] = 200
+def savedict(dict, fpath):
+        # save all options 
+        tensor2numpy(dict)
+        json.dump( dict, open( fpath, 'w' ), indent=4 )
+
+
