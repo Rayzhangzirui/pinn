@@ -28,20 +28,13 @@ class Gmodel:
             total = self.opts.get('N') + self.opts.get('Ntest')
             self.dataset.downsample(total)
 
-            self.dattrainidx = np.arange(self.opts['Ndat'])
-            self.dattestidx = np.arange(self.opts['Ndat'], self.opts['Ndat'] + self.opts['Ndattest'])
-
-            self.restrainidx = np.arange(self.opts['N'])
-            self.restestidx = np.arange(self.opts['N'], total)
-        
         if opts.get('useupred') is not None:
             # use upred at xdat from other training
+            print('use upred from ', opts['useupred'])
             tmpdataset = DataSet(opts['useupred'])
             self.dataset.xdat = np.copy(tmpdataset.xdat)
             self.dataset.udat = np.copy(tmpdataset.upredxdat)
         
-        
-
         self.dim = self.dataset.dim
         self.xdim = self.dataset.xdim
         
@@ -58,18 +51,15 @@ class Gmodel:
 
 
         # choose optimizer
-        if opts.get('optimizer') == 'adamax':
+        if opts['optimizer'] == 'adamax':
             self.optim = tf.keras.optimizers.Adamax(learning_rate=learning_rate_schedule)
-        elif opts.get('optimizer') == 'rmsprop':
+        elif opts['optimizer'] == 'rmsprop':
             self.optim = tf.keras.optimizers.RMSprop(learning_rate=learning_rate_schedule)
         else:
             self.opts['optimizer'] = 'adam'
             self.optim = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
 
-        if opts.get('exactfwd') == True:
-            print('use exat parameter from dataset')
-            opts['D0'] = self.dataset.rDe
-            opts['RHO0'] = self.dataset.rRHOe
+        
         
         
         self.geomodel = None
@@ -84,35 +74,41 @@ class Gmodel:
                                 ]
                             )
 
-        self.param = {'rD':tf.Variable( opts['D0'], trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
-        'rRHO': tf.Variable(opts['RHO0'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
-        # 'factor': tf.Variable(opts['r0'], trainable=opts.get('trainfactor'),dtype = DTYPE,name="r"),
-        'M': tf.Variable(opts['M0'], trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
-        'm': tf.Variable(opts['m0'], trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
-        'A': tf.Variable(opts['A0'], trainable=opts.get('trainA'),dtype = DTYPE,name="A"),
-        'x0': tf.Variable(opts['x0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
-        'y0': tf.Variable(opts['y0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
-        'th1': tf.Variable(opts['th1'], trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
-        'th2': tf.Variable(opts['th2'], trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
+        # get init from dataset
+        opts['initparam']['rD'] = self.dataset.rDe 
+        opts['initparam']['rRHO'] = self.dataset.rRHOe
+        opts['initparam']['M'] =  self.dataset.M
+        opts['initparam']['m'] =  self.dataset.m
+        opts['initparam']['A'] =  self.dataset.A
+        opts['initparam']['x0'] = self.dataset.x0[0][0]
+        opts['initparam']['y0'] = self.dataset.x0[0][1]
+        opts['initparam']['z0'] = self.dataset.x0[0][2]
+        opts['initparam']['th1'] = self.dataset.th[0][0]
+        opts['initparam']['th2'] = self.dataset.th[0][1]
+
+        # model for probability
+        self.param = {
+        'rD':  tf.Variable(opts['initparam']['rD'],    trainable=opts.get('trainD'), dtype = DTYPE, name="rD"),
+        'rRHO':tf.Variable(opts['initparam']['rRHO'], trainable=opts.get('trainRHO'),dtype = DTYPE,name="rRHO"),
+        'M':   tf.Variable(opts['initparam']['M'],     trainable=opts.get('trainM'),dtype = DTYPE,name="M"),
+        'm':   tf.Variable(opts['initparam']['m'],     trainable=opts.get('trainm'),dtype = DTYPE,name="m"),
+        'A':   tf.Variable(opts['initparam']['A'],     trainable=opts.get('trainA'),dtype = DTYPE,name="A"),
+        'x0':  tf.Variable(opts['initparam']['x0'],    trainable=opts.get('trainx0'),dtype = DTYPE,name="x0"),
+        'y0':  tf.Variable(opts['initparam']['y0'],    trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
+        'th1': tf.Variable(opts['initparam']['th1'],   trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
+        'th2': tf.Variable(opts['initparam']['th2'],   trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
         }
 
         self.ix = [[self.param['x0'],self.param['y0']]]
 
         if self.xdim == 3:
-            self.param['z0'] = tf.Variable(opts['z0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="z0")
+            self.param['z0'] = tf.Variable(opts['initparam']['z0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="z0")
             self.ix = [[self.param['x0'],self.param['y0'],self.param['z0']]]
-        # initial
+
+        # print options
+        print (json.dumps(opts, indent=2,cls=MyEncoder))
+
         
-
-        # for computing residual at initial time
-        # self.dataset.xrt0 = np.copy(self.dataset.xr)
-        # self.dataset.xrt0[:,0] = 0.0
-
-        # for computing residual at final time
-        # self.dataset.xrt1 = np.copy(self.dataset.xr)
-        # self.dataset.xrt1[:,0] = 1.0
-        
-
         def ic(x):
             L = self.dataset.L
             r2 = tf.reduce_sum(tf.square((x[:, 1:self.dim]-self.ix)*L), 1, keepdims=True) # this is in pixel scale, unit mm, 
@@ -217,8 +213,9 @@ class Gmodel:
 
 
         reg = None
-        if self.opts.get('reg') is not None:
-            reg = tf.keras.regularizers.L2(self.opts['reg'])
+        if self.opts.get('weightreg') is not None:
+            print('apply weight regularization')
+            reg = tf.keras.regularizers.L2(self.opts['weightreg'])
 
         self.model = PINN(param=self.param,
                 input_dim=self.dim,
@@ -237,15 +234,10 @@ class Gmodel:
                                 geomodel = self.geomodel,
                                 options = opts)
 
-        if opts.get('exactfwd') == True:
+        if opts['simtype'] == 'exactfwd':
             self.param['rD'].assign(self.dataset.rDe)
             self.param['rRHO'].assign(self.dataset.rRHOe)
 
-        if opts.get('resetparam') == True:
-            self.param['rD'].assign(self.opts['D0'])
-            self.param['rRHO'].assign(self.opts['RHO0'])
-            self.param['M'].assign(self.opts['M0'])
-            self.param['m'].assign(self.opts['m0'])
 
     def solve(self):
 

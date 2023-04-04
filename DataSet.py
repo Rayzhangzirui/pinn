@@ -12,7 +12,7 @@ class DataSet:
         _ , ext = os.path.splitext(matfile)
         assert ext == '.mat', 'not reading mat file'
         
-        matdat = loadmat(matfile)
+        matdat = loadmat(matfile,mat_dtype=True)
 
         for key, value in matdat.items():
             
@@ -20,7 +20,7 @@ class DataSet:
                 # skip meta data
                 continue
             if isinstance(value,np.ndarray):
-                if value.dtype.kind == 'f':
+                if value.dtype.kind in {'f','i','u'}:
                     # convert to float or double
                     value = value.astype(DTYPE)
                 if value.size == 1:
@@ -38,6 +38,8 @@ class DataSet:
         for a in attr:
             x = getattr(self, a)
             print(f"{a} {x}")
+            if isinstance(x, np.ndarray):
+                print(f"{x.shape} {x.dtype}")
     
     def downsample(self,n):
         ''' downsample data size
@@ -57,7 +59,5 @@ class DataSet:
 
 if __name__ == "__main__":
     filename  = sys.argv[1]
-    opts = {}
-    opts['inv_dat_file'] = filename
-    dataset = DataSet(opts)
+    dataset = DataSet(filename)
     dataset.print()

@@ -675,7 +675,8 @@ class PINNSolver():
         upredxr = self.model(self.dataset.xr)
         savedat['xr'] = t2n(self.dataset.xr)
         savedat['upredxr'] = t2n(upredxr)
-
+        savedat['lossname'] = [k for k,v in self.current_loss.items()]
+        savedat['lossval'] = [v.numpy() for k,v in self.current_loss.items()]
         # resxr = self.pde(self.dataset.xr, self.model)
         # savedat['resxr'] = t2n(resxr['residual'])
 

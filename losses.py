@@ -123,6 +123,7 @@ class Losses():
             self.mask = 1.0        
 
         self.weighting = Weighting(self.opts['weights'], **self.opts['weightopt'])
+        
 
         mregloss = lambda: relusqr(self.param['m'], self.opts['mrange'][0], self.opts['mrange'][1])
         rDregloss = lambda: relusqr(self.param['rD'], self.opts['D0'] * 0.1, self.opts['D0'] * 1.9)

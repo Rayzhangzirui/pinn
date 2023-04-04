@@ -39,7 +39,7 @@ class Weighting(object):
         self.current_iter = 0
         self.num_losses = 0
         self.weight_keys = [] # list of active losses
-        self.skip_weights = {'mreg','rDreg','rRHOreg','Areg'} #weights to skip
+        self.skip_weights = {'mreg','rDreg','rRHOreg','Areg','th1reg','th2reg','Mreg'} #weights to skip
         self.active = True
         
         # initialization, alpha is dict of loss-weight
@@ -86,7 +86,7 @@ class Weighting(object):
         
         
     def trackres_update(self, dict_unw_loss):
-        '''keep the data loss magnitude some factor of residual
+        '''keep the data loss magnitude same factor of residual
         '''
         # alpha  =  average of residual loss/ loss average of other loss
         L = np.array([dict_unw_loss[k] for k in self.weight_keys])
@@ -110,19 +110,12 @@ class Weighting(object):
         Lave = self.stream.process(L)
         itrack = self.weight_keys.index(self.whichloss) #index of loss being tracked, usually residual loss
 
-        
-
         for i,k in enumerate(self.weight_keys):
             if k in self.skip_weights:
                 # skip some weights,
                 continue
             if i != itrack:
                 self.alphas[k] = self.beta * self.alphas[k] + (1-self.beta) * Lave[itrack]/ Lave[i]
-        
-
-        
-
-
     
     def cov_update(self, dict_unw_loss):
         # loss CANNOT be negative or zero

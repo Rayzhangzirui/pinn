@@ -7,6 +7,17 @@ from scipy.io import loadmat
 import collections
 import json
 
+class MyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(MyEncoder, self).default(obj)
+                
 # decorator for timing
 def timer(func):
     def wrapper(*args, **kwargs):
@@ -72,11 +83,13 @@ def sample(n, bd):
     return tf.concat(cols, axis=1)
 
 def n2t(x):
+    # convert numpy to tensor
     if x is None:
         return None
     return tf.convert_to_tensor(x,dtype=DTYPE)
 
 def t2n(x):
+    # convert tensor to numpy
     if x is None:
         return None
     if isinstance(x, np.ndarray):
@@ -157,6 +170,6 @@ def tensor2numpy(d):
 def savedict(dict, fpath):
         # save all options 
         tensor2numpy(dict)
-        json.dump( dict, open( fpath, 'w' ), indent=4 )
+        json.dump( dict, open( fpath, 'w' ), indent=4, cls=MyEncoder)
 
 
