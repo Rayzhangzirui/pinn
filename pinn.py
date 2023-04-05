@@ -91,6 +91,7 @@ class PINNSolver():
     def __init__(self, model, pde, 
                 losses,
                 dataset,
+                manager,
                 geomodel=None, 
                 wr = None,
                 options=None):
@@ -98,6 +99,7 @@ class PINNSolver():
         self.geomodel = geomodel
         self.pde = pde
         self.dataset = dataset
+        self.manager = manager
         
         self.losses = losses
         
@@ -120,8 +122,6 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
         self.gradlog = None #log for gradient
 
-    
-        
         print(f"earlystop monitor {self.options['monitor']}")
 
         self.earlystop = EarlyStopping(self.options['monitor'], self.options['patience'])
@@ -142,10 +142,7 @@ class PINNSolver():
         else:
             print('skip file log')
         
-        self.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.options['restore'])
-        if self.geomodel is not None:
-            self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.options['restore'])
-
+        
         # may set some layer trainable = False
         self.model.set_trainable_layer(self.options.get('trainnnweight'))
 
@@ -156,38 +153,7 @@ class PINNSolver():
         if self.geomodel is not None:
             glob_trainable_variables +=  self.geomodel.trainable_variables
 
-    def setup_ckpt(self, model, ckptdir = 'ckpt', restore = None):
-         # set up check point
-        checkpoint = tf.train.Checkpoint(model)
-        manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.options['model_dir'],ckptdir), max_to_keep=4)
-        # manager.latest_checkpoint is None if no ckpt found
-
-        if self.options['restore'] is not None and (self.options['restore']):
-            # not None and not empty
-            # self.options['restore'] is a number or a path
-            if isinstance(self.options['restore'],int):
-                # restore check point in the same directory by integer, 0 = ckpt-1
-                ckptpath = manager.checkpoints[self.options['restore']]
-            else:
-                # restore checkpoint by path
-                if "/ckpt" in self.options['restore']:
-                    ckptpath = os.path.join(self.options['restore'])
-                else:
-                    ckptpath = os.path.join(self.options['restore'],ckptdir,'ckpt-2')
-            checkpoint.restore(ckptpath)
-            print("Restored from {}".format(ckptpath))
-        else:
-            # self.options['restore'] is None
-            # try to continue previous simulation
-            ckptpath = manager.latest_checkpoint
-            if ckptpath is not None:
-                checkpoint.restore(ckptpath)
-                print("Restored from {}".format(ckptpath))
-            else:
-                # if no previous ckpt
-                print("No restore")
-
-        return manager 
+    
 
     # @tf.function
     # def loss_fn(self):

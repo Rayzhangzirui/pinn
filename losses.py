@@ -4,6 +4,10 @@ import numpy as np
 from weight import Weighting
 from util import *
 
+
+glob_smoothwidth = 20.0
+glob_heaviside = 'sigmoid'
+
 def binarize(x, th):
     # https://stackoverflow.com/questions/37743574/hard-limiting-threshold-activation-function-in-tensorflow
     # return 1.0 if x > th
@@ -14,7 +18,8 @@ def binarize(x, th):
 
 def sigmoidbinarize(x, th):
     # smooth heaviside function using a sigmoid
-    return tf.math.sigmoid(20*(x-th))
+    K = glob_smoothwidth
+    return tf.math.sigmoid(K*(x-th))
 
 
 def double_logistic_sigmoid(x, th):
@@ -28,7 +33,7 @@ def smoothheaviside(x, th):
     # tfp.math.smootherstep S(x), y goes from 0 to 1 as x goes from 0 1
     # F(x) = S((x+1)/2) = S(x/2+1/2), -1 to 1
     # G(x) = S(Kx/2+1/2), -1/K to 1/K
-    K = 20.0
+    K = glob_smoothwidth
     return tfp.math.smootherstep(K * (x-th)/2.0 + 1.0/2.0)
         
 def mse(x,y,w=1.0):
@@ -54,8 +59,11 @@ def diceloss(upred, udat, phi, th):
     return 1.0-d
 
 def segmseloss(upred, udat, phi, th):    
-    # uth = sigmoidbinarize(upred, th)
-    uth = smoothheaviside(upred, th)
+
+    if glob_heaviside == 'sigmoid':
+        uth = sigmoidbinarize(upred, th)
+    else:
+        uth = smoothheaviside(upred, th)
     return phimse(uth, udat, phi)
 
 def loglikely(alpha, y):
@@ -89,6 +97,12 @@ class Losses():
         self.dataset = dataset
         self.param = param
         self.opts = opts
+        
+        # global variables
+        global glob_heaviside
+        global glob_smoothwidth
+        glob_smoothwidth = self.opts['smoothwidth']
+        glob_heaviside = self.opts['heaviside']
 
         self.idattrain = np.arange(self.opts['Ndat'])
         self.idattest = np.arange(self.opts['Ndat'], self.opts['Ndat'] + self.opts['Ndattest'])

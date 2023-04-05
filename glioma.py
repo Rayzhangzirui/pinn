@@ -105,9 +105,7 @@ class Gmodel:
             self.param['z0'] = tf.Variable(opts['initparam']['z0'], trainable=opts.get('trainx0'),dtype = DTYPE,name="z0")
             self.ix = [[self.param['x0'],self.param['y0'],self.param['z0']]]
 
-        # print options
-        print (json.dumps(opts, indent=2,cls=MyEncoder))
-
+        
         
         def ic(x):
             L = self.dataset.L
@@ -217,30 +215,39 @@ class Gmodel:
             print('apply weight regularization')
             reg = tf.keras.regularizers.L2(self.opts['weightreg'])
 
+        # Initilize PINN model
         self.model = PINN(param=self.param,
                 input_dim=self.dim,
                 **(self.opts['nn_opts']),
                 output_transform=ot,
                 regularizer=reg)
+        
+        # load model, also change self.param
+        self.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
+        if self.geomodel is not None:
+            self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
 
+        for x in self.param:
+            # if variable not trainable, set as initparam
+            if self.param[x].trainable == False:
+                self.param[x].assign(self.opts['initparam'][x])
 
         losses = Losses(self.model, pde, self.dataset, self.param, self.opts)
-
-
+                
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 
                                 losses,
                                 self.dataset,
+                                manager = self.manager,
                                 geomodel = self.geomodel,
                                 options = opts)
 
-        if opts['simtype'] == 'exactfwd':
-            self.param['rD'].assign(self.dataset.rDe)
-            self.param['rRHO'].assign(self.dataset.rRHOe)
-
 
     def solve(self):
-
+        
+        # print options
+        print (json.dumps(self.opts, indent=2,cls=MyEncoder))
+        print(self.param)
         # save option
         savedict(self.opts, os.path.join(self.opts['model_dir'],'options.json') )
 
@@ -251,9 +258,41 @@ class Gmodel:
         if self.opts['lbfgs_opts'] is not None:
             results = self.solver.solve_with_ScipyOptimizer(method='L-BFGS-B', options=self.opts['lbfgs_opts'])
             
-
         # save time info 
         savedict(self.solver.info, os.path.join(self.opts['model_dir'],'solverinfo.json') )
+    
+    def setup_ckpt(self, model, ckptdir = 'ckpt', restore = None):
+         # set up check point
+        checkpoint = tf.train.Checkpoint(model)
+        manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['model_dir'],ckptdir), max_to_keep=4)
+        # manager.latest_checkpoint is None if no ckpt found
+
+        if self.opts['restore'] is not None and (self.opts['restore']):
+            # not None and not empty
+            # self.opts['restore'] is a number or a path
+            if isinstance(self.opts['restore'],int):
+                # restore check point in the same directory by integer, 0 = ckpt-1
+                ckptpath = manager.checkpoints[self.opts['restore']]
+            else:
+                # restore checkpoint by path
+                if "/ckpt" in self.opts['restore']:
+                    ckptpath = os.path.join(self.opts['restore'])
+                else:
+                    ckptpath = os.path.join(self.opts['restore'],ckptdir,'ckpt-2')
+            checkpoint.restore(ckptpath)
+            print("Restored from {}".format(ckptpath))
+        else:
+            # self.opts['restore'] is None
+            # try to continue previous simulation
+            ckptpath = manager.latest_checkpoint
+            if ckptpath is not None:
+                checkpoint.restore(ckptpath)
+                print("Restored from {}".format(ckptpath))
+            else:
+                # if no previous ckpt
+                print("No restore")
+
+        return manager 
     
 
     

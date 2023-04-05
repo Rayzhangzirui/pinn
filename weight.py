@@ -194,7 +194,6 @@ if __name__ == "__main__":
     n = eval(sys.argv[1])
     w = Weighting(weight, method=sys.argv[2], param=eval(sys.argv[3]))
     
-    
 
     for i in range(n):
         loss = {'w2': np.random.exponential(1), 'w1':np.random.exponential(10), 'res':np.random.exponential(1)}
