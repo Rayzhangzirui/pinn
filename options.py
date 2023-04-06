@@ -12,7 +12,7 @@ weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'da
     'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
 
 # initial paramter
-initparam = {'rD': None, 'rRHO': None, 'M': None, 'm': None, 'th1':None, 'th2':None, 'A':None, 'x0':None, 'y0':None, 'z0':None}
+initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
 
 opts = {
    "tag" : '',
@@ -27,6 +27,7 @@ opts = {
     "save_res_every" : None, # save residual
     "weights" : weights, # weight of data, weight of res is 1
     "ckpt_every": 20000,
+    "initfromdata":False,
     "patience":1000,
     "file_log":True,
     "saveckpt":True,
@@ -62,6 +63,7 @@ opts = {
     "patientweight":1e-3,
     "simtype":'exactfwd',
     "monitor":['total'],
+    "whichseg":'mse',
     "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
     }
 
@@ -119,6 +121,8 @@ class Options(object):
         while i < len(args):
             key = args[i]
             default_val = get_nested_dict(self.opts, key)
+            if default_val is None:
+                raise ValueError('key not found in dictionary: %s' % key)
             if isinstance(default_val,str):
                 val = args[i+1]
             elif isinstance(default_val,list):
@@ -153,8 +157,6 @@ class Options(object):
             self.opts['trainx0'] = False
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
-            self.opts['D0'] = 1.0
-            self.opts['RHO0'] = 1.0
             self.opts['monitor'] = ['total','totaltest']
         
         elif simtype == 'synthetic':
@@ -183,9 +185,15 @@ class Options(object):
             self.opts['trainth2'] = True
             self.opts['weights']['res'] = 1.0
             self.opts['weights']['bc'] = 1.0
+            if self.opts['whichseg'] == 'mse':
+                self.opts['weights']['seg1'] = w
+                self.opts['weights']['seg2'] = w
+            elif self.opts['whichseg'] == 'area':
+                self.opts['weights']['area1'] = w
+                self.opts['weights']['area2'] = w
+            else:
+                raise ValueError('whichseg must be mse or area')
             self.opts['weights']['petmse'] = w
-            self.opts['weights']['seg1'] = w
-            self.opts['weights']['seg2'] = w
             self.opts['weights']['Areg'] = 1.0
             self.opts['weights']['mreg'] = 1.0
             self.opts['weights']['th1reg'] = 1.0
@@ -224,8 +232,14 @@ class Options(object):
             self.opts['weights']['res'] = 1.0
             self.opts['weights']['bc'] = 1.0
             self.opts['weights']['petmse'] = None
-            self.opts['weights']['seg1'] = w
-            self.opts['weights']['seg2'] = w
+            if self.opts['whichseg'] == 'mse':
+                self.opts['weights']['seg1'] = w
+                self.opts['weights']['seg2'] = w
+            elif self.opts['whichseg'] == 'area':
+                self.opts['weights']['area1'] = w
+                self.opts['weights']['area2'] = w
+            else:
+                raise ValueError('whichseg must be mse or area')
             self.opts['weights']['Areg'] = None
             self.opts['weights']['mreg'] = None
             self.opts['weights']['th1reg'] = 1.0

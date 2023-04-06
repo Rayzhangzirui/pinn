@@ -16,7 +16,7 @@ def binarize(x, th):
     out = tf.where(cond, 1.0, 0.0) 
     return out
 
-def sigmoidbinarize(x, th):
+def sigmoid_binarize(x, th):
     # smooth heaviside function using a sigmoid
     K = glob_smoothwidth
     return tf.math.sigmoid(K*(x-th))
@@ -28,13 +28,20 @@ def double_logistic_sigmoid(x, th):
     sigma2 = 0.05
     return 0.5 + 0.5 * tf.math.sign(z) * (1.0 - tf.exp(-z**2/sigma2))
 
-def smoothheaviside(x, th):
+def smootherstep_binarize(x, th):
     # smooth heaviside function
     # tfp.math.smootherstep S(x), y goes from 0 to 1 as x goes from 0 1
     # F(x) = S((x+1)/2) = S(x/2+1/2), -1 to 1
     # G(x) = S(Kx/2+1/2), -1/K to 1/K
     K = glob_smoothwidth
     return tfp.math.smootherstep(K * (x-th)/2.0 + 1.0/2.0)
+
+def smoothheaviside(u, th):
+    if glob_heaviside == 'sigmoid':
+        uth = sigmoid_binarize(u, th)
+    else:
+        uth = smootherstep_binarize(u, th)
+    return uth
         
 def mse(x,y,w=1.0):
     return tf.reduce_mean((x-y)**2 *w)
@@ -54,17 +61,23 @@ def dice(T, P):
     return 2 * TP / (2*TP + FP + FN)
 
 def diceloss(upred, udat, phi, th):
-    pu = sigmoidbinarize(upred, th)
+    pu = smoothheaviside(upred, th)
     d = dice(pu, udat)
     return 1.0-d
 
 def segmseloss(upred, udat, phi, th):    
-
-    if glob_heaviside == 'sigmoid':
-        uth = sigmoidbinarize(upred, th)
-    else:
-        uth = smoothheaviside(upred, th)
+    '''spatial segmentation loss by mse'''
+    uth = smoothheaviside(upred,th)
     return phimse(uth, udat, phi)
+
+def areamseloss(upred, udat, phi, th):    
+    '''spatial segmentation loss by area (estimated as ratio of points above threshold)'''
+    upred_th = smoothheaviside(upred,th)
+    upred_area = tf.reduce_mean(upred_th)
+
+    udat_th = smoothheaviside(udat,th)
+    udat_area = tf.reduce_mean(udat_th)
+    return mse(upred_area, udat_area)
 
 def loglikely(alpha, y):
     # equation 4, Jana 
@@ -74,9 +87,7 @@ def loglikely(alpha, y):
 
 def area(upred,th):
     #estimate area above some threshold, assuming the points are uniformly distributed
-    # uth = smoothheaviside(upred, th)
-    uth = sigmoidbinarize(upred, th)
-    # uth = binarize(upred, th)
+    uth = smoothheaviside(upred, th)
     return tf.reduce_mean(uth)
 
 def relusqr(p, a, b):
@@ -150,6 +161,7 @@ class Losses():
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
                          'uxr':self.uxrloss,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
+                         'area1': self.farea1loss , 'area2': self.farea2loss, 
                         'petmse': self.fpetmseloss,
                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
                         'th1reg':th1regloss, 'th2reg':th2regloss
@@ -214,6 +226,13 @@ class Losses():
 
     def fseg2loss(self): 
         return segmseloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
+    
+    # segmentation area loss, mse of ratio above threshold
+    def farea1loss(self): 
+        return areamseloss(self.upredxdat, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
+
+    def farea2loss(self): 
+        return areamseloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
 
     def fpetmseloss(self):
         # assuming mu ~ pet
@@ -299,7 +318,7 @@ def fresl1t1loss():
 maximize dice, minimize 1-dice
 def fdice2loss(): 
     upred = self.model(self.dataset.xdat)
-    pu2 = sigmoidbinarize(upred, self.param['th2'])
+    pu2 = sigmoid_binarize(upred, self.param['th2'])
     d2 = dice(self.dataset.u2, pu2)
     return 1.0-d2
 
@@ -345,14 +364,14 @@ def flike1loss():
     # minimize 1-likelihood, equation 4 Lipkova personalized ...
     upred = self.model(self.dataset.xdat) *self.dataset.phidat
     # alpha = double_logistic_sigmoid(upred, self.param['th1'])
-    alpha = sigmoidbinarize(upred, self.param['th1'])
+    alpha = sigmoid_binarize(upred, self.param['th1'])
     return loglikely(alpha, self.dataset.u1)
 
 def flike2loss():
     # minimize 1-likelihood, equation 4 Lipkova personalized ...
     upred = self.model(self.dataset.xdat) *self.dataset.phidat
     # alpha = double_logistic_sigmoid(upred, self.param['th2'])
-    alpha = sigmoidbinarize(upred, self.param['th2'])
+    alpha = sigmoid_binarize(upred, self.param['th2'])
     return loglikely(alpha, self.dataset.u2)
 
 

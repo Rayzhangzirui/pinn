@@ -75,16 +75,14 @@ class Gmodel:
                             )
 
         # get init from dataset
-        opts['initparam']['rD'] = self.dataset.rDe 
-        opts['initparam']['rRHO'] = self.dataset.rRHOe
-        opts['initparam']['M'] =  self.dataset.M
-        opts['initparam']['m'] =  self.dataset.m
-        opts['initparam']['A'] =  self.dataset.A
-        opts['initparam']['x0'] = self.dataset.x0[0][0]
-        opts['initparam']['y0'] = self.dataset.x0[0][1]
-        opts['initparam']['z0'] = self.dataset.x0[0][2]
-        opts['initparam']['th1'] = self.dataset.th[0][0]
-        opts['initparam']['th2'] = self.dataset.th[0][1]
+        if opts['initfromdata'] is True:
+            # do not set rD, rRHO, depend on udatsource
+            # do not set x0, y0, z0, unsclaed value in dataset
+            opts['initparam']['M'] =  self.dataset.M
+            opts['initparam']['m'] =  self.dataset.m
+            opts['initparam']['A'] =  self.dataset.A
+            opts['initparam']['th1'] = self.dataset.th[0][0]
+            opts['initparam']['th2'] = self.dataset.th[0][1]
 
         # model for probability
         self.param = {
@@ -227,10 +225,12 @@ class Gmodel:
         if self.geomodel is not None:
             self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
 
+        
         for x in self.param:
             # if variable not trainable, set as initparam
             if self.param[x].trainable == False:
                 self.param[x].assign(self.opts['initparam'][x])
+                
 
         losses = Losses(self.model, pde, self.dataset, self.param, self.opts)
                 
@@ -247,7 +247,8 @@ class Gmodel:
         
         # print options
         print (json.dumps(self.opts, indent=2,cls=MyEncoder))
-        print(self.param)
+        for vname in self.param:
+            print(vname, self.param[vname].numpy(), self.param[vname].trainable)
         # save option
         savedict(self.opts, os.path.join(self.opts['model_dir'],'options.json') )
 
