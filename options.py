@@ -1,5 +1,6 @@
 import sys
 import ast
+import json
 
 # default ftol 2.2204460492503131e-09 from  https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py#L48-L207
 lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun': 10000, "maxiter": 10000, "maxls": 50}
@@ -14,6 +15,7 @@ weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'da
 # initial paramter
 initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
 
+earlystop_opts = {'patience': 1000, 'min_delta': 1e-4, "monitor":['total']}
 opts = {
    "tag" : '',
     "model_dir": '',
@@ -27,8 +29,8 @@ opts = {
     "save_res_every" : None, # save residual
     "weights" : weights, # weight of data, weight of res is 1
     "ckpt_every": 20000,
-    "initfromdata":False,
-    "patience":1000,
+    "initfromdata":True,
+    "earlystop_opts":earlystop_opts,
     "file_log":True,
     "saveckpt":True,
     "trainD":True,
@@ -62,7 +64,6 @@ opts = {
     "usegeo":False,
     "patientweight":1e-3,
     "simtype":'exactfwd',
-    "monitor":['total'],
     "whichseg":'mse',
     "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
     }
@@ -80,11 +81,15 @@ def update_nested_dict(nested_dict, key, value):
     Returns:
     - None
     """
+    found =  False
     for k, v in nested_dict.items():
         if k == key:
             nested_dict[k] = value
+            found = True
         elif isinstance(v, dict):
-            update_nested_dict(v, key, value)
+            found = found or update_nested_dict(v, key, value)
+
+    return found
 
 def get_nested_dict(nested_dict, target_key):
     """
@@ -121,8 +126,6 @@ class Options(object):
         while i < len(args):
             key = args[i]
             default_val = get_nested_dict(self.opts, key)
-            if default_val is None:
-                raise ValueError('key not found in dictionary: %s' % key)
             if isinstance(default_val,str):
                 val = args[i+1]
             elif isinstance(default_val,list):
@@ -130,7 +133,9 @@ class Options(object):
             else:
                 val = ast.literal_eval(args[i+1])
             
-            update_nested_dict(self.opts, key, val)
+            found = update_nested_dict(self.opts, key, val)
+            if not found:
+                raise ValueError('Key %s not found in dictionary' % key)
             i +=2
 
     def preprocess_option(self):
@@ -145,7 +150,7 @@ class Options(object):
             self.opts['trainx0'] = False
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
-            self.opts['monitor'] = ['total','totaltest']
+            self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
         
         elif simtype == 'solvechar':
             # solve characteristic equation
@@ -157,7 +162,7 @@ class Options(object):
             self.opts['trainx0'] = False
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
-            self.opts['monitor'] = ['total','totaltest']
+            self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
         
         elif simtype == 'synthetic':
             # simple synthetic data, infer D and RHO
@@ -198,7 +203,7 @@ class Options(object):
             self.opts['weights']['mreg'] = 1.0
             self.opts['weights']['th1reg'] = 1.0
             self.opts['weights']['th2reg'] = 1.0
-            self.opts['monitor'] = ['pdattest']
+            self.opts['earlystop_opts']['monitor'] = ['pdattest']
         
         elif simtype == 'petonly':
             w = self.opts['patientweight']
@@ -218,7 +223,7 @@ class Options(object):
             self.opts['weights']['mreg'] = 1.0
             self.opts['weights']['th1reg'] = None
             self.opts['weights']['th2reg'] = None
-            self.opts['monitor'] = ['pdattest']
+            self.opts['earlystop_opts']['monitor'] = ['pdattest']
         
         elif simtype == 'segonly':
             w = self.opts['patientweight']
@@ -244,7 +249,7 @@ class Options(object):
             self.opts['weights']['mreg'] = None
             self.opts['weights']['th1reg'] = 1.0
             self.opts['weights']['th2reg'] = 1.0
-            self.opts['monitor'] = ['pdattest']
+            self.opts['earlystop_opts']['monitor'] = ['pdattest']
 
         else:
             raise ValueError('simtype not recognized')
@@ -262,6 +267,7 @@ if __name__ == "__main__":
     opts = Options()
     opts.parse_args(*sys.argv[1:])
 
-    print(opts.opts)
+    print (json.dumps(opts.opts, indent=2))
+    
 
 

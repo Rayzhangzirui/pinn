@@ -25,8 +25,9 @@ class Gmodel:
         self.dataset = DataSet(opts['inv_dat_file'])
         if self.opts.get('N') is not None:
             # down sample dataset
-            total = self.opts.get('N') + self.opts.get('Ntest')
-            self.dataset.downsample(total)
+            totalxr = self.opts.get('N') + self.opts.get('Ntest')
+            totalxdat = self.opts.get('Ndat') + self.opts.get('Ndattest')
+            self.dataset.downsample(max(totalxr, totalxdat))
 
         if opts.get('useupred') is not None:
             # use upred at xdat from other training
@@ -253,7 +254,7 @@ class Gmodel:
         savedict(self.opts, os.path.join(self.opts['model_dir'],'options.json') )
 
         if self.opts["num_init_train"] > 0:
-            self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"], patience = self.opts["patience"])
+            self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"])
             
 
         if self.opts['lbfgs_opts'] is not None:

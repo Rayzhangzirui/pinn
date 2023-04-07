@@ -55,27 +55,27 @@ class Logger(object):
 
 
 class EarlyStopping:
-    def __init__(self, monitor_losses:list, patience=100):
-        self.monitor_losses = monitor_losses
+    def __init__(self, monitor:list = ['total'], patience=100, min_delta = 1e-6):
+        self.monitor = monitor
         self.patience = patience
-        self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
-        self.wait = {loss: 0 for loss in self.monitor_losses}
+        self.best_losses = {loss: float('inf') for loss in self.monitor}
+        self.wait = {loss: 0 for loss in self.monitor}
         self.stop_loss = None  # stop due to which loss
-        self.detla = 1e-6 # minimum improvement to be considered as improvement
+        self.min_delta = min_delta # minimum improvement to be considered as improvement
         
     
     def reset(self):
-        self.best_losses = {loss: float('inf') for loss in self.monitor_losses}
-        self.wait = {loss: 0 for loss in self.monitor_losses}
+        self.best_losses = {loss: float('inf') for loss in self.monitor}
+        self.wait = {loss: 0 for loss in self.monitor}
         
     def check_stop(self, loss_dict:dict):
         # Determine the largest improvement across all monitored losses
         stop = False
-        for loss in self.monitor_losses:
+        for loss in self.monitor:
             cur_loss = loss_dict[loss]
             best_cur_loss = self.best_losses[loss]
             # Check if the largest improvement exceeds the
-            if cur_loss < best_cur_loss - self.detla:
+            if cur_loss < best_cur_loss - self.min_delta:
                 self.best_losses[loss] = cur_loss
                 self.wait[loss] = 0
             else:
@@ -122,9 +122,9 @@ class PINNSolver():
         self.current_optimizer = None # current optimizer
         self.gradlog = None #log for gradient
 
-        print(f"earlystop monitor {self.options['monitor']}")
+        
 
-        self.earlystop = EarlyStopping(self.options['monitor'], self.options['patience'])
+        self.earlystop = EarlyStopping(**self.options['earlystop_opts'])
         # set up log
         os.makedirs(options['model_dir'], exist_ok=True)
         
@@ -252,7 +252,7 @@ class PINNSolver():
     #     return testlosses
     
     
-    def solve_with_TFoptimizer(self, optimizer, N=10000, patience = 1000):
+    def solve_with_TFoptimizer(self, optimizer, N=10000):
         """This method performs a gradient descent type optimization."""
 
         @tf.function
@@ -292,7 +292,7 @@ class PINNSolver():
 
         end = time()
 
-        self.info['tfadamiter'] = i
+        self.info['tfadamiter'] = self.iter
         self.info['tfadamtime'] = (end-start)
         print('adam It:{:05d}, loss {:10.4e}, time {}'.format(i, loss['total'].numpy(), end-start))
         
@@ -390,13 +390,16 @@ class PINNSolver():
                                        method=method,
                                        callback=self.callback,
                                        **kwargs)
-            self.info['scipylbfgsiter'] = results.nit
             print('lbfgs(scipy) It:{:05d}, loss {:10.4e}, {}.'.format(results.nit, results.fun, results.message ))
         except Exception as e:
             print(e)
             print('lbfgs(scipy) stop early')
             pass
         
+        if self.info.get('tfadamiter') is None:
+            self.info['scipylbfgsiter'] = self.iter
+        else:
+            self.info['scipylbfgsiter'] = self.iter - self.info.get('tfadamiter')
         end = time()
         
         self.info['scipylbfgstime'] = (end-start)
@@ -501,6 +504,7 @@ class PINNSolver():
             
 
         # in the first iteration, create header
+        # this is loss after gradient step
         if self.iter == 1:
             trainable_params = []
             # create header
