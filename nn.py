@@ -55,7 +55,8 @@ class PINN(tf.keras.Model):
         self.paddings = [[0, 0], [0, self.num_neurons_per_layer - self.input_dim]]
 
         self.build(input_shape=(None,input_dim))
-        
+    
+    @tf.function
     def call(self, X):
         """Forward-pass through neural network."""
         Z = X

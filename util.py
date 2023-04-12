@@ -90,11 +90,20 @@ def n2t(x):
 
 def t2n(x):
     # convert tensor to numpy
-    if x is None:
-        return None
+    
     if isinstance(x, np.ndarray):
         return x
-    return x.numpy()
+    elif isinstance(x, tf.Tensor):
+        return x.numpy()
+    elif isinstance(x, dict):
+        dict_of_numpy_arrays = {}
+        for key, tensor in x.items():
+            if isinstance(tensor, tf.Tensor):
+                dict_of_numpy_arrays[key] = tensor.numpy()
+        return dict_of_numpy_arrays
+    else:
+        raise ValueError("Input must be a TensorFlow tensor or a dictionary of tensors.")
+
 
 def read_mri_dat(n,inv_dat_file,dim):
     ''' 

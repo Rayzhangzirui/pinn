@@ -40,7 +40,7 @@ class Logger(object):
     def __init__(self,fname):
         
         self.terminal = sys.stdout
-        self.log = open(fname, "a")
+        self.log = open(fname, "w")
         
    
     def write(self, message):
@@ -135,8 +135,12 @@ class PINNSolver():
         if self.options.get('file_log'):
             # if log to file
             if os.path.exists(logfile): 
-                print(f'{logfile} already exist') 
-                sys.exit()
+                if os.path.isdir(os.path.join(options['model_dir'],'ckpt')):
+                    print(f'{logfile} exist, and ckpt exist, exit')
+                    sys.exit()
+                else:
+                    print(f'{logfile} exist, but ckpt do not exist, continue')
+                    
             
             sys.stdout = Logger(logfile)
         else:
@@ -294,6 +298,7 @@ class PINNSolver():
 
         self.info['tfadamiter'] = self.iter
         self.info['tfadamtime'] = (end-start)
+        self.info['tfadamloss'] = self.current_loss
         print('adam It:{:05d}, loss {:10.4e}, time {}'.format(i, loss['total'].numpy(), end-start))
         
         # self.losses.weighting.active = False
@@ -403,6 +408,7 @@ class PINNSolver():
         end = time()
         
         self.info['scipylbfgstime'] = (end-start)
+        self.info['scipylbfgslosses'] = self.current_loss
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html#scipy.optimize.OptimizeResult
         print(f'lbfgs(scipy) time {end-start}')
         self.callback_train_end()
@@ -488,9 +494,11 @@ class PINNSolver():
         test_losses = self.losses.getloss()
         test_losses = {key + 'test': value for key, value in test_losses.items()}
 
-        test_monitor = 0.
+        test_monitor = tf.Variable(0., dtype=DTYPE)
+        # `variable += value` with `tf.Variable`s is not supported. Use `variable.assign_add(value)` to modify the variable, or `out = variable + value` if you need to get a new output Tensor.
         for x in self.losses.data_test_loss:
-            test_monitor += test_losses[x + 'test']
+            test_monitor = test_monitor + test_losses[x + 'test']
+            
         test_losses['pdattest'] = test_monitor
         
         all_losses = self.current_loss | test_losses
@@ -642,25 +650,28 @@ class PINNSolver():
         '''
         savedat = {}
 
-        upredxr = self.model(self.dataset.xr)
+        self.losses.savemode()
+        self.losses.getupredxr()
+        self.losses.getupredxdat()
+        
         savedat['xr'] = t2n(self.dataset.xr)
-        savedat['upredxr'] = t2n(upredxr)
-        savedat['lossname'] = [k for k,v in self.current_loss.items()]
-        savedat['lossval'] = [v.numpy() for k,v in self.current_loss.items()]
+        savedat['upredxr'] = t2n(self.losses.upredxr)
 
-        # resxr = self.pde(self.dataset.xr, self.model)
-        # savedat['resxr'] = t2n(resxr['residual'])
+        if self.dataset.xdat is not None:
+            upredxdat = self.model(self.dataset.xdat)
+            savedat['xdat'] = t2n(self.dataset.xdat)
+            savedat['upredxdat'] = t2n(self.losses.upredxdat)
+
+        # may not have current_loss if reload
+        # savedat['lossname'] = [k for k,v in self.current_loss.items()]
+        # savedat['lossval'] = [v.numpy() for k,v in self.current_loss.items()]
+        self.losses.getpdeterm()
+        savedat.update(t2n(self.losses.pdeterm))
 
         if self.geomodel is not None:
             P = self.geomodel(self.dataset.xr[:,1:])
             savedat['ppred'] = t2n(P)
-        
-        
-        if self.dataset.xdat is not None:
-            upredxdat = self.model(self.dataset.xdat)
-            savedat['xdat'] = t2n(self.dataset.xdat)
-            savedat['upredxdat'] = t2n(upredxdat)
-        
+
         for key in self.model.param:
             savedat[key] = self.model.param[key].numpy()
 

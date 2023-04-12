@@ -7,15 +7,21 @@ sys.path.insert(1, '/home/ziruz16/pinn')
 from config import *
 from glioma import *
 import json
+import argparse
+
 
 if __name__ == "__main__":
     
     optfile = sys.argv[1] #option file, used to load model
-    tend = eval(sys.argv[2]) #final time
-    N = eval(sys.argv[3]) # interval
- 
+    
+    parser = argparse.ArgumentParser(description="load option, make prediction")
+    parser.add_argument("optfile", type=str, help="option file, used to load model")
+    parser.add_argument("-p", "--path", type=str, help="Path to the ckpt file")
+    parser.add_argument("-n", "--name", type=str, help="Name of the output prediciton file")
+
+    args = parser.parse_args()
     # Opening JSON file
-    with open(optfile) as json_file:
+    with open(args.optfile) as json_file:
         opts = json.load(json_file)
     
 
@@ -29,9 +35,9 @@ if __name__ == "__main__":
     g.solver.save_upred('scipylbfgs')
     # g.solver.predtx('lbfgs', tend, N)
 
-    # restore from checkpoint 0
+    # # restore from checkpoint 0
     del g
     opts['restore'] = 0
     g = Gmodel(opts)
-    g.solver.save_upred('tfadam')
-    # g.solver.predtx('adam', tend, N)
+    g.solver.save_upred('adam')
+    # # g.solver.predtx('adam', tend, N)

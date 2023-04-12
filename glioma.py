@@ -43,10 +43,10 @@ class Gmodel:
         # choose learning rate schedule
         schedule_type = self.opts['schedule_type']
         if schedule_type == "Constant":
-            learning_rate_schedule = self.opts['lr']
+            learning_rate_schedule = self.opts['learning_rate_opts']
 
         elif schedule_type == "Exponential":
-            learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(**(opts['lr']))
+            learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(**(opts['learning_rate_opts']))
         else:
             raise ValueError("Unsupported schedule_type")
 

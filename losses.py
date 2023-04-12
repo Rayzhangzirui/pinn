@@ -117,9 +117,17 @@ class Losses():
 
         self.idattrain = np.arange(self.opts['Ndat'])
         self.idattest = np.arange(self.opts['Ndat'], self.opts['Ndat'] + self.opts['Ndattest'])
+        self.iresall = np.arange(self.opts['Ndat'] + self.opts['Ndattest'])
 
         self.irestrain = np.arange(self.opts['N'])
         self.irestest = np.arange(self.opts['N'], self.opts['N'] + self.opts['Ntest'])
+        self.idatall = np.arange(self.opts['N'] + self.opts['Ntest'])
+        
+        self.istrain = True
+        # index for residual loss and data loss
+        self.ires = None
+        self.idat = None
+        
 
         self.pdeterm = None
         self.upredxdat = None
@@ -135,10 +143,7 @@ class Losses():
         if self.opts['Ntest'] > 0:
             self.hastest = True
 
-        self.istrain = True
-        # index for residual loss and data loss
-        self.ires = None
-        self.idat = None
+
 
         if self.opts['datmask'] is not None:
             # mask for data loss
@@ -159,7 +164,7 @@ class Losses():
 
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
-                         'uxr':self.uxrloss,
+                         'uxr':self.uxrloss, 'u0dat':self.u0datloss, 
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                          'area1': self.farea1loss , 'area2': self.farea2loss, 
                         'petmse': self.fpetmseloss,
@@ -185,10 +190,18 @@ class Losses():
         self.istrain = False
         self.ires = self.irestest
         self.idat = self.idattest
+    
+    def savemode(self):
+        self.istrain = False
+        self.ires = self.iresall
+        self.idat = self.idatall
         
     # evaluate upred at xdat
     def getupredxdat(self):
         self.upredxdat = self.model(self.dataset.xdat[self.idat,:])
+    
+    def getu0predxdat(self):
+        self.u0predxdat = self.model(self.dataset.xt0[self.idat,:])
     
     def getupredxr(self):
         self.upredxr = self.model(self.dataset.xr[self.ires,:])
@@ -202,6 +215,8 @@ class Losses():
         self.getupredxdat()
         if 'uxr' in self.weighting.weight_keys:
             self.getupredxr()
+        if 'u0dat' in self.weighting.weight_keys:
+            self.getu0predxdat()
         
 
         wlosses = {} # dict of weighted loss
@@ -244,6 +259,10 @@ class Losses():
         '''mse of u at Xdat'''
         return phimse(self.dataset.udat[self.idat,:], self.upredxdat, self.dataset.phidat[self.idat,:])
     
+    def u0datloss(self):
+        '''mse of u at Xt0'''
+        return phimse(self.dataset.u0dat[self.idat,:], self.u0predxdat, self.dataset.phidat[self.idat,:])
+
     def uxrloss(self):
         '''mse of u at Xr'''
         return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phiq[self.ires,:])

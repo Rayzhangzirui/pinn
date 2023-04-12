@@ -8,7 +8,7 @@ lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun'
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False}
 
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'dat':None, 
-    'plfcor':None, 'uxr':None,
+    'plfcor':None, 'uxr':None, 'u0dat':None,
     'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
     'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
 
@@ -20,10 +20,10 @@ opts = {
    "tag" : '',
     "model_dir": '',
     "num_init_train" : 100000, # initial traning iteration
-    "N" : 40000, # number of residual point
-    "Ntest":40000,
-    "Ndat":40000,
-    "Ndattest":40000,
+    "N" : 50000, # number of residual point
+    "Ntest":50000,
+    "Ndat":50000,
+    "Ndattest":50000,
     "nn_opts": nn_opts,
     "print_res_every" : 100, # print residual
     "save_res_every" : None, # save residual
@@ -56,7 +56,7 @@ opts = {
     "trainnnweight":None,
     "resetparam":False,
     "schedule_type":'Exponential',
-    "lr": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
+    "learning_rate_opts": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
     "smalltest":False,
     "useupred": None,
     "gradnorm":False,
