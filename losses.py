@@ -117,11 +117,11 @@ class Losses():
 
         self.idattrain = np.arange(self.opts['Ndat'])
         self.idattest = np.arange(self.opts['Ndat'], self.opts['Ndat'] + self.opts['Ndattest'])
-        self.iresall = np.arange(self.opts['Ndat'] + self.opts['Ndattest'])
+        self.idatall = np.arange(self.opts['Ndat'] + self.opts['Ndattest'])
 
         self.irestrain = np.arange(self.opts['N'])
         self.irestest = np.arange(self.opts['N'], self.opts['N'] + self.opts['Ntest'])
-        self.idatall = np.arange(self.opts['N'] + self.opts['Ntest'])
+        self.iresall = np.arange(self.opts['N'] + self.opts['Ntest'])
         
         self.istrain = True
         # index for residual loss and data loss
@@ -145,7 +145,7 @@ class Losses():
 
 
 
-        if self.opts['datmask'] is not None:
+        if self.opts['datmask'] is not None and hasattr(self.dataset, self.opts['datmask']):
             # mask for data loss
             self.mask = getattr(self.dataset, self.opts['datmask'])
             print(f"use {self.opts['datmask']} as mask for pet data loss")

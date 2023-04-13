@@ -43,7 +43,7 @@ class Gmodel:
         # choose learning rate schedule
         schedule_type = self.opts['schedule_type']
         if schedule_type == "Constant":
-            learning_rate_schedule = self.opts['learning_rate_opts']
+            learning_rate_schedule = self.opts['learning_rate_opts']['initial_learning_rate']
 
         elif schedule_type == "Exponential":
             learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(**(opts['learning_rate_opts']))
@@ -77,13 +77,19 @@ class Gmodel:
 
         # get init from dataset
         if opts['initfromdata'] is True:
-            # do not set rD, rRHO, depend on udatsource
             # do not set x0, y0, z0, unsclaed value in dataset
+            opts['initparam']['rD'] =  self.dataset.rDe
+            opts['initparam']['rRHO'] =  self.dataset.rRHOe
             opts['initparam']['M'] =  self.dataset.M
-            opts['initparam']['m'] =  self.dataset.m
-            opts['initparam']['A'] =  self.dataset.A
-            opts['initparam']['th1'] = self.dataset.th[0][0]
-            opts['initparam']['th2'] = self.dataset.th[0][1]
+            if hasattr(self.dataset, 'm'):
+                opts['initparam']['m'] =  self.dataset.m
+            if hasattr(self.dataset, 'A'):
+                opts['initparam']['A'] =  self.dataset.A
+            if hasattr(self.dataset, 'th'):
+                opts['initparam']['th1'] = self.dataset.th[0][0]
+                opts['initparam']['th2'] = self.dataset.th[0][1]
+            
+            
 
         # model for probability
         self.param = {

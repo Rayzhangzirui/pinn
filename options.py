@@ -15,9 +15,10 @@ weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'da
 # initial paramter
 initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
 
-earlystop_opts = {'patience': 1000, 'min_delta': 1e-4, "monitor":['total']}
+earlystop_opts = {'patience': 1000, 'min_delta': 1e-5, "monitor":['total']}
 opts = {
    "tag" : '',
+   "note": '',
     "model_dir": '',
     "num_init_train" : 100000, # initial traning iteration
     "N" : 50000, # number of residual point
@@ -53,9 +54,10 @@ opts = {
     "activation":'tanh',
     "optimizer":'adam',
     "restore": '',
+    "copyfrom": '',
     "trainnnweight":None,
     "resetparam":False,
-    "schedule_type":'Exponential',
+    "schedule_type":'Constant',
     "learning_rate_opts": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
     "smalltest":False,
     "useupred": None,
@@ -105,19 +107,44 @@ def get_nested_dict(nested_dict, target_key):
 
 
 
+
+
 class Options(object):
     def __init__(self, opts = opts):
         self.opts = opts
-        
+        self.copied = False
+
     def parse_args(self, *args):
-        # first pass, parse args according to dictionary
         
+        # initialize by copy
+        i = 0
+        while i < len(args):
+            key = args[i]
+            if key =='copyfrom':
+                file = args[i+1]
+                with open(file, 'r') as f:
+                    copyopts = json.load(f)
+                self.opts.update(copyopts)
+            i +=2
+
+        # first pass, parse args according to dictionary
         self.parse_nest_args(*args)
+
+        if not self.opts['note']:
+            print('no note')
+            self.opts['note'] = input('note: ')
+
         self.preprocess_option()
         # second pass, might modify the dictionary, especially for weights
         self.parse_nest_args(*args)
         # trim the weights
         self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
+        self.eval_name()
+    
+    def eval_name(self):
+        # evaluate the name of the model
+        size = f"{self.opts['nn_opts']['num_hidden_layers']}x{self.opts['nn_opts']['num_neurons_per_layer']}"
+        self.opts['tag'] = (self.opts['tag']).format(size=size)
 
     def parse_nest_args(self, *args):
         # parse args according to dictionary
@@ -176,7 +203,7 @@ class Options(object):
             self.opts['trainth2'] = False
             self.opts['weights']['res'] = 1.0
             self.opts['weights']['dat'] = 1.0
-            self.opts['weights']['bc'] = 1.0
+            # self.opts['weights']['bc'] = 1.0
         
         elif simtype == 'patient':
             # patient data or full synthetic data, infer all parameters
