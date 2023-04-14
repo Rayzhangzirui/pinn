@@ -294,7 +294,7 @@ if __name__ == "__main__":
     opts = Options()
     opts.parse_args(*sys.argv[1:])
 
-    print (json.dumps(opts.opts, indent=2))
+    print (json.dumps(opts.opts, indent=2,sort_keys=True))
     
 
 

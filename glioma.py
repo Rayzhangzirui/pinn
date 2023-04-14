@@ -56,6 +56,9 @@ class Gmodel:
             self.optim = tf.keras.optimizers.Adamax(learning_rate=learning_rate_schedule)
         elif opts['optimizer'] == 'rmsprop':
             self.optim = tf.keras.optimizers.RMSprop(learning_rate=learning_rate_schedule)
+        
+        elif opts['optimizer'] == 'sgd':
+            self.optim = tf.keras.optimizers.SGD(momentum = 0.0, learning_rate=learning_rate_schedule)
         else:
             self.opts['optimizer'] = 'adam'
             self.optim = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
@@ -253,7 +256,7 @@ class Gmodel:
     def solve(self):
         
         # print options
-        print (json.dumps(self.opts, indent=2,cls=MyEncoder))
+        print (json.dumps(self.opts, indent=2,cls=MyEncoder,sort_keys=True))
         for vname in self.param:
             print(vname, self.param[vname].numpy(), self.param[vname].trainable)
         # save option
