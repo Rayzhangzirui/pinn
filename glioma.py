@@ -88,9 +88,9 @@ class Gmodel:
                 opts['initparam']['m'] =  self.dataset.m
             if hasattr(self.dataset, 'A'):
                 opts['initparam']['A'] =  self.dataset.A
-            if hasattr(self.dataset, 'th'):
-                opts['initparam']['th1'] = self.dataset.th[0][0]
-                opts['initparam']['th2'] = self.dataset.th[0][1]
+            if hasattr(self.dataset, 'th1'):
+                opts['initparam']['th1'] = self.dataset.th1
+                opts['initparam']['th2'] = self.dataset.th2
             
             
 

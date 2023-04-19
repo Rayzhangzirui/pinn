@@ -179,6 +179,6 @@ def tensor2numpy(d):
 def savedict(dict, fpath):
         # save all options 
         tensor2numpy(dict)
-        json.dump( dict, open( fpath, 'w' ), indent=4, cls=MyEncoder)
+        json.dump( dict, open( fpath, 'w' ), indent=4, cls=MyEncoder, sort_keys=True)
 
 

@@ -18,7 +18,7 @@ case "$2" in
 	;;
 
 	"opengpu")
-	server=ziruz16@opengpu.ics.uci.edu
+	server=ziruz16@lucy.ics.uci.edu
 	remotedir=/home/ziruz16/pinn/
 	;;
 

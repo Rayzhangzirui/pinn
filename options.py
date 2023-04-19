@@ -3,11 +3,12 @@ import ast
 import json
 
 # default ftol 2.2204460492503131e-09 from  https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py#L48-L207
+# about np.finfo(float).eps*10e6
 lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun': 10000, "maxiter": 10000, "maxls": 50}
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False}
 
-weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'dat':None, 
+weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
     'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
     'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
@@ -15,7 +16,7 @@ weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':1.0, 'da
 # initial paramter
 initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
 
-earlystop_opts = {'patience': 1000, 'min_delta': 1e-5, "monitor":['total']}
+earlystop_opts = {'patience': 1000, 'min_delta': 1e-6, "monitor":['total']}
 opts = {
    "tag" : '',
    "note": '',
@@ -64,7 +65,7 @@ opts = {
     "gradnorm":False,
     "outputderiv":False,
     "usegeo":False,
-    "patientweight":1e-3,
+    "patientweight":1.0,
     "simtype":'exactfwd',
     "whichseg":'mse',
     "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
@@ -191,6 +192,20 @@ class Options(object):
             self.opts['trainth2'] = False
             self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
         
+        elif simtype == 'fitfwd':
+            # use res and dat to learn solution
+            self.opts['trainD'] = False
+            self.opts['trainRHO'] = False
+            self.opts['trainM'] = False
+            self.opts['trainm'] = False
+            self.opts['trainA'] = False
+            self.opts['trainx0'] = False
+            self.opts['trainth1'] = False
+            self.opts['trainth2'] = False
+            self.opts['weights']['res'] = 1.0
+            self.opts['weights']['dat'] = 1.0
+            self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
+        
         elif simtype == 'synthetic':
             # simple synthetic data, infer D and RHO
             self.opts['trainD'] = True
@@ -203,7 +218,7 @@ class Options(object):
             self.opts['trainth2'] = False
             self.opts['weights']['res'] = 1.0
             self.opts['weights']['dat'] = 1.0
-            # self.opts['weights']['bc'] = 1.0
+        
         
         elif simtype == 'patient':
             # patient data or full synthetic data, infer all parameters
@@ -215,8 +230,8 @@ class Options(object):
             self.opts['trainx0'] = True
             self.opts['trainth1'] = True
             self.opts['trainth2'] = True
+            self.opts['weights']['dat'] = None
             self.opts['weights']['res'] = 1.0
-            self.opts['weights']['bc'] = 1.0
             if self.opts['whichseg'] == 'mse':
                 self.opts['weights']['seg1'] = w
                 self.opts['weights']['seg2'] = w
@@ -241,8 +256,8 @@ class Options(object):
             self.opts['trainx0'] = True
             self.opts['trainth1'] = False
             self.opts['trainth2'] = False
+            self.opts['weights']['dat'] = None
             self.opts['weights']['res'] = 1.0
-            self.opts['weights']['bc'] = 1.0
             self.opts['weights']['petmse'] = w
             self.opts['weights']['seg1'] = None
             self.opts['weights']['seg2'] = None
@@ -261,8 +276,8 @@ class Options(object):
             self.opts['trainx0'] = True
             self.opts['trainth1'] = True
             self.opts['trainth2'] = True
+            self.opts['weights']['dat'] = None
             self.opts['weights']['res'] = 1.0
-            self.opts['weights']['bc'] = 1.0
             self.opts['weights']['petmse'] = None
             if self.opts['whichseg'] == 'mse':
                 self.opts['weights']['seg1'] = w
