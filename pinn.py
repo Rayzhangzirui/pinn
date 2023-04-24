@@ -629,9 +629,9 @@ class PINNSolver():
 
             upredtxr = self.model(xr)
             if self.dataset.xdim == 2:
-                restxr = self.pde(self.dataset.xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
+                restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
             else:
-                restxr = self.pde(self.dataset.xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi, self.dataset.DzPphi)
+                restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi, self.dataset.DzPphi)
             
             upredts.append(t2n(upredtxr))
             rests.append(t2n(restxr['residual']))

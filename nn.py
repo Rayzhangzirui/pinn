@@ -28,14 +28,22 @@ class PINN(tf.keras.Model):
         # phyiscal parameters in the model
         self.param = param
 
-        
+        if activation == 'sin':
+            activation_fcn = tf.sin
+            kernel_initializer = SineInit()
+        else:
+            activation_fcn = tf.keras.activations.get(activation)
+            
+
         # Define NN architecture
         self.hidden = [tf.keras.layers.Dense(num_neurons_per_layer,
-                             activation=tf.keras.activations.get(activation),
+                             activation=activation_fcn,
                              kernel_initializer=kernel_initializer,
                              kernel_regularizer= regularizer)
                            for _ in range(self.num_hidden_layers)]
         
+        
+
         if userff == True:
             rbf =  tf.keras.layers.experimental.RandomFourierFeatures(
                 output_dim=num_neurons_per_layer,
@@ -55,6 +63,16 @@ class PINN(tf.keras.Model):
         self.paddings = [[0, 0], [0, self.num_neurons_per_layer - self.input_dim]]
 
         self.build(input_shape=(None,input_dim))
+
+        if activation == 'sin':
+            # first layer is re-initilize, 
+            first_layer = self.hidden[0]
+            weights, biases = first_layer.get_weights()
+            initializer = SineFirstInit()
+            new_weights = initializer(shape=weights.shape, dtype=weights.dtype)
+            new_biases = initializer(shape=biases.shape, dtype=biases.dtype)
+
+            first_layer.set_weights([new_weights, new_biases])
     
     @tf.function
     def call(self, X):
@@ -108,3 +126,17 @@ class PINN(tf.keras.Model):
                 else:
                     l.trainable = False
                 k += 1
+
+
+
+# SIREN paper
+# https://github.com/vsitzmann/siren/blob/master/modules.py
+class SineInit(tf.keras.initializers.Initializer):
+
+    def __call__(self, shape, **kwargs):
+        return tf.random.uniform(shape, -tf.sqrt(6.0/shape[-1]), tf.sqrt(6.0/shape[-1]))
+
+class SineFirstInit(tf.keras.initializers.Initializer):
+
+    def __call__(self, shape, **kwargs):
+        return tf.random.uniform(shape, -1/shape[-1], 1/shape[-1])

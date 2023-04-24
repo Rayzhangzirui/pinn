@@ -236,10 +236,10 @@ class Gmodel:
             self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
 
         
-        for x in self.param:
-            # if variable not trainable, set as initparam
-            if self.param[x].trainable == False:
-                self.param[x].assign(self.opts['initparam'][x])
+        # for x in self.param:
+        #     # if variable not trainable, set as initparam
+        #     if self.param[x].trainable == False:
+        #         self.param[x].assign(self.opts['initparam'][x])
                 
 
         losses = Losses(self.model, pde, self.dataset, self.param, self.opts)

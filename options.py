@@ -6,7 +6,7 @@ import json
 # about np.finfo(float).eps*10e6
 lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun': 10000, "maxiter": 10000, "maxls": 50}
 
-nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False}
+nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False, "activation":'tanh'}
 
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
@@ -52,7 +52,6 @@ opts = {
     'inv_dat_file': '',
     "lbfgs_opts":lbfgs_opts,
     "randomt": -1.0,
-    "activation":'tanh',
     "optimizer":'adam',
     "restore": '',
     "copyfrom": '',
@@ -113,20 +112,18 @@ def get_nested_dict(nested_dict, target_key):
 class Options(object):
     def __init__(self, opts = opts):
         self.opts = opts
-        self.copied = False
+        
 
     def parse_args(self, *args):
         
         # initialize by copy
-        i = 0
-        while i < len(args):
-            key = args[i]
-            if key =='copyfrom':
-                file = args[i+1]
-                with open(file, 'r') as f:
-                    copyopts = json.load(f)
-                self.opts.update(copyopts)
-            i +=2
+        if 'copyfrom' in args:
+            file = args[args.index('copyfrom')+1]
+            with open(file, 'r') as f:
+                copyopts = json.load(f)
+            self.opts.update(copyopts)
+            self.opts['restore'] = self.opts['model_dir']
+        
 
         # first pass, parse args according to dictionary
         self.parse_nest_args(*args)
