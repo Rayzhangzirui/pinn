@@ -18,8 +18,8 @@ initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, '
 
 earlystop_opts = {'patience': 1000, 'min_delta': 1e-6, "monitor":['total']}
 opts = {
-   "tag" : '',
-   "note": '',
+    "tag" : '',
+    "note": '',
     "model_dir": '',
     "num_init_train" : 100000, # initial traning iteration
     "N" : 50000, # number of residual point
@@ -124,19 +124,20 @@ class Options(object):
             self.opts.update(copyopts)
             self.opts['restore'] = self.opts['model_dir']
         
+        if 'simtype' in args:
+            tmp = args[args.index('simtype')+1]
+            self.opts['simtype'] = tmp
 
-        # first pass, parse args according to dictionary
-        self.parse_nest_args(*args)
+        self.preprocess_option()
 
         if not self.opts['note']:
             print('no note')
             self.opts['note'] = input('note: ')
-
-        self.preprocess_option()
+        
         # second pass, might modify the dictionary, especially for weights
         self.parse_nest_args(*args)
         # trim the weights
-        self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
+        # self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
         self.eval_name()
     
     def eval_name(self):
@@ -166,18 +167,7 @@ class Options(object):
     def preprocess_option(self):
         # set some options according to simtype
         simtype = self.opts['simtype']
-        if simtype == 'exactfwd':
-            self.opts['trainD'] = False
-            self.opts['trainRHO'] = False
-            self.opts['trainM'] = False
-            self.opts['trainm'] = False
-            self.opts['trainA'] = False
-            self.opts['trainx0'] = False
-            self.opts['trainth1'] = False
-            self.opts['trainth2'] = False
-            self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
-        
-        elif simtype == 'solvechar':
+        if simtype == 'solvechar':
             # solve characteristic equation
             self.opts['trainD'] = False
             self.opts['trainRHO'] = False
@@ -291,7 +281,7 @@ class Options(object):
             self.opts['earlystop_opts']['monitor'] = ['pdattest']
 
         else:
-            raise ValueError('simtype not recognized')
+            raise ValueError(f'simtype == {simtype} not recognized')
         
         # quick test
         if self.opts['smalltest'] == True:

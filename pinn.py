@@ -60,7 +60,7 @@ class EarlyStopping:
         self.patience = patience
         self.best_losses = {loss: float('inf') for loss in self.monitor}
         self.wait = {loss: 0 for loss in self.monitor}
-        self.stop_loss = None  # stop due to which loss
+        self.reason = ''  # reason for stopping
         self.min_delta = min_delta # minimum improvement to be considered as improvement
         
     
@@ -68,9 +68,16 @@ class EarlyStopping:
         self.best_losses = {loss: float('inf') for loss in self.monitor}
         self.wait = {loss: 0 for loss in self.monitor}
         
-    def check_stop(self, loss_dict:dict):
+    def check_stop(self, loss_dict:dict, param_dict:dict):
         # Determine the largest improvement across all monitored losses
         stop = False
+
+        # check if rD is too small
+        if param_dict['rD']< 0.05:
+            stop = True
+            self.reason = f'early stop: rD too small'
+            return stop
+
         for loss in self.monitor:
             cur_loss = loss_dict[loss]
             best_cur_loss = self.best_losses[loss]
@@ -82,7 +89,7 @@ class EarlyStopping:
                 self.wait[loss] += 1
                 if self.wait[loss] >= self.patience:
                     stop = True
-                    self.stop_loss = loss
+                    self.reason = f'early stop after {self.patience} due to {loss}'
                     break
 
         return stop
@@ -152,6 +159,7 @@ class PINNSolver():
 
         self.model.summary()
 
+        # collect all trainable variables
         global glob_trainable_variables
         glob_trainable_variables+=  self.model.trainable_variables
         if self.geomodel is not None:
@@ -502,9 +510,9 @@ class PINNSolver():
         test_losses['pdattest'] = test_monitor
         
         all_losses = self.current_loss | test_losses
-        earlystop = self.earlystop.check_stop(all_losses)
+        earlystop = self.earlystop.check_stop(all_losses, self.model.param)
         if earlystop:
-            print(f'Early stopping after {self.earlystop.patience} due to {self.earlystop.stop_loss}')
+            print(self.earlystop.reason)
             raise Exception
             # https://github.com/scipy/scipy/blob/v1.10.1/scipy/optimize/_lbfgsb_py.py#L48-L207
             # lbfgs returning true in callback does not stop the mnimizer
