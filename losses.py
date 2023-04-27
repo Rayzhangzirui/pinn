@@ -164,12 +164,13 @@ class Losses():
 
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
-                         'uxr':self.uxrloss, 'u0dat':self.u0datloss, 
+                         'uxr':self.uxrloss,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                          'area1': self.farea1loss , 'area2': self.farea2loss, 
                         'petmse': self.fpetmseloss,
                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
-                        'th1reg':th1regloss, 'th2reg':th2regloss
+                        'th1reg':th1regloss, 'th2reg':th2regloss,
+                        'ic': self.icloss,
                         }
 
         # all training losses
@@ -197,27 +198,18 @@ class Losses():
         self.idat = self.idatall
         
     # evaluate upred at xdat
+    # this is saved because upredxdat is used in multiple losses
     def getupredxdat(self):
         self.upredxdat = self.model(self.dataset.xdat[self.idat,:])
-    
-    def getu0predxdat(self):
-        self.u0predxdat = self.model(self.dataset.xt0[self.idat,:])
-    
+
     def getupredxr(self):
         self.upredxr = self.model(self.dataset.xr[self.ires,:])
-
     
-
-    # @tf.function
+    @tf.function
     def getloss(self):
         # compute train or test loss, depending on mode
         self.getpdeterm()
         self.getupredxdat()
-        if 'uxr' in self.weighting.weight_keys:
-            self.getupredxr()
-        if 'u0dat' in self.weighting.weight_keys:
-            self.getu0predxdat()
-        
 
         wlosses = {} # dict of weighted loss
         total = 0.0
@@ -259,12 +251,14 @@ class Losses():
         '''mse of u at Xdat'''
         return phimse(self.dataset.udat[self.idat,:], self.upredxdat, self.dataset.phidat[self.idat,:])
     
-    def u0datloss(self):
-        '''mse of u at Xt0'''
-        return phimse(self.dataset.u0dat[self.idat,:], self.u0predxdat, self.dataset.phidat[self.idat,:])
+    def icloss(self):
+        '''mse of u at xinit'''
+        uinitpred = self.model(self.dataset.xinit[self.idat,:])
+        return phimse(self.dataset.uinit[self.idat,:], uinitpred, self.dataset.phiinit[self.idat,:])
 
     def uxrloss(self):
         '''mse of u at Xr'''
+        upredxr = self.model(self.dataset.xr[self.ires,:])
         return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phiq[self.ires,:])
         
 

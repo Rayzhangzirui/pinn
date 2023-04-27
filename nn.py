@@ -57,11 +57,11 @@ class PINN(tf.keras.Model):
             self.hidden =   [rbf] + self.hidden
 
 
-
         self.out = tf.keras.layers.Dense(output_dim)
-        self.output_transform = output_transform
-        self.paddings = [[0, 0], [0, self.num_neurons_per_layer - self.input_dim]]
 
+        
+        self.output_transform = output_transform
+        
         self.build(input_shape=(None,input_dim))
 
         if activation == 'sin':

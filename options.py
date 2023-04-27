@@ -11,6 +11,7 @@ nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, '
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
     'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
+    'ic':None,
     'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}
 
 # initial paramter
@@ -22,6 +23,7 @@ opts = {
     "note": '',
     "model_dir": '',
     "num_init_train" : 100000, # initial traning iteration
+    "ictransform":True,
     "N" : 50000, # number of residual point
     "Ntest":50000,
     "Ndat":50000,
@@ -44,7 +46,7 @@ opts = {
     "smoothwidth": 20,
     "heaviside":'sigmoid',
     "udatsource":'udat',
-    "mrange":[0.8,2.0],
+    "mrange":[0.8,1.2],
     "trainA":False,
     "trainth1":False,
     "trainth2":False,
@@ -130,9 +132,9 @@ class Options(object):
 
         self.preprocess_option()
 
-        if not self.opts['note']:
-            print('no note')
-            self.opts['note'] = input('note: ')
+        # if not self.opts['note']:
+        #     print('no note')
+        #     self.opts['note'] = input('note: ')
         
         # second pass, might modify the dictionary, especially for weights
         self.parse_nest_args(*args)
