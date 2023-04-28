@@ -59,7 +59,7 @@ opts = {
     "copyfrom": '',
     "trainnnweight":None,
     "resetparam":False,
-    "schedule_type":'Constant',
+    "schedule_type":'Constant', #Constant, Exponential
     "learning_rate_opts": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
     "smalltest":False,
     "useupred": None,

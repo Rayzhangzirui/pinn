@@ -205,7 +205,7 @@ class Losses():
     def getupredxr(self):
         self.upredxr = self.model(self.dataset.xr[self.ires,:])
     
-    @tf.function
+    # @tf.function
     def getloss(self):
         # compute train or test loss, depending on mode
         self.getpdeterm()
@@ -217,7 +217,7 @@ class Losses():
             f = self.lossdict[key] # get loss function
             wlosses[key] = f() # eval loss
             total += self.weighting.alphas[key] * wlosses[key]
-
+            # tf.print(f"{key}: {self.weighting.alphas[key]} {wlosses[key]}")
         wlosses['total'] = total
         return wlosses
 
@@ -253,8 +253,8 @@ class Losses():
     
     def icloss(self):
         '''mse of u at xinit'''
-        uinitpred = self.model(self.dataset.xinit[self.idat,:])
-        return phimse(self.dataset.uinit[self.idat,:], uinitpred, self.dataset.phiinit[self.idat,:])
+        uinitpred = self.model(self.dataset.xinit[self.ires,:])
+        return phimse(self.dataset.uinit[self.ires,:], uinitpred, self.dataset.phiinit[self.ires,:])
 
     def uxrloss(self):
         '''mse of u at Xr'''

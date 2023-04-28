@@ -121,7 +121,7 @@ class Gmodel:
             return 0.1*tf.exp(-0.1*r2)*self.param['M']
 
         
-        if opts.get('ictransofrm') == False:
+        if opts['ictransform'] == False:
             # without output transform, ic as data loss
             print('no nn ic transformation')
             def ot(x,u):

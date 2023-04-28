@@ -28,19 +28,21 @@ class Weighting(object):
                 beta = 0.9, 
                 whichloss = 'res',
                 factor = 1.0,
+                interval = 10,
                 ):
         ''' weights0 = initial weights
         '''
         self.method = method
-        self.window = window
-        self.beta = beta
-        self.whichloss = whichloss
-        self.factor = factor
+        self.window = window # window size for moving average
+        self.beta = beta # decay rate
+        self.whichloss = whichloss # which loss to track
+        self.factor = factor    # factor to multiply the loss used in trackres
         self.current_iter = 0
-        self.num_losses = 0
+        self.num_losses = 0 # number of active losses, not including None
         self.weight_keys = [] # list of active losses
         self.skip_weights = {'mreg','rDreg','rRHOreg','Areg','th1reg','th2reg','Mreg'} #weights to skip
-        self.active = True
+        self.active = True # if False, do not update weights
+        self.interval = interval # interval to update weights
         
         # initialization, alpha is dict of loss-weight
         self.alphas = {}
@@ -63,21 +65,27 @@ class Weighting(object):
             self.stream = StreamingMovingAverage(self.window)
 
 
-    def update_weights(self, unweighted_loss):
+    def update_weights(self, unweighted_loss:dict, grad_stat:dict = None):
         # different ways to update loss
         
         if self.active == False:
             # do not update
             return
-
-        if self.method == 'cov' or self.method == 'decay':
-            self.cov_update(unweighted_loss)
         
-        if self.method == 'trackres':
-            self.trackres_update(unweighted_loss)
+        if self.current_iter % self.interval == 0:
+            # update
+            
+            if self.method == 'cov' or self.method == 'decay':
+                self.cov_update(unweighted_loss)
+            
+            if self.method == 'trackres':
+                self.trackres_update(unweighted_loss)
 
-        if self.method == 'start0':
-            self.start0_update(unweighted_loss)
+            if self.method == 'start0':
+                self.start0_update(unweighted_loss)
+            
+            if self.method == "grad":
+                self.grad_update(grad_stat)
         
         self.current_iter +=1
         return
@@ -175,7 +183,18 @@ class Weighting(object):
         x_L = L
         self.running_mean_L = mean_param * self.running_mean_L + (1 - mean_param) * x_L
         
+    def grad_update(self, grad_stat):
+        # update by statistics of grad
+        # https://github.com/PredictiveIntelligenceLab/GradientPathologiesPINNs/blob/master/Helmholtz/Helmholtz2D_model_tf.py
         
+        for k in self.weight_keys:
+            if k in self.skip_weights or k == self.whichloss:
+                # skip some weights,
+                continue
+            new_alpha = grad_stat[self.whichloss]['max'].numpy() /  (self.alphas[k] *grad_stat[k]['mean'].numpy())
+            self.alphas[k] = self.beta * self.alphas[k] + (1-self.beta) * new_alpha
+            
+            
         
 
 

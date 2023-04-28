@@ -29,6 +29,8 @@ import warnings
 tf.keras.backend.set_floatx(DTYPE)
 
 glob_trainable_variables = []
+glob_grad_by_loss = {} # gradients
+glob_grad_stat = {} # statistics of gradients
 
 
 # debug, not compatible with tf.gradients
@@ -166,22 +168,12 @@ class PINNSolver():
             glob_trainable_variables +=  self.geomodel.trainable_variables
 
     
-
     # @tf.function
-    # def loss_fn(self):
-    #     uwlosses = {}
-    #     total = 0.0
-    #     for key in self.losses.weighting.weight_keys:
-    #         uwlosses[key] = self.flosses[key]()
-    #         total += self.losses.weighting.alphas[key] * uwlosses[key]
-
-    #     uwlosses['total'] = total
-    #     return uwlosses
-    
-    @tf.function
     def get_grad(self):
         """ get loss, residual, gradient
-        called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, need tf.function
+        called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, 
+        !do not use tf.function for dynamic weighting, the weight seems not in the graph
+        !if use tf.function, the weight will be fixed to the initial value
         """
         self.losses.trainmode()
         with tf.GradientTape(persistent=True, watch_accessed_variables=True) as tape:
@@ -190,95 +182,46 @@ class PINNSolver():
             # tape.watch(self.model.trainable_variables)
             tape.watch(glob_trainable_variables)
             loss = self.losses.getloss()
-            
+        
         g = tape.gradient(loss['total'], glob_trainable_variables)
-        del tape
+        grad_stat = {}
+        grad_by_loss = {}
+        if self.losses.weighting.method == "grad":
+            # compute gradient for each loss
+            for loss_name in loss.keys():
+                grad_by_loss[loss_name] = tape.gradient(loss[loss_name], glob_trainable_variables)
+                flattened_tensors = [tf.reshape(tensor, [-1]) for tensor in grad_by_loss[loss_name]]
+                concatenated_tensor = tf.concat(flattened_tensors, axis=0)
 
-        return loss, g
-    
-
-    @tf.function
-    def get_grad_separate(self):
-        """ Apply residual grad to all trainable. Apply data loss grad to last layer
-        """
-        wlosses = {}
-        grad = {}
-        total = 0.0
-        with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
-            tape.watch(glob_trainable_variables)
-            for key in self.weighting.weight_keys:
-                wlosses[key] = self.weighting.alphas[key]* self.flosses[key]()
-                total += wlosses[key]
-        wlosses['total'] = total
-
-        grad = tape.gradient(wlosses, glob_trainable_variables) # return a dictionary of gradient
-        
-
-        for key in self.weighting.weight_keys:
-            if key.startswith('res'):
-                continue
-            grad[key] += tape.gradient(wlosses[key], glob_last_layer)
-        
-        
-        
+                stat = {}
+                stat['mean'] =  tf.reduce_mean(tf.abs(concatenated_tensor))
+                stat['max'] = tf.reduce_max(tf.abs(concatenated_tensor))
+                grad_stat[loss_name] = stat
 
         del tape
-        
-        return wlosses, grad
+        return loss, g, grad_by_loss, grad_stat
     
-    # @tf.function
-    # def get_grad_by_loss(self):
-    #     """ get gradient by each loss
-    #     to study gradient, look at weighted loss
-    #     """
-        
-    #     wlosses = {}
-    #     grad = {}
-    #     total = 0.0
-    #     with tf.GradientTape(persistent=True,  watch_accessed_variables=True) as tape:
-    #         # This tape is for derivatives with
-    #         # respect to trainable variables
-    #         # tape.watch(self.model.trainable_variables)
-    #         tape.watch(glob_trainable_variables)
-    #         for key in self.losses.weighting.weight_keys:
-    #             wlosses[key] = self.losses.weighting.alphas[key]* self.flosses[key]()
-    #             total += wlosses[key]
-    #     wlosses['total'] = total
-        
-    #     for key in self.losses.weighting.weight_keys:
-    #         grad[key] = tape.gradient(wlosses[key], glob_trainable_variables)
-                
-    #     grad['total'] = tape.gradient(wlosses['total'], glob_trainable_variables)
-
-    #     del tape
-    #     return wlosses, grad
-    
-    # @tf.function
-    # def check_exact(self):
-    #     """ check with exact solution if provided
-    #     """
-    #     testlosses = {}
-    #     for key in self.ftests:
-    #         testlosses[key] = self.ftests[key]()
-
-    #     return testlosses
-    
+     
     
     def solve_with_TFoptimizer(self, optimizer, N=10000):
         """This method performs a gradient descent type optimization."""
 
-        @tf.function
+        # @tf.function
         def train_step():
-            loss, grad_theta = self.get_grad()
+            loss, grad, grad_by_loss, grad_stat = self.get_grad()
             # Perform gradient descent step
-            optimizer.apply_gradients(zip(grad_theta, glob_trainable_variables))
-            return loss
+            optimizer.apply_gradients(zip(grad, glob_trainable_variables))
+            return loss, grad, grad_by_loss, grad_stat
+        
+        global glob_grad_by_loss
+        global glob_grad_stat
         
         self.current_optimizer = self.options['optimizer']
         start = time()
         
+
         for i in range(N):
-            loss = train_step()
+            loss, grad, glob_grad_by_loss, glob_grad_stat = train_step()
             self.current_loss = loss # before applying gradient
             
             try:
@@ -286,21 +229,6 @@ class PINNSolver():
             except Exception as e:
                 print(e)
                 break
-            
-            
-            # change t
-            if self.options.get('randomt') > 0 and i % 10 == 0:
-                tend = self.options.get('randomt')
-                nrow = self.dataset.xr.shape[0]
-                self.dataset.xr[:,0:1] = np.random.uniform(0, tend, size=(nrow,1))
-            
-            # randomly set half of the res time to be final time
-            if self.options.get('randomtfinal') == True and i % 10 == 0:
-                self.dataset.xr[:,0:1] = 1.0
-                nrow = self.dataset.xr.shape[0]
-                half = nrow//2
-                idx = np.random.choice(nrow, size=half,replace=False)
-                self.dataset.xr[idx,0:1] = np.random.uniform(size=(half,1))
 
         end = time()
 
@@ -309,8 +237,8 @@ class PINNSolver():
         self.info['tfadamloss'] = self.current_loss
         print('adam It:{:05d}, loss {:10.4e}, time {}'.format(i, loss['total'].numpy(), end-start))
         
-        # self.losses.weighting.active = False
-        # print('turn off dynamic weighting after Adam')
+        self.losses.weighting.active = False
+        print('turn off dynamic weighting after Adam')
 
         self.callback_train_end()
 
@@ -371,8 +299,11 @@ class PINNSolver():
             
             # Update weights in model
             set_weight_tensor(w)
+
+            global glob_grad_by_loss
+            global glob_grad_stat
             # Determine value of \phi and gradient w.r.t. \theta at w
-            loss_dict, grad = self.get_grad()
+            loss_dict, grad, glob_grad_by_loss, glob_grad_stat = self.get_grad()
             
             # Store current loss for callback function            
             loss = loss_dict['total'].numpy().astype(np.float64)
@@ -495,7 +426,8 @@ class PINNSolver():
         if callback return true, ealy stop
         """
         self.iter+=1
-        self.losses.weighting.update_weights(self.current_loss)
+        # update weights in model
+        self.losses.weighting.update_weights(self.current_loss, glob_grad_stat)
         
         # compute all patient data loss 
         self.losses.testmode()
