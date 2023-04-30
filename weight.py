@@ -1,6 +1,8 @@
 # import tensorflow as tf
 import numpy as np
 import sys
+import tensorflow as tf
+from config import *
 
 # https://stackoverflow.com/questions/39166941/real-time-moving-averages-in-python
 class StreamingMovingAverage:
@@ -50,7 +52,7 @@ class Weighting(object):
             if weights0[key] is not None :
                 self.weight_keys.append(key)
                 self.num_losses += 1
-                self.alphas[key] = weights0[key]
+                self.alphas[key] = tf.Variable(weights0[key], trainable=False, dtype=DTYPE)
         
         if self.method == 'cov' or self.method == 'decay':
             self.unweighted_losses = np.zeros(self.num_losses)
@@ -64,6 +66,12 @@ class Weighting(object):
             print(f'moving avaerage with windown{self.window}')
             self.stream = StreamingMovingAverage(self.window)
 
+
+    def decay_update(self, new_alpha):
+        '''update weights using exponential decay'''
+
+        for k in self.weight_keys:
+            self.alphas[k].assign(self.beta * self.alphas[k] + (1-self.beta) * new_alpha)
 
     def update_weights(self, unweighted_loss:dict, grad_stat:dict = None):
         # different ways to update loss
@@ -91,24 +99,16 @@ class Weighting(object):
         return
         
 
-        
-        
     def trackres_update(self, dict_unw_loss):
         '''keep the data loss magnitude same factor of residual
         '''
         # alpha  =  average of residual loss/ loss average of other loss
-        L = np.array([dict_unw_loss[k] for k in self.weight_keys])
-        Lave = self.stream.process(L)
-        itrack = self.weight_keys.index(self.whichloss) #index of loss being tracked, usually residual loss
-
-        # initially keep constant, then start changing the weight
-        # if self.current_iter > self.stream.window_size:
-        for i,k in enumerate(self.weight_keys):
-            if k in self.skip_weights:
+        for k in self.weight_keys:
+            if k in self.skip_weights or k == self.whichloss:
                 # skip some weights,
                 continue
-            if i != itrack:
-                self.alphas[k] = Lave[itrack]/ Lave[i] * self.factor # weight of res/ weight of loss
+            new_alpha = dict_unw_loss[self.whichloss] / dict_unw_loss[k] * self.factor
+            self.alphas[k] = self.beta * self.alphas[k] + (1-self.beta) * new_alpha
     
     def start0_update(self, dict_unw_loss):
         '''loss starts at 0, then gradually increase to the ratio between residual and data loss
@@ -126,6 +126,7 @@ class Weighting(object):
                 self.alphas[k] = self.beta * self.alphas[k] + (1-self.beta) * Lave[itrack]/ Lave[i]
     
     def cov_update(self, dict_unw_loss):
+        sys.error('not implemented')
         # loss CANNOT be negative or zero
         # only update weights
         # unweighted loss, collect alpha as list in same order
@@ -191,8 +192,8 @@ class Weighting(object):
             if k in self.skip_weights or k == self.whichloss:
                 # skip some weights,
                 continue
-            new_alpha = grad_stat[self.whichloss]['max'].numpy() /  (self.alphas[k] *grad_stat[k]['mean'].numpy())
-            self.alphas[k] = self.beta * self.alphas[k] + (1-self.beta) * new_alpha
+            new_alpha = grad_stat[self.whichloss]['max'] /  (self.alphas[k] *grad_stat[k]['mean'])
+            self.alphas[k].assign(self.beta * self.alphas[k] + (1-self.beta) * new_alpha)
             
             
         

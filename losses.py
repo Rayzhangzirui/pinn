@@ -205,7 +205,10 @@ class Losses():
     def getupredxr(self):
         self.upredxr = self.model(self.dataset.xr[self.ires,:])
     
-    # @tf.function
+
+    # use tf.print properly
+    # https://towardsdatascience.com/using-tf-print-in-tensorflow-aa26e1cff11e
+    @tf.function
     def getloss(self):
         # compute train or test loss, depending on mode
         self.getpdeterm()
@@ -216,8 +219,9 @@ class Losses():
         for key in self.weighting.weight_keys:
             f = self.lossdict[key] # get loss function
             wlosses[key] = f() # eval loss
-            total += self.weighting.alphas[key] * wlosses[key]
             # tf.print(f"{key}: {self.weighting.alphas[key]} {wlosses[key]}")
+            total += tf.stop_gradient(self.weighting.alphas[key]) * wlosses[key]
+            
         wlosses['total'] = total
         return wlosses
 

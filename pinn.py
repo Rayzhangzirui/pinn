@@ -168,7 +168,7 @@ class PINNSolver():
             glob_trainable_variables +=  self.geomodel.trainable_variables
 
     
-    # @tf.function
+    @tf.function
     def get_grad(self):
         """ get loss, residual, gradient
         called by both solve_with_TFoptimizer and solve_with_ScipyOptimizer, 
@@ -206,7 +206,7 @@ class PINNSolver():
     def solve_with_TFoptimizer(self, optimizer, N=10000):
         """This method performs a gradient descent type optimization."""
 
-        # @tf.function
+        @tf.function
         def train_step():
             loss, grad, grad_by_loss, grad_stat = self.get_grad()
             # Perform gradient descent step
@@ -492,7 +492,7 @@ class PINNSolver():
             info = [self.iter] + losses
 
             if self.losses.weighting.method !='constant':
-                alphas = [v for _,v in self.losses.weighting.alphas.items()]
+                alphas = [v.numpy() for _,v in self.losses.weighting.alphas.items()]
                 info += alphas
 
             if self.model.param is not None:
@@ -509,6 +509,9 @@ class PINNSolver():
             info_str = ','.join('{:<12.4e}'.format(k) for k in info[1:])
             print('{:05d}, {}'.format(info[0], info_str))  
             self.hist.append(info)
+            # breakpoint()
+        
+        
 
 
         # save residual to file with interval save_res_every

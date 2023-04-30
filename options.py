@@ -61,7 +61,6 @@ opts = {
     "resetparam":False,
     "schedule_type":'Constant', #Constant, Exponential
     "learning_rate_opts": {'initial_learning_rate': 0.001, 'decay_rate': 0.01, 'decay_steps':100000},
-    "smalltest":False,
     "useupred": None,
     "gradnorm":False,
     "outputderiv":False,
@@ -126,11 +125,15 @@ class Options(object):
             self.opts.update(copyopts)
             self.opts['restore'] = self.opts['model_dir']
         
+        if 'patientweight' in args:
+            tmp = args[args.index('patientweight')+1]
+            self.opts['patientweight'] = ast.literal_eval(tmp)
+
         if 'simtype' in args:
             tmp = args[args.index('simtype')+1]
             self.opts['simtype'] = tmp
 
-        self.preprocess_option()
+        self.process_simtype()
 
         # if not self.opts['note']:
         #     print('no note')
@@ -138,8 +141,9 @@ class Options(object):
         
         # second pass, might modify the dictionary, especially for weights
         self.parse_nest_args(*args)
+        
         # trim the weights
-        # self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
+        self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
         self.eval_name()
     
     def eval_name(self):
@@ -166,131 +170,136 @@ class Options(object):
                 raise ValueError('Key %s not found in dictionary' % key)
             i +=2
 
-    def preprocess_option(self):
+    def process_simtype(self):
         # set some options according to simtype
-        simtype = self.opts['simtype']
-        if simtype == 'solvechar':
-            # solve characteristic equation
-            self.opts['trainD'] = False
-            self.opts['trainRHO'] = False
-            self.opts['trainM'] = False
-            self.opts['trainm'] = False
-            self.opts['trainA'] = False
-            self.opts['trainx0'] = False
-            self.opts['trainth1'] = False
-            self.opts['trainth2'] = False
-            self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
+        simtypes = self.opts['simtype'].split(',')
         
-        elif simtype == 'fitfwd':
-            # use res and dat to learn solution
-            self.opts['trainD'] = False
-            self.opts['trainRHO'] = False
-            self.opts['trainM'] = False
-            self.opts['trainm'] = False
-            self.opts['trainA'] = False
-            self.opts['trainx0'] = False
-            self.opts['trainth1'] = False
-            self.opts['trainth2'] = False
-            self.opts['weights']['res'] = 1.0
-            self.opts['weights']['dat'] = 1.0
-            self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
-        
-        elif simtype == 'synthetic':
-            # simple synthetic data, infer D and RHO
-            self.opts['trainD'] = True
-            self.opts['trainRHO'] = True
-            self.opts['trainM'] = False
-            self.opts['trainm'] = False
-            self.opts['trainA'] = False
-            self.opts['trainx0'] = False
-            self.opts['trainth1'] = False
-            self.opts['trainth2'] = False
-            self.opts['weights']['res'] = 1.0
-            self.opts['weights']['dat'] = 1.0
-        
-        
-        elif simtype == 'patient':
-            # patient data or full synthetic data, infer all parameters
-            w = self.opts['patientweight']
-            self.opts['trainD'] = True
-            self.opts['trainRHO'] = True
-            self.opts['trainm'] = True
-            self.opts['trainA'] = True
-            self.opts['trainx0'] = True
-            self.opts['trainth1'] = True
-            self.opts['trainth2'] = True
-            self.opts['weights']['dat'] = None
-            self.opts['weights']['res'] = 1.0
-            if self.opts['whichseg'] == 'mse':
-                self.opts['weights']['seg1'] = w
-                self.opts['weights']['seg2'] = w
-            elif self.opts['whichseg'] == 'area':
-                self.opts['weights']['area1'] = w
-                self.opts['weights']['area2'] = w
-            else:
-                raise ValueError('whichseg must be mse or area')
-            self.opts['weights']['petmse'] = w
-            self.opts['weights']['Areg'] = 1.0
-            self.opts['weights']['mreg'] = 1.0
-            self.opts['weights']['th1reg'] = 1.0
-            self.opts['weights']['th2reg'] = 1.0
-            self.opts['earlystop_opts']['monitor'] = ['pdattest']
-        
-        elif simtype == 'petonly':
-            w = self.opts['patientweight']
-            self.opts['trainD'] = True
-            self.opts['trainRHO'] = True
-            self.opts['trainm'] = True
-            self.opts['trainA'] = True
-            self.opts['trainx0'] = True
-            self.opts['trainth1'] = False
-            self.opts['trainth2'] = False
-            self.opts['weights']['dat'] = None
-            self.opts['weights']['res'] = 1.0
-            self.opts['weights']['petmse'] = w
-            self.opts['weights']['seg1'] = None
-            self.opts['weights']['seg2'] = None
-            self.opts['weights']['Areg'] = 1.0
-            self.opts['weights']['mreg'] = 1.0
-            self.opts['weights']['th1reg'] = None
-            self.opts['weights']['th2reg'] = None
-            self.opts['earlystop_opts']['monitor'] = ['pdattest']
-        
-        elif simtype == 'segonly':
-            w = self.opts['patientweight']
-            self.opts['trainD'] = True
-            self.opts['trainRHO'] = True
-            self.opts['trainm'] = False
-            self.opts['trainA'] = False
-            self.opts['trainx0'] = True
-            self.opts['trainth1'] = True
-            self.opts['trainth2'] = True
-            self.opts['weights']['dat'] = None
-            self.opts['weights']['res'] = 1.0
-            self.opts['weights']['petmse'] = None
-            if self.opts['whichseg'] == 'mse':
-                self.opts['weights']['seg1'] = w
-                self.opts['weights']['seg2'] = w
-            elif self.opts['whichseg'] == 'area':
-                self.opts['weights']['area1'] = w
-                self.opts['weights']['area2'] = w
-            else:
-                raise ValueError('whichseg must be mse or area')
-            self.opts['weights']['Areg'] = None
-            self.opts['weights']['mreg'] = None
-            self.opts['weights']['th1reg'] = 1.0
-            self.opts['weights']['th2reg'] = 1.0
-            self.opts['earlystop_opts']['monitor'] = ['pdattest']
-
-        else:
-            raise ValueError(f'simtype == {simtype} not recognized')
-        
-        # quick test
-        if self.opts['smalltest'] == True:
-            self.opts['file_log'] = False
-            self.opts['num_init_train'] = 500
-            self.opts['lbfgs_opts']['maxfun'] = 200
+        for simtype in simtypes:
+            if simtype == 'solvechar':
+                # solve characteristic equation
+                self.opts['trainD'] = False
+                self.opts['trainRHO'] = False
+                self.opts['trainM'] = False
+                self.opts['trainm'] = False
+                self.opts['trainA'] = False
+                self.opts['trainx0'] = False
+                self.opts['trainth1'] = False
+                self.opts['trainth2'] = False
+                self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
             
+            elif simtype == 'fitfwd':
+                # use res and dat to learn solution
+                self.opts['trainD'] = False
+                self.opts['trainRHO'] = False
+                self.opts['trainM'] = False
+                self.opts['trainm'] = False
+                self.opts['trainA'] = False
+                self.opts['trainx0'] = False
+                self.opts['trainth1'] = False
+                self.opts['trainth2'] = False
+                self.opts['weights']['res'] = 1.0
+                self.opts['weights']['dat'] = 1.0
+                self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
+            
+            elif simtype == 'synthetic':
+                # simple synthetic data, infer D and RHO
+                self.opts['trainD'] = True
+                self.opts['trainRHO'] = True
+                self.opts['trainM'] = False
+                self.opts['trainm'] = False
+                self.opts['trainA'] = False
+                self.opts['trainx0'] = False
+                self.opts['trainth1'] = False
+                self.opts['trainth2'] = False
+                self.opts['weights']['res'] = 1.0
+                self.opts['weights']['dat'] = 1.0
+            
+            
+            elif simtype == 'patient':
+                # patient data or full synthetic data, infer all parameters
+                w = self.opts['patientweight']
+                self.opts['trainD'] = True
+                self.opts['trainRHO'] = True
+                self.opts['trainm'] = True
+                self.opts['trainA'] = True
+                self.opts['trainx0'] = True
+                self.opts['trainth1'] = True
+                self.opts['trainth2'] = True
+                self.opts['weights']['dat'] = None
+                self.opts['weights']['res'] = 1.0
+                if self.opts['whichseg'] == 'mse':
+                    self.opts['weights']['seg1'] = w
+                    self.opts['weights']['seg2'] = w
+                elif self.opts['whichseg'] == 'area':
+                    self.opts['weights']['area1'] = w
+                    self.opts['weights']['area2'] = w
+                else:
+                    raise ValueError('whichseg must be mse or area')
+                self.opts['weights']['petmse'] = w
+                self.opts['weights']['Areg'] = 1.0
+                self.opts['weights']['mreg'] = 1.0
+                self.opts['weights']['th1reg'] = 1.0
+                self.opts['weights']['th2reg'] = 1.0
+                self.opts['earlystop_opts']['monitor'] = ['pdattest']
+            
+            elif simtype == 'petonly':
+                w = self.opts['patientweight']
+                self.opts['trainD'] = True
+                self.opts['trainRHO'] = True
+                self.opts['trainm'] = True
+                self.opts['trainA'] = True
+                self.opts['trainx0'] = True
+                self.opts['trainth1'] = False
+                self.opts['trainth2'] = False
+                self.opts['weights']['dat'] = None
+                self.opts['weights']['res'] = 1.0
+                self.opts['weights']['petmse'] = w
+                self.opts['weights']['seg1'] = None
+                self.opts['weights']['seg2'] = None
+                self.opts['weights']['Areg'] = 1.0
+                self.opts['weights']['mreg'] = 1.0
+                self.opts['weights']['th1reg'] = None
+                self.opts['weights']['th2reg'] = None
+                self.opts['earlystop_opts']['monitor'] = ['pdattest']
+            
+            elif simtype == 'segonly':
+                w = self.opts['patientweight']
+                self.opts['trainD'] = True
+                self.opts['trainRHO'] = True
+                self.opts['trainm'] = False
+                self.opts['trainA'] = False
+                self.opts['trainx0'] = True
+                self.opts['trainth1'] = True
+                self.opts['trainth2'] = True
+                self.opts['weights']['dat'] = None
+                self.opts['weights']['res'] = 1.0
+                self.opts['weights']['petmse'] = None
+                if self.opts['whichseg'] == 'mse':
+                    self.opts['weights']['seg1'] = w
+                    self.opts['weights']['seg2'] = w
+                elif self.opts['whichseg'] == 'area':
+                    self.opts['weights']['area1'] = w
+                    self.opts['weights']['area2'] = w
+                else:
+                    raise ValueError('whichseg must be mse or area')
+                self.opts['weights']['Areg'] = None
+                self.opts['weights']['mreg'] = None
+                self.opts['weights']['th1reg'] = 1.0
+                self.opts['weights']['th2reg'] = 1.0
+                self.opts['earlystop_opts']['monitor'] = ['pdattest']
+
+            # quick test
+            elif simtype == 'smalltest':
+                self.opts['file_log'] = False
+                self.opts['num_init_train'] = 500
+                self.opts['lbfgs_opts']['maxfun'] = 200
+                self.opts['N'] = 100
+                self.opts['Ntest'] = 100
+                self.opts['Ndat'] = 100
+                self.opts['Ndattest'] = 100
+            
+            else:
+                raise ValueError(f'simtype == {simtype} not recognized')
 
 if __name__ == "__main__":
     
