@@ -57,22 +57,25 @@ class Logger(object):
 
 
 class EarlyStopping:
-    def __init__(self, monitor:list = ['total'], patience=100, min_delta = 1e-6):
+    def __init__(self, monitor:list = ['total'], patience=1000, min_delta = 1e-6, burnin=1000):
         self.monitor = monitor
         self.patience = patience
         self.best_losses = {loss: float('inf') for loss in self.monitor}
-        self.wait = {loss: 0 for loss in self.monitor}
+        self.wait = {loss: 0 for loss in self.monitor} # number of iterations without improvement
         self.reason = ''  # reason for stopping
         self.min_delta = min_delta # minimum improvement to be considered as improvement
+        self.burnin = burnin # number of iterations to ignore before early stopping is applied
         
     
     def reset(self):
         self.best_losses = {loss: float('inf') for loss in self.monitor}
-        self.wait = {loss: 0 for loss in self.monitor}
+        self.wait = {loss: 0 for loss in self.monitor} 
         
-    def check_stop(self, loss_dict:dict, param_dict:dict):
+    def check_stop(self, iter:int, loss_dict:dict, param_dict:dict):
         # Determine the largest improvement across all monitored losses
         stop = False
+        if iter < self.burnin:
+            return stop
 
         # check if rD is too small
         if param_dict['rD']< 0.05:
@@ -186,7 +189,7 @@ class PINNSolver():
         g = tape.gradient(loss['total'], glob_trainable_variables)
         grad_stat = {}
         grad_by_loss = {}
-        if self.losses.weighting.method == "grad":
+        if self.losses.weighting.method in {"grad","invd"}:
             # compute gradient for each loss
             for loss_name in loss.keys():
                 grad_by_loss[loss_name] = tape.gradient(loss[loss_name], glob_trainable_variables)
@@ -196,6 +199,7 @@ class PINNSolver():
                 stat = {}
                 stat['mean'] =  tf.reduce_mean(tf.abs(concatenated_tensor))
                 stat['max'] = tf.reduce_max(tf.abs(concatenated_tensor))
+                stat['std'] = tf.math.reduce_std(concatenated_tensor)
                 grad_stat[loss_name] = stat
 
         del tape
@@ -426,8 +430,7 @@ class PINNSolver():
         if callback return true, ealy stop
         """
         self.iter+=1
-        # update weights in model
-        self.losses.weighting.update_weights(self.current_loss, glob_grad_stat)
+        
         
         # compute all patient data loss 
         self.losses.testmode()
@@ -442,7 +445,7 @@ class PINNSolver():
         test_losses['pdattest'] = test_monitor
         
         all_losses = self.current_loss | test_losses
-        earlystop = self.earlystop.check_stop(all_losses, self.model.param)
+        earlystop = self.earlystop.check_stop(self.iter, all_losses, self.model.param)
         if earlystop:
             print(self.earlystop.reason)
             raise Exception
@@ -511,6 +514,8 @@ class PINNSolver():
             self.hist.append(info)
             # breakpoint()
         
+        # update weights in the end, after printing
+        self.losses.weighting.update_weights(self.current_loss, glob_grad_stat)
         
 
 

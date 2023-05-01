@@ -17,7 +17,7 @@ weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'd
 # initial paramter
 initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
 
-earlystop_opts = {'patience': 1000, 'min_delta': 1e-6, "monitor":['total']}
+earlystop_opts = {'patience': 1000, 'min_delta': 1e-6, "monitor":['total'],'burnin':1000}
 opts = {
     "tag" : '',
     "note": '',

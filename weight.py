@@ -94,6 +94,9 @@ class Weighting(object):
             
             if self.method == "grad":
                 self.grad_update(grad_stat)
+            
+            if self.method == "invd":
+                self.inverse_dirichlet_update(grad_stat)
         
         self.current_iter +=1
         return
@@ -194,7 +197,13 @@ class Weighting(object):
                 continue
             new_alpha = grad_stat[self.whichloss]['max'] /  (self.alphas[k] *grad_stat[k]['mean'])
             self.alphas[k].assign(self.beta * self.alphas[k] + (1-self.beta) * new_alpha)
-            
+    
+    def inverse_dirichlet_update(self,grad_stat):
+        # Inverse Dirichlet weighting enables reliable training of physics informed neural networks
+        max_std = tf.reduce_max(tf.stack([grad_stat[k]['std'] for k in self.weight_keys]))
+        for k in self.weight_keys:
+            new_alpha = max_std/grad_stat[k]['std']
+            self.alphas[k].assign(self.beta * self.alphas[k] + (1-self.beta) * new_alpha)
             
         
 
