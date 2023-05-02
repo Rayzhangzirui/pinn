@@ -168,6 +168,7 @@ class PINNSolver():
         global glob_trainable_variables
         glob_trainable_variables+=  self.model.trainable_variables
         if self.geomodel is not None:
+            self.geomodel.summary()
             glob_trainable_variables +=  self.geomodel.trainable_variables
 
     
@@ -539,7 +540,7 @@ class PINNSolver():
             save_path = self.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))
             if self.geomodel is not None:
-                save_path = self.managergeo.save()
+                save_path = self.geomodel.save_checkpoint()
             
         else:
             print("checkpoint not saved")
@@ -577,7 +578,10 @@ class PINNSolver():
 
             upredtxr = self.model(xr)
             if self.dataset.xdim == 2:
-                restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
+                if self.geomodel is None:
+                    restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
+                else:
+                    restxr = self.pde(xr, self.model, self.geomodel)
             else:
                 restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi, self.dataset.DzPphi)
             

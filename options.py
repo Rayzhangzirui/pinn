@@ -8,6 +8,8 @@ lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun'
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False, "activation":'tanh'}
 
+geonn_opts = {'num_hidden_layers':2, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False, "activation":'tanh'}
+
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
     'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
@@ -123,6 +125,9 @@ class Options(object):
             with open(file, 'r') as f:
                 copyopts = json.load(f)
             self.opts.update(copyopts)
+            global weights
+            self.opts['weights'].update(weights)
+            self.opts['weights'].update(copyopts['weights'])
             self.opts['restore'] = self.opts['model_dir']
         
         if 'patientweight' in args:
@@ -158,6 +163,9 @@ class Options(object):
         i = 0
         while i < len(args):
             key = args[i]
+            if key in {"simtype","copyfrom"}:
+                i += 2
+                continue
             default_val = get_nested_dict(self.opts, key)
             if isinstance(default_val,str):
                 val = args[i+1]

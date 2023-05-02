@@ -30,8 +30,9 @@ class Geonn(tf.keras.Model):
         self.output_Pgm = tf.keras.layers.Dense(1, activation='sigmoid')
         self.output_phi = tf.keras.layers.Dense(1, activation='sigmoid')
 
-        self.compile(optimizer='adam',
-                     loss={'Pwm': 'mse', 'Pgm': 'mse', 'phi': 'mse'})
+        self.build(input_shape=(None,input_dim))
+
+        
         
         self.checkpoint = tf.train.Checkpoint(model=self)
         self.checkpoint_manager = tf.train.CheckpointManager(self.checkpoint, directory='geockpt', max_to_keep=3)
@@ -39,13 +40,13 @@ class Geonn(tf.keras.Model):
         
     def call(self, inputs):
         x = self.input_layer(inputs)
-
         for hidden_layer in self.hidden_layers:
             x = hidden_layer(x)
 
         return {'Pwm':self.output_Pwm(x),'Pgm':self.output_Pgm(x),'phi':self.output_phi(x)}
 
     def train(self, X, Pwmq, Pgmq, phiq, epochs=10000):
+        self.compile(optimizer='adam',loss={'Pwm': 'mse', 'Pgm': 'mse', 'phi': 'mse'})
         # do not use mini-batch
         batch_size = X.shape[0]
         history = self.fit(X, {'Pwm': Pwmq,  'Pgm': Pgmq, 'phi': phiq}, epochs=epochs, batch_size=batch_size)

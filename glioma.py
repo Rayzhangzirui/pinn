@@ -70,7 +70,7 @@ class Gmodel:
         # model for probability
         # input is spatial coordiante, output Pwm, Pgm, phi
         if opts['usegeo'] is True:
-            self.geomodel = Geonn()
+            self.geomodel = Geonn(input_dim=self.xdim)
 
         # get init from dataset
         if opts['initfromdata'] is True:
@@ -184,14 +184,14 @@ class Gmodel:
         if self.xdim == 2 and self.geomodel is not None:
             # geometry is represented by neural net
                 @tf.function
-                def pde(xr, nn):
+                def pde(xr, nn, geomodel):
                     t = xr[:,0:1]
                     x = xr[:,1:2]
                     y = xr[:,2:3]
                     xr = tf.concat([t,x,y], axis=1)
                     xxr = tf.concat([x,y], axis=1)
 
-                    geo = self.geomodel(xxr)
+                    geo = geomodel(xxr)
                     P = geo['Pwm'] + geo['Pgm']/self.dataset.factor # Pwm + Pgm/factor
                     phi = geo['phi']
 
@@ -205,11 +205,11 @@ class Gmodel:
                     u_xx = tf.gradients( phi * P * u_x , x)[0]
                     u_yy = tf.gradients( phi * P * u_y , y)[0]
 
-                    proliferation =  self.dataset.RHO * self.dataset.phiq * u * ( 1 - u/self.param['M'])
+                    proliferation =  self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
 
-                    diffusion =  self.dataset.DW * (self.dataset.Pq *self.dataset.phiq * (u_xx + u_yy) + self.dataset.L* self.dataset.DxPphi * u_x + self.dataset.L* self.dataset.DyPphi * u_y)
-                    residual = self.dataset.phiq * u_t - ( self.param['rD'] * diffusion +  self.param['rRHO']* proliferation)
-                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':self.dataset.phiq * u_t}
+                    diffusion =  self.dataset.DW * (u_xx + u_yy)
+                    residual = phi * u_t - ( self.param['rD'] * diffusion +  self.param['rRHO']* proliferation)
+                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
 
 
         reg = None
@@ -226,9 +226,7 @@ class Gmodel:
         
         # load model, also change self.param
         self.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
-        if self.geomodel is not None:
-            self.managergeo = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
-
+        
         
         # for x in self.param:
         #     # if variable not trainable, set as initparam
