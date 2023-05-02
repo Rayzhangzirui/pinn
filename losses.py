@@ -102,8 +102,9 @@ def relusqr(p, a, b):
 
     
 class Losses():
-    def __init__(self, model, pde, dataset, param, opts):
+    def __init__(self, model, geomodel, pde, dataset, param, opts):
         self.model = model
+        self.geomodel = geomodel
         self.pde = pde
         self.dataset = dataset
         self.param = param
@@ -168,6 +169,7 @@ class Losses():
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                          'area1': self.farea1loss , 'area2': self.farea2loss, 
                         'petmse': self.fpetmseloss,
+                        'geomse': self.geomseloss,
                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
                         'th1reg':th1regloss, 'th2reg':th2regloss,
                         'ic': self.icloss,
@@ -227,7 +229,10 @@ class Losses():
 
     def getpdeterm(self):
         if self.dataset.xdim == 2:
-            self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
+            if self.geomodel is None:
+                self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
+            else:
+                self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.geomodel)
         else:
             self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:], self.dataset.DzPphi[self.ires,:])
 
@@ -283,11 +288,10 @@ class Losses():
         r1 = tf.math.abs(self.pdeterm['residual']) # L1 norm
         return tf.reduce_mean(r1)
     
-
-
-    # def geomseloss():
-    #     P = self.geomodel(self.dataset.xr[:,1:self.xdim+1])
-    #     return mse(P[:,0:1],self.dataset.Pwmq)+mse(P[:,1:2],self.dataset.Pgmq) + mse(P[:,2:3],self.dataset.phiq)
+    def geomseloss(self):
+        # loss for geometry
+        geo = self.geomodel(self.dataset.xr[self.ires,1:])
+        return mse(geo['Pwm'],self.dataset.Pwmq[self.ires,:])+mse(geo['Pgm'],self.dataset.Pgmq[self.ires,:]) + mse(geo['phi'],self.dataset.phiq[self.ires,:])
 
 
 

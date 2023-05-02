@@ -10,7 +10,7 @@ sys.path.insert(1, '/home/ziruz16/pinn')
 from config import *
 from pinn import *
 from DataSet import DataSet
-
+from Geonn import Geonn
 from losses import Losses
 
 import tensorflow_probability as tfp
@@ -70,13 +70,7 @@ class Gmodel:
         # model for probability
         # input is spatial coordiante, output Pwm, Pgm, phi
         if opts['usegeo'] is True:
-            self.geomodel = tf.keras.Sequential(
-                                [
-                                    tf.keras.layers.Dense(32, activation="tanh", input_shape=(self.xdim,)),
-                                    tf.keras.layers.Dense(32, activation="tanh"),
-                                    tf.keras.layers.Dense(3, activation="sigmoid"),
-                                ]
-                            )
+            self.geomodel = Geonn()
 
         # get init from dataset
         if opts['initfromdata'] is True:
@@ -198,8 +192,8 @@ class Gmodel:
                     xxr = tf.concat([x,y], axis=1)
 
                     geo = self.geomodel(xxr)
-                    P = geo[:,0:1] + geo[:,1:2]/self.dataset.factor # Pwm + Pgm/factor
-                    phi = geo[:,2:3]
+                    P = geo['Pwm'] + geo['Pgm']/self.dataset.factor # Pwm + Pgm/factor
+                    phi = geo['phi']
 
                     u =  nn(xr)
                     
@@ -242,7 +236,7 @@ class Gmodel:
         #         self.param[x].assign(self.opts['initparam'][x])
                 
 
-        losses = Losses(self.model, pde, self.dataset, self.param, self.opts)
+        losses = Losses(self.model, self.geomodel, pde, self.dataset, self.param, self.opts)
                 
         # Initilize PINN solver
         self.solver = PINNSolver(self.model, pde, 

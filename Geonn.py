@@ -12,7 +12,7 @@ class Geonn(tf.keras.Model):
     def __init__(self,
             input_dim=3,
             num_hidden_layers=2, 
-            num_neurons_per_layer=16,
+            num_neurons_per_layer=64,
             **kwargs):
         super().__init__( **kwargs)
         self.input_dim = input_dim
@@ -33,6 +33,10 @@ class Geonn(tf.keras.Model):
         self.compile(optimizer='adam',
                      loss={'Pwm': 'mse', 'Pgm': 'mse', 'phi': 'mse'})
         
+        self.checkpoint = tf.train.Checkpoint(model=self)
+        self.checkpoint_manager = tf.train.CheckpointManager(self.checkpoint, directory='geockpt', max_to_keep=3)
+
+        
     def call(self, inputs):
         x = self.input_layer(inputs)
 
@@ -46,6 +50,15 @@ class Geonn(tf.keras.Model):
         batch_size = X.shape[0]
         history = self.fit(X, {'Pwm': Pwmq,  'Pgm': Pgmq, 'phi': phiq}, epochs=epochs, batch_size=batch_size)
         return history
+
+    def save_checkpoint(self):
+        self.checkpoint_manager.save()
+
+    def load_checkpoint(self, checkpoint_path=None):
+        if checkpoint_path:
+            self.checkpoint.restore(checkpoint_path)
+        else:
+            self.checkpoint.restore(self.checkpoint_manager.latest_checkpoint)
 
     def save_checkpoint(self, checkpoint_dir='geockpt'):
         os.makedirs(checkpoint_dir, exist_ok=True)
