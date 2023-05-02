@@ -279,9 +279,8 @@ class Losses():
         return tf.reduce_mean(r2)
 
     def resl1loss(self):
-        res = self.pdeterm['residual']
-        rl1 = tf.math.abs(res) # L1 norm
-        return tf.reduce_mean(rl1)
+        r1 = tf.math.abs(self.pdeterm['residual']) # L1 norm
+        return tf.reduce_mean(r1)
 
 
     # def geomseloss():

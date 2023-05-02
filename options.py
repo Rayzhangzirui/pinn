@@ -66,7 +66,7 @@ opts = {
     "outputderiv":False,
     "usegeo":False,
     "patientweight":1.0,
-    "simtype":'exactfwd',
+    "simtype":'fitfwd',
     "whichseg":'mse',
     "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
     }
@@ -133,6 +133,7 @@ class Options(object):
             tmp = args[args.index('simtype')+1]
             self.opts['simtype'] = tmp
 
+        
         self.process_simtype()
 
         # if not self.opts['note']:
@@ -143,7 +144,7 @@ class Options(object):
         self.parse_nest_args(*args)
         
         # trim the weights
-        self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
+        # self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
         self.eval_name()
     
     def eval_name(self):
@@ -297,6 +298,9 @@ class Options(object):
                 self.opts['Ntest'] = 100
                 self.opts['Ndat'] = 100
                 self.opts['Ndattest'] = 100
+            
+            elif simtype == 'noadam':
+                self.opts['num_init_train'] = 0
             
             else:
                 raise ValueError(f'simtype == {simtype} not recognized')

@@ -192,8 +192,8 @@ class PINNSolver():
         if self.losses.weighting.method in {"grad","invd"}:
             # compute gradient for each loss
             for loss_name in loss.keys():
-                grad_by_loss[loss_name] = tape.gradient(loss[loss_name], glob_trainable_variables)
-                flattened_tensors = [tf.reshape(tensor, [-1]) for tensor in grad_by_loss[loss_name]]
+                grad_by_loss = tape.gradient(loss[loss_name], glob_trainable_variables)
+                flattened_tensors = [tf.reshape(tensor, [-1]) for tensor in grad_by_loss]
                 concatenated_tensor = tf.concat(flattened_tensors, axis=0)
 
                 stat = {}
@@ -225,7 +225,7 @@ class PINNSolver():
         
 
         for i in range(N):
-            loss, grad, glob_grad_by_loss, glob_grad_stat = train_step()
+            loss, grad, _, glob_grad_stat = train_step()
             self.current_loss = loss # before applying gradient
             
             try:
@@ -307,7 +307,7 @@ class PINNSolver():
             global glob_grad_by_loss
             global glob_grad_stat
             # Determine value of \phi and gradient w.r.t. \theta at w
-            loss_dict, grad, glob_grad_by_loss, glob_grad_stat = self.get_grad()
+            loss_dict, grad, _, glob_grad_stat = self.get_grad()
             
             # Store current loss for callback function            
             loss = loss_dict['total'].numpy().astype(np.float64)
