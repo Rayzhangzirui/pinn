@@ -264,7 +264,8 @@ class Losses():
         '''mse of u at Xr'''
         upredxr = self.model(self.dataset.xr[self.ires,:])
         return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phiq[self.ires,:])
-        
+    
+    
 
     #  boundary condition loss
     def bcloss(self):
@@ -281,6 +282,7 @@ class Losses():
     def resl1loss(self):
         r1 = tf.math.abs(self.pdeterm['residual']) # L1 norm
         return tf.reduce_mean(r1)
+    
 
 
     # def geomseloss():

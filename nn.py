@@ -1,4 +1,5 @@
 import tensorflow as tf
+import os
 # Define model architecture
 class PINN(tf.keras.Model):
     """ Set basic architecture of the PINN model."""
@@ -126,7 +127,6 @@ class PINN(tf.keras.Model):
                 else:
                     l.trainable = False
                 k += 1
-
 
 
 # SIREN paper
