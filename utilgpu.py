@@ -42,8 +42,11 @@ def gpu_memory_map():
 
 def pick_gpu_lowest_memory():
     """Returns GPU with the least allocated memory"""
-
-    memory_gpu_map = [(memory, gpu_id) for (gpu_id, memory) in gpu_memory_map().items()]
-    best_memory, best_gpu = sorted(memory_gpu_map)[0]
-    print(f'bestgpu = {best_gpu}')
+    best_gpu = -1 
+    try:
+        memory_gpu_map = [(memory, gpu_id) for (gpu_id, memory) in gpu_memory_map().items()]
+        best_memory, best_gpu = sorted(memory_gpu_map)[0]
+        print(f'bestgpu = {best_gpu}')
+    except:
+        print('No GPU available')
     return best_gpu
