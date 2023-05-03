@@ -103,7 +103,6 @@ class PINNSolver():
     def __init__(self, model, pde, 
                 losses,
                 dataset,
-                manager,
                 geomodel=None, 
                 wr = None,
                 options=None):
@@ -111,7 +110,7 @@ class PINNSolver():
         self.geomodel = geomodel
         self.pde = pde
         self.dataset = dataset
-        self.manager = manager
+        
         
         self.losses = losses
         
@@ -537,10 +536,10 @@ class PINNSolver():
         # also make prediction of xr at various time
         self.earlystop.reset()
         if self.options.get('saveckpt'):
-            save_path = self.manager.save()
+            save_path = self.model.manager.save()
             print("Saved checkpoint for {} step {} {}".format(int(self.iter),self.current_optimizer, save_path))
             if self.geomodel is not None:
-                save_path = self.geomodel.save_checkpoint()
+                save_path = self.geomodel.manager.save()
             
         else:
             print("checkpoint not saved")

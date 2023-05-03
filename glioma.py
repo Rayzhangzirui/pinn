@@ -71,6 +71,7 @@ class Gmodel:
         # input is spatial coordiante, output Pwm, Pgm, phi
         if opts['usegeo'] is True:
             self.geomodel = Geonn(input_dim=self.xdim)
+            self.geomodel.manager = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
 
         # get init from dataset
         if opts['initfromdata'] is True:
@@ -225,7 +226,7 @@ class Gmodel:
                 regularizer=reg)
         
         # load model, also change self.param
-        self.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
+        self.model.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
         
         
         # for x in self.param:
@@ -240,7 +241,6 @@ class Gmodel:
         self.solver = PINNSolver(self.model, pde, 
                                 losses,
                                 self.dataset,
-                                manager = self.manager,
                                 geomodel = self.geomodel,
                                 options = opts)
 
@@ -271,17 +271,17 @@ class Gmodel:
         # manager.latest_checkpoint is None if no ckpt found
 
         if self.opts['restore'] is not None and (self.opts['restore']):
+            # restore from previous simulation
+            prev_manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['restore'],ckptdir), max_to_keep=4) 
             # not None and not empty
             # self.opts['restore'] is a number or a path
             if isinstance(self.opts['restore'],int):
                 # restore check point in the same directory by integer, 0 = ckpt-1
-                ckptpath = manager.checkpoints[self.opts['restore']]
+                ckptpath = prev_manager.checkpoints[self.opts['restore']]
             else:
                 # restore checkpoint by path
-                if "/ckpt" in self.opts['restore']:
-                    ckptpath = os.path.join(self.opts['restore'])
-                else:
-                    ckptpath = os.path.join(self.opts['restore'],ckptdir,'ckpt-2')
+                ckptpath = prev_manager.latest_checkpoint
+
             checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
         else:
