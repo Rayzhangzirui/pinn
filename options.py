@@ -8,7 +8,7 @@ lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun'
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False, "activation":'tanh'}
 
-geonn_opts = {'depth':2, 'width':64}
+geonn_opts = {'depth':3, 'width':64}
 
 # option for data set
 data_opts = {'Nres': 50000, 'resratio':1.0, 'Ndat': 50000, 'Ndatratio':1.0}
@@ -178,7 +178,11 @@ class Options(object):
             elif isinstance(default_val,list):
                 val = (args[i+1]).split()
             else:
-                val = ast.literal_eval(args[i+1])
+                try:
+                    val = ast.literal_eval(args[i+1])
+                except ValueError as ve:
+                    print(f'error parsing {args[i]} and {args[i+1]}: {ve}')
+                    sys.exit(1)
             
             found = update_nested_dict(self.opts, key, val)
             if not found:
@@ -306,12 +310,21 @@ class Options(object):
             # quick test
             elif simtype == 'smalltest':
                 self.opts['file_log'] = False
-                self.opts['num_init_train'] = 500
-                self.opts['lbfgs_opts']['maxfun'] = 200
-                self.opts['N'] = 100
-                self.opts['Ntest'] = 100
-                self.opts['Ndat'] = 100
-                self.opts['Ndattest'] = 100
+                self.opts['num_init_train'] = 100
+                self.opts['lbfgs_opts']['maxfun'] = 20
+                self.opts['print_res_every'] = 10
+                self.opts['N'] = 64
+                self.opts['Ntest'] = 64
+                self.opts['Ndat'] = 64
+                self.opts['Ndattest'] = 64
+            
+            elif simtype == 'smallnet':
+                # testing with small network
+                self.opts['nn_opts']['num_hidden_layers'] = 2
+                self.opts['nn_opts']['num_neurons_per_layer'] = 16
+                self.opts['geonn_opts']['depth'] = 2
+                self.opts['geonn_opts']['width'] = 16
+                
             
             elif simtype == 'noadam':
                 self.opts['num_init_train'] = 0

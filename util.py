@@ -90,7 +90,7 @@ def n2t(x):
 
 def t2n(x):
     # convert tensor to numpy
-    
+    # if x is dict of tensor convert all tensors to numpy
     if isinstance(x, np.ndarray):
         return x
     elif isinstance(x, tf.Tensor):

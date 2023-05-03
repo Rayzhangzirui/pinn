@@ -15,6 +15,152 @@ from losses import Losses
 
 import tensorflow_probability as tfp
 
+class PDE:
+    def __init__(self, nn, param, geonn, dataset):
+        self.nn = nn
+        self.geonn = geonn
+        self.dataset = dataset
+        self.dim = dataset.dim
+        self.xdim = self.dataset.xdim
+        self.param = param
+    
+
+    
+    @tf.function
+    def pde2d(self, xr, phi, P, DxPphi, DyPphi):
+        t = xr[:,0:1]
+        x = xr[:,1:2]
+        y = xr[:,2:3]
+        xr = tf.concat([t,x,y], axis=1)
+        
+        u =  self.nn(xr)
+        
+        u_t = tf.gradients(u, t)[0]
+
+        u_x = tf.gradients(u, x)[0]
+        u_y = tf.gradients(u, y)[0]
+        
+        u_xx = tf.gradients(u_x, x)[0]
+        u_yy = tf.gradients(u_y, y)[0]
+
+        proliferation = self.param['rRHO'] * self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
+
+        diffusion = self.param['rD'] * self.dataset.DW * (P *phi * (u_xx + u_yy) + self.dataset.L* DxPphi * u_x + self.dataset.L* DyPphi * u_y)
+        residual = phi * u_t - ( diffusion +  proliferation)
+        return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
+    
+    @tf.function
+    def pde3d(self, x_r, phi, P, DxPphi, DyPphi, DzPphi):
+        t = x_r[:,0:1]
+        x = x_r[:,1:2]
+        y = x_r[:,2:3]
+        z = x_r[:,3:4]
+        xr = tf.concat([t,x,y,z], axis=1)
+        u = self.nn(xr)
+        
+        u_t = tf.gradients(u, t)[0]
+        u_x = tf.gradients(u, x)[0]
+        u_xx = tf.gradients(u_x, x)[0]
+        
+        u_y = tf.gradients(u, y)[0]
+        u_yy = tf.gradients(u_y, y)[0]
+        
+        u_z = tf.gradients(u, z)[0]
+        u_zz = tf.gradients(u_z, z)[0]
+
+        proliferation = self.param['rRHO'] * self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
+
+        diffusion = self.param['rD'] * self.dataset.DW * (P * phi * (u_xx + u_yy + u_zz) + 
+                                                            self.dataset.L* DxPphi * u_x +
+                                                            self.dataset.L* DyPphi * u_y +
+                                                            self.dataset.L* DzPphi * u_z )
+        
+        residual = phi * u_t - ( diffusion +  proliferation)
+        return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
+
+    
+    # geometry is represented by neural net
+    @tf.function
+    def pde2dgeo(self, xr):
+        t = xr[:,0:1]
+        x = xr[:,1:2]
+        y = xr[:,2:3]
+        xr = tf.concat([t,x,y], axis=1)
+        xxr = tf.concat([x,y], axis=1)
+
+        geo = self.geonn(xxr)
+        P = geo['Pwm'] + geo['Pgm']/self.dataset.factor # Pwm + Pgm/factor
+        phi = geo['phi']
+
+        u =  self.nn(xr)
+        
+        u_t = tf.gradients(u, t)[0]
+
+        u_x = tf.gradients(u, x)[0]
+        u_y = tf.gradients(u, y)[0]
+
+        u_xx = tf.gradients( phi * P * u_x , x)[0]
+        u_yy = tf.gradients( phi * P * u_y , y)[0]
+
+        proliferation =  self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
+
+        diffusion =  self.dataset.DW * (u_xx + u_yy)
+        residual = phi * u_t - ( self.param['rD'] * diffusion +  self.param['rRHO']* proliferation)
+        return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}    
+    
+    @tf.function
+    def pde3dgeo(self, xr):
+        t = xr[:,0:1]
+        x = xr[:,1:2]
+        y = xr[:,2:3]
+        z = xr[:,3:4]
+        xr = tf.concat([t,x,y,z], axis=1)
+        xxr = tf.concat([x,y,z], axis=1)
+
+        geo = self.geonn(xxr)
+        P = geo['Pwm'] + geo['Pgm']/self.dataset.factor # Pwm + Pgm/factor
+        phi = geo['phi']
+
+        u =  self.nn(xr)
+        
+        u_t = tf.gradients(u, t)[0]
+
+        u_x = tf.gradients(u, x)[0]
+        u_y = tf.gradients(u, y)[0]
+        u_z = tf.gradients(u, z)[0]
+
+        u_xx = tf.gradients( phi * P * u_x , x)[0]
+        u_yy = tf.gradients( phi * P * u_y , y)[0]
+        u_zz = tf.gradients( phi * P * u_z , z)[0]
+
+        proliferation =  self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
+
+        diffusion =  self.dataset.DW * (u_xx + u_yy + u_zz)
+        residual = phi * u_t - ( self.param['rD'] * diffusion +  self.param['rRHO']* proliferation)
+        return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}    
+    
+
+    def getres(self, dataset, idx=None):
+        # get terms of pde as dictionary
+        if idx is None:
+            idx = tf.range(dataset.xr.shape[0])
+        if self.xdim == 2:
+            if self.geonn is None:
+                res = self.pde2d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:])
+            else:
+                res = self.pde2dgeo(dataset.xr[idx,:])
+        
+        if self.xdim == 3:
+            if self.geonn is None:
+                res = self.pde2d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:], dataset.DzPphi[idx,:])
+            else:
+                # not implemented yet
+                res = self.pde3dgeo(dataset.xr[idx,:])
+
+        return res
+
+
+
 
 
 class Gmodel:
@@ -72,6 +218,7 @@ class Gmodel:
         if opts['usegeo'] is True:
             self.geomodel = Geonn(input_dim=self.xdim, **(self.opts['geonn_opts']))
             self.geomodel.manager = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
+            self.geomodel.trainable = self.opts['traingeo']
 
         # get init from dataset
         if opts['initfromdata'] is True:
@@ -126,93 +273,6 @@ class Gmodel:
             def ot(x,u):
                 return u* x[:, 0:1]+ ic(x)
 
-        if self.xdim == 2 and self.geomodel is None:
-                # geometry is provided by data
-                @tf.function
-                def pde(xr, nn, phi, P, DxPphi, DyPphi):
-                    t = xr[:,0:1]
-                    x = xr[:,1:2]
-                    y = xr[:,2:3]
-                    xr = tf.concat([t,x,y], axis=1)
-                    
-                    u =  nn(xr)
-                    
-                    u_t = tf.gradients(u, t)[0]
-
-                    u_x = tf.gradients(u, x)[0]
-                    u_y = tf.gradients(u, y)[0]
-                    
-                    u_xx = tf.gradients(u_x, x)[0]
-                    u_yy = tf.gradients(u_y, y)[0]
-
-                    proliferation = self.param['rRHO'] * self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
-
-                    diffusion = self.param['rD'] * self.dataset.DW * (P *phi * (u_xx + u_yy) + self.dataset.L* DxPphi * u_x + self.dataset.L* DyPphi * u_y)
-                    residual = phi * u_t - ( diffusion +  proliferation)
-                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
-        
-        if self.xdim == 3 and self.geomodel is None:
-            @tf.function
-            def pde(x_r, nn, phi, P, DxPphi, DyPphi, DzPphi):
-                
-                t = x_r[:,0:1]
-                x = x_r[:,1:2]
-                y = x_r[:,2:3]
-                z = x_r[:,3:4]
-                xr = tf.concat([t,x,y,z], axis=1)
-                u = nn(xr)
-                
-                u_t = tf.gradients(u, t)[0]
-                u_x = tf.gradients(u, x)[0]
-                u_xx = tf.gradients(u_x, x)[0]
-                
-                u_y = tf.gradients(u, y)[0]
-                u_yy = tf.gradients(u_y, y)[0]
-                
-                u_z = tf.gradients(u, z)[0]
-                u_zz = tf.gradients(u_z, z)[0]
-
-                proliferation = self.param['rRHO'] * self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
-
-                diffusion = self.param['rD'] * self.dataset.DW * (P * phi * (u_xx + u_yy + u_zz) + 
-                                                                  self.dataset.L* DxPphi * u_x +
-                                                                    self.dataset.L* DyPphi * u_y +
-                                                                    self.dataset.L* DzPphi * u_z )
-                
-                residual = phi * u_t - ( diffusion +  proliferation)
-                return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
-
-        if self.xdim == 2 and self.geomodel is not None:
-            # geometry is represented by neural net
-                @tf.function
-                def pde(xr, nn, geomodel):
-                    t = xr[:,0:1]
-                    x = xr[:,1:2]
-                    y = xr[:,2:3]
-                    xr = tf.concat([t,x,y], axis=1)
-                    xxr = tf.concat([x,y], axis=1)
-
-                    geo = geomodel(xxr)
-                    P = geo['Pwm'] + geo['Pgm']/self.dataset.factor # Pwm + Pgm/factor
-                    phi = geo['phi']
-
-                    u =  nn(xr)
-                    
-                    u_t = tf.gradients(u, t)[0]
-
-                    u_x = tf.gradients(u, x)[0]
-                    u_y = tf.gradients(u, y)[0]
-
-                    u_xx = tf.gradients( phi * P * u_x , x)[0]
-                    u_yy = tf.gradients( phi * P * u_y , y)[0]
-
-                    proliferation =  self.dataset.RHO * phi * u * ( 1 - u/self.param['M'])
-
-                    diffusion =  self.dataset.DW * (u_xx + u_yy)
-                    residual = phi * u_t - ( self.param['rD'] * diffusion +  self.param['rRHO']* proliferation)
-                    return {'residual':residual, 'proliferation': proliferation, 'diffusion': diffusion, 'phiut':phi * u_t}
-
-
         reg = None
         if self.opts.get('weightreg') is not None:
             print('apply weight regularization')
@@ -225,6 +285,8 @@ class Gmodel:
                 output_transform=ot,
                 regularizer=reg)
         
+        self.pde = PDE(self.model, self.param, self.geomodel, self.dataset)
+
         # load model, also change self.param
         self.model.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
         
@@ -235,10 +297,10 @@ class Gmodel:
         #         self.param[x].assign(self.opts['initparam'][x])
                 
 
-        losses = Losses(self.model, self.geomodel, pde, self.dataset, self.param, self.opts)
+        losses = Losses(self.model, self.geomodel, self.pde, self.dataset, self.param, self.opts)
                 
         # Initilize PINN solver
-        self.solver = PINNSolver(self.model, pde, 
+        self.solver = PINNSolver(self.model, self.pde, 
                                 losses,
                                 self.dataset,
                                 geomodel = self.geomodel,

@@ -576,13 +576,7 @@ class PINNSolver():
             xr[:,0] = t
 
             upredtxr = self.model(xr)
-            if self.dataset.xdim == 2:
-                if self.geomodel is None:
-                    restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi)
-                else:
-                    restxr = self.pde(xr, self.model, self.geomodel)
-            else:
-                restxr = self.pde(xr, self.model, self.dataset.phiq, self.dataset.Pq, self.dataset.DxPphi, self.dataset.DyPphi, self.dataset.DzPphi)
+            restxr = self.pde.getres(self.dataset)
             
             upredts.append(t2n(upredtxr))
             rests.append(t2n(restxr['residual']))
@@ -616,12 +610,12 @@ class PINNSolver():
         # may not have current_loss if reload
         # savedat['lossname'] = [k for k,v in self.current_loss.items()]
         # savedat['lossval'] = [v.numpy() for k,v in self.current_loss.items()]
-        self.losses.getpdeterm()
-        savedat.update(t2n(self.losses.pdeterm))
+        pdeterm = self.pde.getres(self.dataset)
+        savedat['ppred'] = t2n(pdeterm)
 
         if self.geomodel is not None:
-            P = self.geomodel(self.dataset.xr[:,1:])
-            savedat['ppred'] = t2n(P)
+            P = self.geomodel(self.dataset.xdat[:,1:])
+            savedat.update(t2n(P))
 
         for key in self.model.param:
             savedat[key] = self.model.param[key].numpy()

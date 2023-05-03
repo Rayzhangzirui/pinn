@@ -213,7 +213,7 @@ class Losses():
     @tf.function
     def getloss(self):
         # compute train or test loss, depending on mode
-        self.getpdeterm()
+        self.pdeterm = self.pde.getres(self.dataset, self.ires)
         self.getupredxdat()
 
         wlosses = {} # dict of weighted loss
@@ -227,14 +227,14 @@ class Losses():
         wlosses['total'] = total
         return wlosses
 
-    def getpdeterm(self):
-        if self.dataset.xdim == 2:
-            if self.geomodel is None:
-                self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
-            else:
-                self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.geomodel)
-        else:
-            self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:], self.dataset.DzPphi[self.ires,:])
+    # def getpdeterm(self):
+    #     if self.dataset.xdim == 2:
+    #         if self.geomodel is None:
+    #             self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
+    #         else:
+    #             self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.geomodel)
+    #     else:
+    #         self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:], self.dataset.DzPphi[self.ires,:])
 
     # segmentation mse loss, mse of threholded u and data (patient geometry)
     def fseg1loss(self): 
