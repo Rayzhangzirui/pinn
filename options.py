@@ -72,6 +72,7 @@ opts = {
     "gradnorm":False,
     "outputderiv":False,
     "usegeo":False,
+    "traingeo":False,
     "patientweight":1.0,
     "simtype":'fitfwd',
     "whichseg":'mse',

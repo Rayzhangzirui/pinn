@@ -290,8 +290,8 @@ class Losses():
     
     def geomseloss(self):
         # loss for geometry
-        geo = self.geomodel(self.dataset.xr[self.ires,1:])
-        return mse(geo['Pwm'],self.dataset.Pwmq[self.ires,:])+mse(geo['Pgm'],self.dataset.Pgmq[self.ires,:]) + mse(geo['phi'],self.dataset.phiq[self.ires,:])
+        geo = self.geomodel(self.dataset.xdat[self.idat,1:])
+        return mse(geo['Pwm'],self.dataset.Pwmdat[self.idat,:]) + mse(geo['Pgm'],self.dataset.Pgmdat[self.idat,:]) + mse(geo['phi'],self.dataset.phidat[self.idat,:])
 
 
 
