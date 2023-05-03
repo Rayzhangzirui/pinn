@@ -8,7 +8,10 @@ lbfgs_opts = {"maxcor": 100, 'ftol':2.2204460492503131e-09, 'gtol':0.0, 'maxfun'
 
 nn_opts = {'num_hidden_layers':4, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False, "activation":'tanh'}
 
-geonn_opts = {'num_hidden_layers':2, 'num_neurons_per_layer':64, 'resnet': False, 'userbf' : False, "activation":'tanh'}
+geonn_opts = {'depth':2, 'width':64}
+
+# option for data set
+data_opts = {'Nres': 50000, 'resratio':1.0, 'Ndat': 50000, 'Ndatratio':1.0}
 
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
@@ -20,6 +23,7 @@ weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'd
 initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.5, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
 
 earlystop_opts = {'patience': 1000, 'min_delta': 1e-6, "monitor":['total'],'burnin':1000}
+
 opts = {
     "tag" : '',
     "note": '',
@@ -31,6 +35,7 @@ opts = {
     "Ndat":50000,
     "Ndattest":50000,
     "nn_opts": nn_opts,
+    "geonn_opts": geonn_opts,
     "print_res_every" : 100, # print residual
     "save_res_every" : None, # save residual
     "weights" : weights, # weight of data, weight of res is 1

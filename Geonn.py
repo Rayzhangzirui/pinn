@@ -11,19 +11,19 @@ class Geonn(tf.keras.Model):
 
     def __init__(self,
             input_dim=3,
-            num_hidden_layers=2, 
-            num_neurons_per_layer=64,
+            depth=2, 
+            width=64,
             **kwargs):
         super().__init__( **kwargs)
         self.input_dim = input_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_neurons_per_layer = num_neurons_per_layer
+        self.depth = depth
+        self.width = width
         
         # Input layer
-        self.input_layer = tf.keras.layers.Dense(self.num_neurons_per_layer, activation='tanh', input_shape=(self.input_dim,))
+        self.input_layer = tf.keras.layers.Dense(self.width, activation='tanh', input_shape=(self.input_dim,))
 
         # Hidden layers
-        self.hidden_layers = [tf.keras.layers.Dense(self.num_neurons_per_layer, activation='tanh') for _ in range(self.num_hidden_layers - 1)]
+        self.hidden_layers = [tf.keras.layers.Dense(self.width, activation='tanh') for _ in range(self.depth - 1)]
 
         # Output layers
         self.output_Pwm = tf.keras.layers.Dense(1, activation='sigmoid')

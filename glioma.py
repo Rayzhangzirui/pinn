@@ -70,7 +70,7 @@ class Gmodel:
         # model for probability
         # input is spatial coordiante, output Pwm, Pgm, phi
         if opts['usegeo'] is True:
-            self.geomodel = Geonn(input_dim=self.xdim)
+            self.geomodel = Geonn(input_dim=self.xdim, **(self.opts['geonn_opts']))
             self.geomodel.manager = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
 
         # get init from dataset
