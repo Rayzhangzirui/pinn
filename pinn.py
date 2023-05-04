@@ -470,6 +470,7 @@ class PINNSolver():
                     if ptensor.trainable == True:
                         header+= ", {:<12}".format(f'{pname}')
             if self.losses.hastest == True:
+                # add test losses to header
                 for lname in self.losses.all_test_losses:
                     header+= ",{:<12}".format(lname+'test')
                 header+= ",{:<12}".format('pdattest') # patient data loss

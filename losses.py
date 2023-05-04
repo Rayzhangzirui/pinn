@@ -274,7 +274,7 @@ class Losses():
     def uxrloss(self):
         '''mse of u at Xr'''
         upredxr = self.model(self.dataset.xr[self.ires,:])
-        return phimse(self.dataset.uxr[self.ires,:], self.upredxr, self.dataset.phiq[self.ires,:])
+        return phimse(self.dataset.uxr[self.ires,:], upredxr, self.dataset.phiq[self.ires,:])
     
     
 

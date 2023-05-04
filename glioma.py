@@ -144,6 +144,7 @@ class PDE:
         # get terms of pde as dictionary
         if idx is None:
             idx = tf.range(dataset.xr.shape[0])
+            
         if self.xdim == 2:
             if self.geonn is None:
                 res = self.pde2d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:])
@@ -152,7 +153,7 @@ class PDE:
         
         if self.xdim == 3:
             if self.geonn is None:
-                res = self.pde2d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:], dataset.DzPphi[idx,:])
+                res = self.pde3d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:], dataset.DzPphi[idx,:])
             else:
                 # not implemented yet
                 res = self.pde3dgeo(dataset.xr[idx,:])

@@ -54,7 +54,7 @@ opts = {
     "smoothwidth": 20,
     "heaviside":'sigmoid',
     "udatsource":'udat',
-    "mrange":[0.8,1.2],
+    "mrange":[0.8,2.0],
     "trainA":False,
     "trainth1":False,
     "trainth2":False,
@@ -177,8 +177,7 @@ class Options(object):
             default_val = get_nested_dict(self.opts, key)
             if isinstance(default_val,str):
                 val = args[i+1]
-            elif isinstance(default_val,list):
-                val = (args[i+1]).split()
+            
             else:
                 try:
                     val = ast.literal_eval(args[i+1])
