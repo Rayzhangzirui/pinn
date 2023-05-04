@@ -611,7 +611,7 @@ class PINNSolver():
         # savedat['lossname'] = [k for k,v in self.current_loss.items()]
         # savedat['lossval'] = [v.numpy() for k,v in self.current_loss.items()]
         pdeterm = self.pde.getres(self.dataset)
-        savedat['ppred'] = t2n(pdeterm)
+        savedat.update(t2n(pdeterm))
 
         if self.geomodel is not None:
             P = self.geomodel(self.dataset.xdat[:,1:])

@@ -63,6 +63,7 @@ opts = {
     "randomt": -1.0,
     "optimizer":'adam',
     "restore": '',
+    "restoregeo": '',
     "copyfrom": '',
     "trainnnweight":None,
     "resetparam":False,

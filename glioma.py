@@ -217,7 +217,14 @@ class Gmodel:
         # input is spatial coordiante, output Pwm, Pgm, phi
         if opts['usegeo'] is True:
             self.geomodel = Geonn(input_dim=self.xdim, **(self.opts['geonn_opts']))
-            self.geomodel.manager = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = self.opts['restore'])
+            
+            # if trained together, restore from same dire as main model
+            # if not trained together, restore from restoregeo
+            restore_dir = self.opts['restore']
+            if not self.opts['restoregeo']:
+                restore_dir = self.opts['restoregeo']
+            self.geomodel.manager = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = restore_dir)
+
             self.geomodel.trainable = self.opts['traingeo']
 
         # get init from dataset

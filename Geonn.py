@@ -6,7 +6,7 @@ import tensorflow as tf
 import os
 import sys
 from options import Options
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, CSVLogger
 
 
 class Geonn(tf.keras.Model):
@@ -16,12 +16,16 @@ class Geonn(tf.keras.Model):
             input_dim=3,
             depth=2, 
             width=64,
+            model_dir='geomodel',
             **kwargs):
         super().__init__( **kwargs)
         self.input_dim = input_dim
         self.depth = depth
         self.width = width
-        
+        self.model_dir = model_dir # place to save training info and checkpoint
+        if not os.path.exists(self.model_dir):
+            os.makedirs(self.model_dir)
+
         # Input layer
         self.input_layer = tf.keras.layers.Dense(self.width, activation='tanh', input_shape=(self.input_dim,))
 
@@ -52,19 +56,24 @@ class Geonn(tf.keras.Model):
         
         # train = tfdataset.take(idxsplit)
         # test = tfdataset.skip(idxsplit)
+        
+        
+        early_stopping_val = EarlyStopping(monitor='val_loss', patience=1000)
+        early_stopping_loss = EarlyStopping(monitor='loss', patience=1000)
+        csv_logger = CSVLogger(os.path.join(self.model_dir,'training.txt' ))
 
-        early_stopping_val = EarlyStopping(monitor='val_loss', patience=10)
-        early_stopping_loss = EarlyStopping(monitor='loss', patience=10)
         
         batch_size = X.shape[0]
         history = self.fit(X, {'Pwm': Pwmq,  'Pgm': Pgmq, 'phi': phiq}, 
                             validation_split=0.2,
-                           epochs=epochs, batch_size=batch_size,callbacks=[early_stopping_val, early_stopping_loss])
+                           epochs=epochs, batch_size=batch_size,callbacks=[early_stopping_val, early_stopping_loss, csv_logger],
+                           verbose=1)
         return history
 
     def setup_ckpt(self, ckptdir):
         self.checkpoint = tf.train.Checkpoint(self)
-        self.manager = tf.train.CheckpointManager(self.checkpoint, directory=ckptdir, max_to_keep=4)
+        
+        self.manager = tf.train.CheckpointManager(self.checkpoint, directory=os.path.join(self.model_dir, ckptdir), max_to_keep=4)
 
     def save_checkpoint(self):
         # make director
@@ -82,11 +91,17 @@ if __name__ == '__main__':
 
     dataset = DataSet(optobj.opts['inv_dat_file'])
 
-    
     dataset.downsample(optobj.opts['Ndat'])
-    geonn = Geonn(input_dim=dataset.xdim, **(optobj.opts['geonn_opts']))
-    geonn.setup_ckpt(optobj.opts['model_dir'])
-    geonn.train(dataset.xdat[:,1:], dataset.Pwmdat, dataset.Pgmdat, dataset.phidat,epochs=optobj.opts['num_init_train'])
+    geonn = Geonn(input_dim=dataset.xdim, **(optobj.opts['geonn_opts']), model_dir = optobj.opts['model_dir'])
+    geonn.setup_ckpt('geockpt')
+    history = geonn.train(dataset.xdat[:,1:], dataset.Pwmdat, dataset.Pgmdat, dataset.phidat, epochs=optobj.opts['num_init_train'])
     geonn.save_checkpoint()
+
+
+    f = open("commands.txt", "a")
+    f.write(' '.join(sys.argv))
+    f.write('\n')
+    f.write('finish\n')
+    f.close()
 
     
