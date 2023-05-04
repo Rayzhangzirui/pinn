@@ -5,6 +5,9 @@ from DataSet import DataSet
 import tensorflow as tf
 import os
 import sys
+from options import Options
+from tensorflow.keras.callbacks import EarlyStopping
+
 
 class Geonn(tf.keras.Model):
     """ nn for geometry"""
@@ -43,29 +46,47 @@ class Geonn(tf.keras.Model):
     def train(self, X, Pwmq, Pgmq, phiq, epochs=10000):
         self.compile(optimizer='adam',loss={'Pwm': 'mse', 'Pgm': 'mse', 'phi': 'mse'})
         # do not use mini-batch
+        # split_ratio = 0.8
+        # idxsplit = int(X.shape[0]*split_ratio)
+        # tfdataset = tf.data.Dataset.from_tensor_slices({'xdat':X, 'Pwm':Pwmq, 'Pgm':Pgmq, 'phi':phiq})
+        
+        # train = tfdataset.take(idxsplit)
+        # test = tfdataset.skip(idxsplit)
+
+        early_stopping_val = EarlyStopping(monitor='val_loss', patience=10)
+        early_stopping_loss = EarlyStopping(monitor='loss', patience=10)
+        
         batch_size = X.shape[0]
-        history = self.fit(X, {'Pwm': Pwmq,  'Pgm': Pgmq, 'phi': phiq}, epochs=epochs, batch_size=batch_size)
+        history = self.fit(X, {'Pwm': Pwmq,  'Pgm': Pgmq, 'phi': phiq}, 
+                            validation_split=0.2,
+                           epochs=epochs, batch_size=batch_size,callbacks=[early_stopping_val, early_stopping_loss])
         return history
 
-    # def save_checkpoint(self):
-    #     self.checkpoint_manager.save()
+    def setup_ckpt(self, ckptdir):
+        self.checkpoint = tf.train.Checkpoint(self)
+        self.manager = tf.train.CheckpointManager(self.checkpoint, directory=ckptdir, max_to_keep=4)
 
-    # def load_checkpoint(self, checkpoint_path=None):
-    #     if checkpoint_path:
-    #         self.checkpoint.restore(checkpoint_path)
-    #     else:
-    #         self.checkpoint.restore(self.checkpoint_manager.latest_checkpoint)    
+    def save_checkpoint(self):
+        # make director
+        self.manager.save()
+
+    def load_checkpoint(self):
+        self.checkpoint.restore(self.manager.latest_checkpoint)
+        
 
 if __name__ == '__main__':
     
-    fname = sys.argv[1]
-    N = 50000
-    epochs = 10000
+    args = sys.argv[1:]
+    optobj = Options()
+    optobj.parse_args(*sys.argv[1:])
 
-    dataset = DataSet(fname)
-    dataset.downsample(N)
-    geonn = Geonn()
-    geonn.train(dataset.xr[:,1:], dataset.Pwmq, dataset.Pgmq, dataset.phiq, epochs)
+    dataset = DataSet(optobj.opts['inv_dat_file'])
+
+    
+    dataset.downsample(optobj.opts['Ndat'])
+    geonn = Geonn(input_dim=dataset.xdim, **(optobj.opts['geonn_opts']))
+    geonn.setup_ckpt(optobj.opts['model_dir'])
+    geonn.train(dataset.xdat[:,1:], dataset.Pwmdat, dataset.Pgmdat, dataset.phidat,epochs=optobj.opts['num_init_train'])
     geonn.save_checkpoint()
 
     
