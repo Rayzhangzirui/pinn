@@ -15,6 +15,7 @@ data_opts = {'Nres': 50000, 'resratio':1.0, 'Ndat': 50000, 'Ndatratio':1.0}
 
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
+    'udatpos':None,
     'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
     'ic':None,
     'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None}

@@ -166,6 +166,7 @@ class Losses():
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
                          'uxr':self.uxrloss,
+                         'udatpos': self.udatpos,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                          'area1': self.farea1loss , 'area2': self.farea2loss, 
                         'petmse': self.fpetmseloss,
@@ -260,6 +261,11 @@ class Losses():
         '''mse of u at Xdat'''
         return phimse(self.dataset.udat[self.idat,:], self.upredxdat, self.dataset.phidat[self.idat,:])
     
+    def udatpos(self):
+        '''keep u positive at Xdat'''
+        penalty = tf.reduce_mean(tf.nn.relu(-self.upredxdat * self.dataset.phidat[self.idat,:])**2)
+        return penalty
+
     def icloss(self):
         '''mse of u at xinit'''
         uinitpred = self.model(self.dataset.xinit[self.ires,:])
