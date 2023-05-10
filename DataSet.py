@@ -53,6 +53,22 @@ class DataSet:
                 print(f'downsample {a} from {x.shape[0]} to {n} ')
                 x = x[:n,:]
                 setattr(self, a, x)
+
+    def subsample(self, idx):
+        ''' subsample data set
+        '''
+        attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
+        for a in attr:
+            x = getattr(self, a)
+            # only work on variables with more than one rows
+            if isinstance(x,np.ndarray) and x.shape[0]>len(idx):
+                print(f'subsample {a} from {x.shape[0]} to {len(idx)} ')
+                x = x[idx,:]
+                setattr(self, a, x)
+    
+    
+
+
             
 
 

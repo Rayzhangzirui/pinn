@@ -35,6 +35,7 @@ opts = {
     "Ntest":50000,
     "Ndat":50000,
     "Ndattest":50000,
+    "endtime": 1.0,
     "nn_opts": nn_opts,
     "geonn_opts": geonn_opts,
     "print_res_every" : 100, # print residual
@@ -257,10 +258,14 @@ class Options(object):
                     raise ValueError('whichseg must be mse or area')
                 self.opts['weights']['petmse'] = w
                 self.opts['weights']['Areg'] = 1.0
+                self.opts['weights']['rDreg'] = 1.0
+                self.opts['weights']['rRHOreg'] = 1.0
                 self.opts['weights']['mreg'] = 1.0
                 self.opts['weights']['th1reg'] = 1.0
                 self.opts['weights']['th2reg'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['pdattest']
+                self.opts['learning_rate_opts']['initial_learning_rate'] = 1e-5
+                self.opts['num_init_train'] = 10000
             
             elif simtype == 'petonly':
                 w = self.opts['patientweight']

@@ -170,11 +170,29 @@ class Gmodel:
         self.opts = opts
 
         self.dataset = DataSet(opts['inv_dat_file'])
+
+        if self.opts.get('endtime') is not None:
+            # down sample dataset
+            t = self.opts.get('endtime')
+            if t < 0:
+                t = self.dataset.xdat[0,0]
+                print('use xdat time point')
+            print('subsample to t less than', t)
+            idx = np.argwhere(self.dataset.xr[:,0] <= t).flatten()
+            self.dataset.subsample(idx)
+        
+
         if self.opts.get('N') is not None:
             # down sample dataset
             totalxr = self.opts.get('N') + self.opts.get('Ntest')
             totalxdat = self.opts.get('Ndat') + self.opts.get('Ndattest')
+            if totalxdat > self.dataset.xdat.shape[0]:
+                print('not enough data xdat')
+                self.opts['Ndattest'] = totalxdat - self.opts['Ndat']
             self.dataset.downsample(max(totalxr, totalxdat))
+        
+
+            
 
         if opts.get('useupred') is not None:
             # use upred at xdat from other training
@@ -299,10 +317,9 @@ class Gmodel:
         self.model.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
         
         
-        # for x in self.param:
-        #     # if variable not trainable, set as initparam
-        #     if self.param[x].trainable == False:
-        #         self.param[x].assign(self.opts['initparam'][x])
+        for x in {'m','A','th1','th2'}:
+            # set init value for m, A, th1, th2
+            self.param[x].assign(self.opts['initparam'][x])
                 
 
         losses = Losses(self.model, self.geomodel, self.pde, self.dataset, self.param, self.opts)

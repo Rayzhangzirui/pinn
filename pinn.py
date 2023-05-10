@@ -568,23 +568,30 @@ class PINNSolver():
 
         savedat = {}
         upredts = [] # prediction at different t
+        udatpredts = [] # prediction at different t on xdat
         rests = [] # residual at different t
         
         predfile = os.path.join(self.options['model_dir'],f'upred_txr_{suffix}.mat')
         ts = np.linspace(0, tend, n)
         xr = np.copy(self.dataset.xr)
+        xdat = np.copy(self.dataset.xdat)
         for t in ts:
             xr[:,0] = t
+            xdat[:,0] = t
 
             upredtxr = self.model(xr)
+            upredtxdat = self.model(xdat)
             restxr = self.pde.getres(self.dataset)
             
             upredts.append(t2n(upredtxr))
+            udatpredts.append(t2n(upredtxdat))
             rests.append(t2n(restxr['residual']))
     
         savedat['upredts'] = np.concatenate([*upredts],axis=1)
+        savedat['udatpredts'] = np.concatenate([*udatpredts],axis=1)
         savedat['rests'] = np.concatenate([*rests],axis=1)
         savedat['xr'] = xr
+        savedat['xdat'] = xdat
         savedat['ts'] = ts
         print(f'save upred of xr at different t to {predfile}')
         savemat(predfile,savedat)
