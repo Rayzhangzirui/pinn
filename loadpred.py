@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="load option, make prediction")
     parser.add_argument("optfile", type=str, help="option file, used to load model")
     parser.add_argument("-p", "--path", type=str, help="Path to the ckpt file")
-    parser.add_argument("-n", "--name", type=str, help="Name of the output prediciton file")
+    parser.add_argument("-n", "--num", type=int, default=-1, help="int of ckpt file")
 
     args = parser.parse_args()
     # Opening JSON file
@@ -30,14 +30,22 @@ if __name__ == "__main__":
     
     # restore from ckpt-1
     opts['file_log'] = False
-    opts['restore'] = 1
+    opts['restore'] = ''
     g = Gmodel(opts)
-    g.solver.save_upred('scipylbfgs')
-    # g.solver.predtx('lbfgs', tend, N)
 
-    # # restore from checkpoint 0
-    del g
-    opts['restore'] = 0
-    g = Gmodel(opts)
-    g.solver.save_upred('adam')
-    # # g.solver.predtx('adam', tend, N)
+    # list of ckpt to restore
+    if args.num<0:
+        ns = [0,1]
+    else:
+        ns = [args.num]
+    
+    # restore and predict
+    for n in ns:
+        if n==0:
+            optimizer = opts['optimizer']
+        else:
+            optimizer = 'scipylbfgs'
+        
+        g.model.checkpoint.restore(g.model.manager.checkpoints[args.num])
+        g.solver.save_upred(optimizer)
+        g.solver.predtx(optimizer)

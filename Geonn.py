@@ -72,7 +72,6 @@ class Geonn(tf.keras.Model):
 
     def setup_ckpt(self, ckptdir):
         self.checkpoint = tf.train.Checkpoint(self)
-        
         self.manager = tf.train.CheckpointManager(self.checkpoint, directory=os.path.join(self.model_dir, ckptdir), max_to_keep=4)
 
     def save_checkpoint(self):

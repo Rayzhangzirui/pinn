@@ -22,7 +22,8 @@ if __name__ == "__main__":
         if args.printval:
             print(matdat[args.varname])
     else:
-        for k,v in matdat.items():
+        for k in sorted(matdat):
+            v = matdat[k]
             if isinstance(v, np.ndarray):
                 print(f'{k} {v.shape} {v.dtype}')
                 if args.printval:

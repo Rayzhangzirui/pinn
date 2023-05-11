@@ -242,7 +242,7 @@ class Gmodel:
             restore_dir = self.opts['restore']
             if not self.opts['restoregeo']:
                 restore_dir = self.opts['restoregeo']
-            self.geomodel.manager = self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = restore_dir)
+            self.setup_ckpt(self.geomodel, ckptdir = 'geockpt', restore = restore_dir)
 
             self.geomodel.trainable = self.opts['traingeo']
 
@@ -314,7 +314,7 @@ class Gmodel:
         self.pde = PDE(self.model, self.param, self.geomodel, self.dataset)
 
         # load model, also change self.param
-        self.model.manager = self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
+        self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
         
         
         for x in {'m','A','th1','th2'}:
@@ -357,32 +357,38 @@ class Gmodel:
         manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['model_dir'],ckptdir), max_to_keep=4)
         # manager.latest_checkpoint is None if no ckpt found
 
-        if self.opts['restore'] is not None and (self.opts['restore']):
-            # restore from previous simulation
-            prev_manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['restore'],ckptdir), max_to_keep=4) 
-            # not None and not empty
-            # self.opts['restore'] is a number or a path
-            if isinstance(self.opts['restore'],int):
-                # restore check point in the same directory by integer, 0 = ckpt-1
-                ckptpath = prev_manager.checkpoints[self.opts['restore']]
+        # if self.opts['restore'] is specified as directory, restore from there
+        if os.path.isdir(self.opts['restore']):
+            # if the path contain ckpt, restore from there
+            # otherwise only model directory is specified, restore from latest
+            if ckptdir in self.opts['restore']:
+                checkpoint.restore(self.opts['restore'])
             else:
-                # restore checkpoint by path
+                prev_manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['restore'],ckptdir), max_to_keep=4) 
                 ckptpath = prev_manager.latest_checkpoint
+                checkpoint.restore(ckptpath)
+                print("Restored from {}".format(ckptpath))
+
+        # if self.opts['restore'] is not specified as directory, restore from the same directory
+        # if None, restore from latest, if integer, restore by number
+        elif manager.latest_checkpoint is not None:
+            # as integer, restore from the same directory
+            if self.opts['restore'] == '':
+                ckptpath = manager.latest_checkpoint
+            elif isinstance(self.opts['restore'],int):
+                # restore check point in the same directory by integer, 0 = ckpt-1
+                ckptpath = manager.checkpoints[self.opts['restore']]
+            else:
+                raise ValueError('restore should be empty or integer')
 
             checkpoint.restore(ckptpath)
             print("Restored from {}".format(ckptpath))
+            
         else:
-            # self.opts['restore'] is None
-            # try to continue previous simulation
-            ckptpath = manager.latest_checkpoint
-            if ckptpath is not None:
-                checkpoint.restore(ckptpath)
-                print("Restored from {}".format(ckptpath))
-            else:
-                # if no previous ckpt
-                print("No restore")
+            print("No restore")
 
-        return manager 
+        self.model.manager = manager
+        self.model.checkpoint = checkpoint
     
 
     

@@ -55,7 +55,7 @@ opts = {
     "smoothwidth": 20,
     "heaviside":'sigmoid',
     "udatsource":'udat',
-    "mrange":[0.8,2.0],
+    "mrange":[0.8,1.2],
     "trainA":False,
     "trainth1":False,
     "trainth2":False,
@@ -264,8 +264,8 @@ class Options(object):
                 self.opts['weights']['th1reg'] = 1.0
                 self.opts['weights']['th2reg'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['pdattest']
-                self.opts['learning_rate_opts']['initial_learning_rate'] = 1e-5
-                self.opts['num_init_train'] = 10000
+                self.opts['learning_rate_opts']['initial_learning_rate'] = 1e-4
+                self.opts['num_init_train'] = 50000
             
             elif simtype == 'petonly':
                 w = self.opts['patientweight']

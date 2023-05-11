@@ -561,8 +561,7 @@ class PINNSolver():
     
 
     def predtx(self, suffix, tend = 1.0, n = 21):
-        # evalute at residual points. not data points. 
-        # need Pwm, Pgm , phi etc
+        # evalute at data points
         if tend is None:
             tend = 1.0
 
@@ -587,8 +586,10 @@ class PINNSolver():
             udatpredts.append(t2n(upredtxdat))
             rests.append(t2n(restxr['residual']))
     
-        savedat['upredts'] = np.concatenate([*upredts],axis=1)
         savedat['udatpredts'] = np.concatenate([*udatpredts],axis=1)
+        savedat['phidat'] = self.dataset.phidat
+
+        savedat['upredts'] = np.concatenate([*upredts],axis=1)
         savedat['rests'] = np.concatenate([*rests],axis=1)
         savedat['xr'] = xr
         savedat['xdat'] = xdat
