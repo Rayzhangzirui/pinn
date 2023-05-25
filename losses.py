@@ -157,8 +157,8 @@ class Losses():
         
 
         mregloss = lambda: relusqr(self.param['m'], self.opts['mrange'][0], self.opts['mrange'][1])
-        rDregloss = lambda: relusqr(self.param['rD'], self.opts['initparam']['rD'] * 0.5, self.opts['initparam']['rD'] * 1.5)
-        rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['initparam']['rRHO'] * 0.5, self.opts['initparam']['rRHO'] * 1.5)
+        rDregloss = lambda: relusqr(self.param['rD'], self.opts['initparam']['rD'] * 0.8, self.opts['initparam']['rD'] * 1.2)
+        rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['initparam']['rRHO'] * 0.8, self.opts['initparam']['rRHO'] * 1.2)
         Aregloss = lambda: relusqr(self.param['A'], 0.0, 1.0)
         th1regloss = lambda: relusqr(self.param['th1'], 0.1, 0.9)
         th2regloss = lambda: relusqr(self.param['th2'], 0.1, 0.9)
