@@ -15,6 +15,9 @@ from losses import Losses
 
 import tensorflow_probability as tfp
 
+
+
+
 class PDE:
     def __init__(self, nn, param, geonn, dataset):
         self.nn = nn
@@ -169,6 +172,9 @@ class Gmodel:
 
         self.opts = opts
 
+        tf.random.set_seed(self.opts['seed'])
+        np.random.seed(self.opts['seed'])
+
         self.dataset = DataSet(opts['inv_dat_file'])
 
         if self.opts.get('endtime') is not None:
@@ -180,8 +186,9 @@ class Gmodel:
             print('subsample to t less than', t)
             idx = np.argwhere(self.dataset.xr[:,0] <= t).flatten()
             self.dataset.subsample(idx)
-        
 
+        self.dataset.shuffle()
+        
         if self.opts.get('N') is not None:
             # down sample dataset
             totalxr = self.opts.get('N') + self.opts.get('Ntest')
@@ -191,7 +198,7 @@ class Gmodel:
                 self.opts['Ndattest'] = totalxdat - self.opts['Ndat']
             self.dataset.downsample(max(totalxr, totalxdat))
         
-
+        
             
 
         if opts.get('useupred') is not None:

@@ -31,11 +31,13 @@ class DataSet:
 
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
-    
+
+        self.attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
+
     def print(self):
-        '''print data set'''
-        attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
-        for a in attr:
+        '''print data set
+        '''
+        for a in self.attr:
             x = getattr(self, a)
             print(f"{a} {x}")
             if isinstance(x, np.ndarray):
@@ -45,8 +47,7 @@ class DataSet:
         ''' downsample data size
         '''
         # get variable name in .mat, remove meta info
-        attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
-        for a in attr:
+        for a in self.attr:
             x = getattr(self, a)
             # only work on variables with more than one rows
             if isinstance(x,np.ndarray) and x.shape[0]>n:
@@ -57,14 +58,25 @@ class DataSet:
     def subsample(self, idx):
         ''' subsample data set
         '''
-        attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
-        for a in attr:
+        for a in self.attr:
             x = getattr(self, a)
             # only work on variables with more than one rows
             if isinstance(x,np.ndarray) and x.shape[0]>len(idx):
                 print(f'subsample {a} from {x.shape[0]} to {len(idx)} ')
                 x = x[idx,:]
                 setattr(self, a, x)
+    
+    def shuffle(self):
+        ''' permute data set
+        '''
+        idx = np.random.permutation(self.xr.shape[0])
+        for a in self.attr:
+            x = getattr(self, a)
+            # only work on variables with more than one rows
+            if isinstance(x,np.ndarray) and x.shape[0]>len(idx):
+                x = x[idx,:]
+                setattr(self, a, x)
+
     
     
 

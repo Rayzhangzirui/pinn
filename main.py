@@ -7,7 +7,7 @@ from config import *
 from glioma import *
 from options import Options
 
-tf.random.set_seed(1)
+
 
 
 
@@ -18,8 +18,13 @@ if __name__ == "__main__":
     optobj = Options()
     optobj.parse_args(*sys.argv[1:])
 
+
+
     optobj.opts['model_dir'] = str_from_dict(optobj.opts, optobj.opts['tag'], [])
 
+
+    tf.random.set_seed(optobj.opts['seed'])
+    np.random.seed(optobj.opts['seed'])
 
     g = Gmodel(optobj.opts)
     g.solve()

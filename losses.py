@@ -160,8 +160,8 @@ class Losses():
         rDregloss = lambda: relusqr(self.param['rD'], self.opts['initparam']['rD'] * 0.8, self.opts['initparam']['rD'] * 1.2)
         rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['initparam']['rRHO'] * 0.8, self.opts['initparam']['rRHO'] * 1.2)
         Aregloss = lambda: relusqr(self.param['A'], 0.0, 1.0)
-        th1regloss = lambda: relusqr(self.param['th1'], 0.1, 0.9)
-        th2regloss = lambda: relusqr(self.param['th2'], 0.1, 0.9)
+        th1regloss = lambda: relusqr(self.param['th1'], 0.3, 0.5)
+        th2regloss = lambda: relusqr(self.param['th2'], 0.5, 0.7)
 
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
@@ -169,6 +169,7 @@ class Losses():
                          'udatpos': self.udatpos,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
                          'area1': self.farea1loss , 'area2': self.farea2loss, 
+                         'dice1': self.fdice1loss , 'dice2': self.fdice2loss, 
                         'petmse': self.fpetmseloss,
                         'geomse': self.geomseloss,
                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
@@ -250,6 +251,12 @@ class Losses():
 
     def farea2loss(self): 
         return areamseloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
+
+    def fdice1loss(self): 
+        return diceloss(self.upredxdat, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
+
+    def fdice2loss(self): 
+        return diceloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
 
     def fpetmseloss(self):
         # assuming mu ~ pet
