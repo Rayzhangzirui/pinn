@@ -13,7 +13,7 @@ geonn_opts = {'depth':3, 'width':64}
 # option for data set
 data_opts = {'Nres': 50000, 'resratio':1.0, 'Ndat': 50000, 'Ndatratio':1.0}
 
-weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'dat':None, 
+weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'udat':None, 
     'plfcor':None, 'uxr':None, 'u0dat':None,
     'udatpos':None,
     'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
@@ -55,7 +55,7 @@ opts = {
     "datmask":'petseg',
     "smoothwidth": 20,
     "heaviside":'sigmoid',
-    "udatsource":'udat',
+    "udatsource":'char',
     "mrange":[0.8,1.2],
     "trainA":False,
     "trainth1":False,
@@ -220,7 +220,7 @@ class Options(object):
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
                 self.opts['weights']['res'] = 1.0
-                self.opts['weights']['dat'] = 1.0
+                self.opts['weights']['udat'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
             
             elif simtype == 'synthetic':
@@ -234,7 +234,7 @@ class Options(object):
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
                 self.opts['weights']['res'] = 1.0
-                self.opts['weights']['dat'] = 1.0
+                self.opts['weights']['udat'] = 1.0
             
             
             elif simtype == 'patient':
@@ -247,7 +247,7 @@ class Options(object):
                 self.opts['trainx0'] = True
                 self.opts['trainth1'] = True
                 self.opts['trainth2'] = True
-                self.opts['weights']['dat'] = None
+                self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 if self.opts['whichseg'] == 'mse':
                     self.opts['weights']['seg1'] = w
@@ -277,7 +277,7 @@ class Options(object):
                 self.opts['trainx0'] = True
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
-                self.opts['weights']['dat'] = None
+                self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['petmse'] = w
                 self.opts['weights']['seg1'] = None
@@ -297,7 +297,7 @@ class Options(object):
                 self.opts['trainx0'] = True
                 self.opts['trainth1'] = True
                 self.opts['trainth2'] = True
-                self.opts['weights']['dat'] = None
+                self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['petmse'] = None
                 if self.opts['whichseg'] == 'mse':

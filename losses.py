@@ -135,9 +135,15 @@ class Losses():
         self.upredxr = None
         
         # set data source 
-        print(f"udatsource: {self.opts['udatsource']}") 
-        self.opts['udatsource']
-        self.dataset.udat = getattr(self.dataset, self.opts['udatsource'])
+        
+        if self.opts['udatsource'] == 'char':
+            print('use char udatchar, uxrchar\n')
+            self.dataset.udat = getattr(self.dataset, 'udatchar')
+            self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+        else:
+            print('use gt udat uxr\n')
+            self.dataset.udat = getattr(self.dataset, 'udat')
+            self.dataset.uxr = getattr(self.dataset, 'uxr')
         
         # compute testing loss
         self.hastest = False
@@ -164,7 +170,7 @@ class Losses():
         th2regloss = lambda: relusqr(self.param['th2'], 0.5, 0.7)
 
 
-        self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'dat':self.fdatloss, 'bc':self.bcloss,
+        self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'udat':self.fdatloss, 'bc':self.bcloss,
                          'uxr':self.uxrloss,
                          'udatpos': self.udatpos,
                          'seg1': self.fseg1loss , 'seg2': self.fseg2loss, 
