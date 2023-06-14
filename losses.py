@@ -140,6 +140,8 @@ class Losses():
             print('use char udatchar, uxrchar\n')
             self.dataset.udat = getattr(self.dataset, 'udatchar')
             self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+            self.dataset.rDe = 1.0
+            self.dataset.rRHOe = 1.0
         else:
             print('use gt udat uxr\n')
             self.dataset.udat = getattr(self.dataset, 'udat')

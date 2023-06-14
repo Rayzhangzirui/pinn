@@ -187,7 +187,8 @@ class Gmodel:
             idx = np.argwhere(self.dataset.xr[:,0] <= t).flatten()
             self.dataset.subsample(idx)
 
-        self.dataset.shuffle()
+        if self.opts['seed'] > 0:
+            self.dataset.shuffle()
         
         if self.opts.get('N') is not None:
             # down sample dataset
@@ -266,6 +267,24 @@ class Gmodel:
             if hasattr(self.dataset, 'th1'):
                 opts['initparam']['th1'] = self.dataset.th1
                 opts['initparam']['th2'] = self.dataset.th2
+        
+        # set data source 
+        if self.opts['udatsource'] == 'char':
+            print('use char udatchar, uxrchar\n')
+            self.dataset.udat = getattr(self.dataset, 'udatchar')
+            self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+            opts['initparam']['rD'] = 1.0
+            opts['initparam']['rRHO'] = 1.0
+        elif self.opts['udatsource'] == 'gt':
+            print('use gt udat uxr\n')
+            self.dataset.udat = getattr(self.dataset, 'udat')
+            self.dataset.uxr = getattr(self.dataset, 'uxr')
+        elif self.opts['udatsource'] == 'noise':
+            print('use noisy udat\n')
+            self.dataset.udat = getattr(self.dataset, 'udatnz')
+            self.dataset.uxr = []
+        else:
+            raise ValueError('udatsource not supported')
             
             
 
@@ -326,7 +345,11 @@ class Gmodel:
         
         for x in {'m','A','th1','th2'}:
             # set init value for m, A, th1, th2
-            self.param[x].assign(self.opts['initparam'][x])
+            if self.opts['seed']>0:
+                # add 20% uniform noise to init value
+                val = self.opts['initparam'][x]
+                val = val + val * 0.2*(2*np.random.rand()-1)
+                self.param[x].assign(val)
                 
 
         losses = Losses(self.model, self.geomodel, self.pde, self.dataset, self.param, self.opts)
