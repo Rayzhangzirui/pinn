@@ -260,6 +260,8 @@ class Gmodel:
             opts['initparam']['rD'] =  self.dataset.rDe
             opts['initparam']['rRHO'] =  self.dataset.rRHOe
             opts['initparam']['M'] =  self.dataset.M
+            if hasattr(self.dataset, 'kadc'):
+                opts['initparam']['kadc'] =  self.dataset.kadc
             if hasattr(self.dataset, 'm'):
                 opts['initparam']['m'] =  self.dataset.m
             if hasattr(self.dataset, 'A'):
@@ -275,16 +277,14 @@ class Gmodel:
             self.dataset.uxr = getattr(self.dataset, 'uxrchar')
             opts['initparam']['rD'] = 1.0
             opts['initparam']['rRHO'] = 1.0
-        elif self.opts['udatsource'] == 'gt':
-            print('use gt udat uxr\n')
-            self.dataset.udat = getattr(self.dataset, 'udat')
-            self.dataset.uxr = getattr(self.dataset, 'uxr')
         elif self.opts['udatsource'] == 'noise':
             print('use noisy udat\n')
             self.dataset.udat = getattr(self.dataset, 'udatnz')
             self.dataset.uxr = []
         else:
-            raise ValueError('udatsource not supported')
+            print('use udat uxr\n')
+            self.dataset.udat = getattr(self.dataset, 'udat')
+            self.dataset.uxr = getattr(self.dataset, 'uxr')
             
             
 
@@ -299,6 +299,7 @@ class Gmodel:
         'y0':  tf.Variable(opts['initparam']['y0'],    trainable=opts.get('trainx0'),dtype = DTYPE,name="y0"),
         'th1': tf.Variable(opts['initparam']['th1'],   trainable=opts.get('trainth1'),dtype = DTYPE,name="th1"),
         'th2': tf.Variable(opts['initparam']['th2'],   trainable=opts.get('trainth2'),dtype = DTYPE,name="th2"),
+        'kadc': tf.Variable(opts['initparam']['kadc'],   trainable=opts.get('trainkadc'),dtype = DTYPE,name="kadc"),
         }
 
         self.ix = [[self.param['x0'],self.param['y0']]]
@@ -343,7 +344,7 @@ class Gmodel:
         self.setup_ckpt(self.model, ckptdir = 'ckpt', restore = self.opts['restore'])
         
         
-        for x in {'m','A','th1','th2'}:
+        for x in {'m','A','th1','th2','kadc'}:
             # set init value for m, A, th1, th2
             if self.opts['seed']>0:
                 # add 20% uniform noise to init value

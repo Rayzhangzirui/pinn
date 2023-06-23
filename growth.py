@@ -14,7 +14,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 # paths
 model_name = "growth2d_tmp"
 
-tf.random.set_seed(1234)
 
 # hyper parameters
 hp = {

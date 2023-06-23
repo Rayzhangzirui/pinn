@@ -14,14 +14,14 @@ geonn_opts = {'depth':3, 'width':64}
 data_opts = {'Nres': 50000, 'resratio':1.0, 'Ndat': 50000, 'Ndatratio':1.0}
 
 weights = {'res':1.0, 'resl1':None, 'geomse':None, 'petmse': None, 'bc':None, 'udat':None, 
-    'plfcor':None, 'uxr':None, 'u0dat':None,
+    'plfcor':None, 'uxr':None, 'u0dat':None, 'adcmse':None,
     'udatpos':None,
-    'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None,
+    'mreg': None, 'rDreg':None, 'rRHOreg':None, 'Areg':None, 'kadcreg':None,
     'ic':None,
     'area1':None, 'area2':None,'seg1':None, 'seg2':None, 'seglower1':None, 'seglower2':None, 'dice1':None, 'dice2':None}
 
 # initial paramter
-initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.6, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0}
+initparam = {'rD': 1.0, 'rRHO': 1.0, 'M': 1.0, 'm': 1.0, 'th1':0.4, 'th2':0.6, 'A':0.0, 'x0':0.0, 'y0':0.0, 'z0':0.0, 'kadc':1.0}
 
 earlystop_opts = {'patience': 1000, 'min_delta': 1e-6, "monitor":['total'],'burnin':1000}
 
@@ -53,6 +53,7 @@ opts = {
     "trainM":False,
     "trainm":False,
     "datmask":'petseg',
+    "adcmask":'u3',
     "smoothwidth": 20,
     "heaviside":'sigmoid',
     "udatsource":'char',
@@ -207,6 +208,7 @@ class Options(object):
                 self.opts['trainx0'] = False
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
+                self.opts['trainkadc'] = False
                 self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
             
             elif simtype == 'fitfwd':
@@ -219,6 +221,7 @@ class Options(object):
                 self.opts['trainx0'] = False
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
+                self.opts['trainkadc'] = False
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['udat'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
@@ -233,6 +236,7 @@ class Options(object):
                 self.opts['trainx0'] = False
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
+                self.opts['trainkadc'] = False
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['udat'] = 1.0
             
@@ -247,6 +251,7 @@ class Options(object):
                 self.opts['trainx0'] = True
                 self.opts['trainth1'] = True
                 self.opts['trainth2'] = True
+                self.opts['trainkadc'] = True
                 self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 if self.opts['whichseg'] == 'mse':
@@ -264,6 +269,7 @@ class Options(object):
                 self.opts['weights']['mreg'] = 1.0
                 self.opts['weights']['th1reg'] = 1.0
                 self.opts['weights']['th2reg'] = 1.0
+                self.opts['weights']['kadcreg'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['pdattest']
                 self.opts['learning_rate_opts']['initial_learning_rate'] = 1e-4
                 self.opts['num_init_train'] = 50000
@@ -277,6 +283,7 @@ class Options(object):
                 self.opts['trainx0'] = True
                 self.opts['trainth1'] = False
                 self.opts['trainth2'] = False
+                self.opts['trainkadc'] = False
                 self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['petmse'] = w
@@ -297,6 +304,7 @@ class Options(object):
                 self.opts['trainx0'] = True
                 self.opts['trainth1'] = True
                 self.opts['trainth2'] = True
+                self.opts['trainkadc'] = False
                 self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['petmse'] = None

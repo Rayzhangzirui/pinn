@@ -152,14 +152,20 @@ class Losses():
         if self.opts['Ntest'] > 0:
             self.hastest = True
 
-
-
         if self.opts['datmask'] is not None and hasattr(self.dataset, self.opts['datmask']):
             # mask for data loss
             self.mask = getattr(self.dataset, self.opts['datmask'])
             print(f"use {self.opts['datmask']} as mask for pet data loss")
         else:
-            self.mask = 1.0        
+            self.mask = 1.0
+
+        
+        if self.opts['adcmask'] is not None and hasattr(self.dataset, self.opts['adcmask']):
+            # mask for data loss
+            self.adcmask = getattr(self.dataset, self.opts['adcmask'])
+            print(f"use {self.opts['adcmask']} as mask for adc data loss")
+        else:
+            self.adcmask = 1.0        
 
         self.weighting = Weighting(self.opts['weights'], **self.opts['weightopt'])
         
@@ -170,6 +176,7 @@ class Losses():
         Aregloss = lambda: relusqr(self.param['A'], 0.0, 1.0)
         th1regloss = lambda: relusqr(self.param['th1'], 0.3, 0.5)
         th2regloss = lambda: relusqr(self.param['th2'], 0.5, 0.7)
+        kadcregloss = lambda: relusqr(self.param['kadc'], 0.5, 1.5)
 
 
         self.lossdict = {'res':self.resloss, 'resl1':self.resl1loss, 'udat':self.fdatloss, 'bc':self.bcloss,
@@ -179,9 +186,10 @@ class Losses():
                          'area1': self.farea1loss , 'area2': self.farea2loss, 
                          'dice1': self.fdice1loss , 'dice2': self.fdice2loss, 
                         'petmse': self.fpetmseloss,
+                        'adcmse': self.fadcmseloss,
                         'geomse': self.geomseloss,
                         'mreg': mregloss, 'rDreg':rDregloss, 'rRHOreg':rRHOregloss, 'Areg':Aregloss,
-                        'th1reg':th1regloss, 'th2reg':th2regloss,
+                        'th1reg':th1regloss, 'th2reg':th2regloss, 'kadcreg':kadcregloss,
                         'ic': self.icloss,
                         }
 
@@ -271,6 +279,13 @@ class Losses():
         phiupred = self.upredxdat * self.dataset.phidat[self.idat,:]
         predpet = self.param['m']* phiupred - self.param['A']
         return mse(predpet, self.dataset.petdat[self.idat,:], w = self.mask[self.idat,:])
+
+    def fadcmseloss(self):
+        # assuming normalized adc = 1 - k * u
+        phiupred = self.upredxdat * self.dataset.phidat[self.idat,:]
+        predadc = 1.0 - self.param['kadc'] * phiupred
+        # return mse(predadc, self.dataset.adcdat[self.idat,:], w = self.adcmask[self.idat,:])
+        return mse(predadc, self.dataset.adcdat[self.idat,:])
     
     def fdatloss(self):
         '''mse of u at Xdat'''
