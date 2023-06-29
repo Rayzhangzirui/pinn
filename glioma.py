@@ -271,20 +271,21 @@ class Gmodel:
                 opts['initparam']['th2'] = self.dataset.th2
         
         # set data source 
-        if self.opts['udatsource'] == 'char':
-            print('use char udatchar, uxrchar\n')
-            self.dataset.udat = getattr(self.dataset, 'udatchar')
-            self.dataset.uxr = getattr(self.dataset, 'uxrchar')
-            opts['initparam']['rD'] = 1.0
-            opts['initparam']['rRHO'] = 1.0
-        elif self.opts['udatsource'] == 'noise':
-            print('use noisy udat\n')
-            self.dataset.udat = getattr(self.dataset, 'udatnz')
-            self.dataset.uxr = []
-        else:
-            print('use udat uxr\n')
-            self.dataset.udat = getattr(self.dataset, 'udat')
-            self.dataset.uxr = getattr(self.dataset, 'uxr')
+        if self.opts['weights']['udat'] is not None or self.opts['weights']['uxr'] is not None:
+            if self.opts['udatsource'] == 'char':
+                print('use char udatchar, uxrchar\n')
+                self.dataset.udat = getattr(self.dataset, 'udatchar')
+                self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+                opts['initparam']['rD'] = 1.0
+                opts['initparam']['rRHO'] = 1.0
+            elif self.opts['udatsource'] == 'noise':
+                print('use noisy udat\n')
+                self.dataset.udat = getattr(self.dataset, 'udatnz')
+                self.dataset.uxr = []
+            else:
+                print('use udat uxr\n')
+                self.dataset.udat = getattr(self.dataset, 'udat')
+                self.dataset.uxr = getattr(self.dataset, 'uxr')
             
             
 

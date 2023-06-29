@@ -135,17 +135,17 @@ class Losses():
         self.upredxr = None
         
         # set data source 
-        
-        if self.opts['udatsource'] == 'char':
-            print('use char udatchar, uxrchar\n')
-            self.dataset.udat = getattr(self.dataset, 'udatchar')
-            self.dataset.uxr = getattr(self.dataset, 'uxrchar')
-            self.dataset.rDe = 1.0
-            self.dataset.rRHOe = 1.0
-        else:
-            print('use gt udat uxr\n')
-            self.dataset.udat = getattr(self.dataset, 'udat')
-            self.dataset.uxr = getattr(self.dataset, 'uxr')
+        if self.opts['weights']['udat'] is not None:
+            if self.opts['udatsource'] == 'char':
+                print('use char udatchar, uxrchar\n')
+                self.dataset.udat = getattr(self.dataset, 'udatchar')
+                self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+                self.dataset.rDe = 1.0
+                self.dataset.rRHOe = 1.0
+            else:
+                print('use gt udat uxr\n')
+                self.dataset.udat = getattr(self.dataset, 'udat')
+                self.dataset.uxr = getattr(self.dataset, 'uxr')
         
         # compute testing loss
         self.hastest = False
@@ -284,8 +284,8 @@ class Losses():
         # assuming normalized adc = 1 - k * u
         phiupred = self.upredxdat * self.dataset.phidat[self.idat,:]
         predadc = 1.0 - self.param['kadc'] * phiupred
-        # return mse(predadc, self.dataset.adcdat[self.idat,:], w = self.adcmask[self.idat,:])
-        return mse(predadc, self.dataset.adcdat[self.idat,:])
+        return mse(predadc, self.dataset.adcdat[self.idat,:], w = self.adcmask[self.idat,:])
+        
     
     def fdatloss(self):
         '''mse of u at Xdat'''

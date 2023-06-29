@@ -47,21 +47,22 @@ opts = {
     "earlystop_opts":earlystop_opts,
     "file_log":True,
     "saveckpt":True,
-    "trainD":True,
-    "trainRHO":True,
     "initparam":initparam,
-    "trainM":False,
-    "trainm":False,
     "datmask":'petseg',
     "adcmask":'u3',
     "smoothwidth": 20,
     "heaviside":'sigmoid',
     "udatsource":'char',
     "mrange":[0.8,1.2],
+    "trainD":True,
+    "trainRHO":True,
+    "trainM":False,
+    "trainm":False,
     "trainA":False,
     "trainth1":False,
     "trainth2":False,
     "trainx0":False,
+    "trainkadc":False,
     'inv_dat_file': '',
     "lbfgs_opts":lbfgs_opts,
     "randomt": -1.0,
@@ -80,7 +81,6 @@ opts = {
     "traingeo":False,
     "patientweight":1.0,
     "simtype":'fitfwd',
-    "whichseg":'mse',
     "weightopt": {'method': 'constant','window': 100, 'whichloss': 'res', 'factor':0.001}
     }
 
@@ -107,6 +107,15 @@ def update_nested_dict(nested_dict, key, value):
 
     return found
 
+def copy_nested_dict(orig_dict, update_dict):
+    for key, value in update_dict.items():
+        if isinstance(value, dict):
+            orig_dict[key] = copy_nested_dict(orig_dict.get(key, {}), value)
+        else:
+            orig_dict[key] = value
+    return orig_dict
+
+
 def get_nested_dict(nested_dict, target_key):
     """
     get value from nested dict, if not found, result is None
@@ -130,20 +139,18 @@ class Options(object):
 
     def parse_args(self, *args):
         
-        # initialize by copy
+        # initialize by copy from previous simulation
         if 'copyfrom' in args:
             file = args[args.index('copyfrom')+1]
             with open(file, 'r') as f:
                 copyopts = json.load(f)
-            self.opts.update(copyopts)
-            global weights
-            self.opts['weights'].update(weights)
-            self.opts['weights'].update(copyopts['weights'])
+            copy_nested_dict(self.opts, copyopts)
             self.opts['restore'] = self.opts['model_dir']
-        
-        if 'patientweight' in args:
-            tmp = args[args.index('patientweight')+1]
-            self.opts['patientweight'] = ast.literal_eval(tmp)
+
+        # set all weights to None except res
+        for k in self.opts['weights'].keys():
+            if k != 'res':
+                self.opts['weights'][k] = None
 
         if 'simtype' in args:
             tmp = args[args.index('simtype')+1]
@@ -152,12 +159,10 @@ class Options(object):
         
         self.process_simtype()
 
-        # if not self.opts['note']:
-        #     print('no note')
-        #     self.opts['note'] = input('note: ')
-        
         # second pass, might modify the dictionary, especially for weights
         self.parse_nest_args(*args)
+
+        self.set_trainable()
         
         # trim the weights
         # self.opts['weights'] = {k: v for k, v in self.opts['weights'].items() if v is not None}
@@ -202,26 +207,13 @@ class Options(object):
                 # solve characteristic equation
                 self.opts['trainD'] = False
                 self.opts['trainRHO'] = False
-                self.opts['trainM'] = False
-                self.opts['trainm'] = False
-                self.opts['trainA'] = False
-                self.opts['trainx0'] = False
-                self.opts['trainth1'] = False
-                self.opts['trainth2'] = False
-                self.opts['trainkadc'] = False
+                self.opts['weights']['res'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
             
             elif simtype == 'fitfwd':
                 # use res and dat to learn solution
                 self.opts['trainD'] = False
                 self.opts['trainRHO'] = False
-                self.opts['trainM'] = False
-                self.opts['trainm'] = False
-                self.opts['trainA'] = False
-                self.opts['trainx0'] = False
-                self.opts['trainth1'] = False
-                self.opts['trainth2'] = False
-                self.opts['trainkadc'] = False
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['udat'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['total','totaltest']
@@ -230,46 +222,18 @@ class Options(object):
                 # simple synthetic data, infer D and RHO
                 self.opts['trainD'] = True
                 self.opts['trainRHO'] = True
-                self.opts['trainM'] = False
-                self.opts['trainm'] = False
-                self.opts['trainA'] = False
-                self.opts['trainx0'] = False
-                self.opts['trainth1'] = False
-                self.opts['trainth2'] = False
-                self.opts['trainkadc'] = False
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['udat'] = 1.0
             
             
             elif simtype == 'patient':
                 # patient data or full synthetic data, infer all parameters
-                w = self.opts['patientweight']
                 self.opts['trainD'] = True
                 self.opts['trainRHO'] = True
-                self.opts['trainm'] = True
-                self.opts['trainA'] = True
                 self.opts['trainx0'] = True
-                self.opts['trainth1'] = True
-                self.opts['trainth2'] = True
-                self.opts['trainkadc'] = True
                 self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
-                if self.opts['whichseg'] == 'mse':
-                    self.opts['weights']['seg1'] = w
-                    self.opts['weights']['seg2'] = w
-                elif self.opts['whichseg'] == 'area':
-                    self.opts['weights']['area1'] = w
-                    self.opts['weights']['area2'] = w
-                else:
-                    raise ValueError('whichseg must be mse or area')
-                self.opts['weights']['petmse'] = w
-                self.opts['weights']['Areg'] = 1.0
-                self.opts['weights']['rDreg'] = 1.0
-                self.opts['weights']['rRHOreg'] = 1.0
-                self.opts['weights']['mreg'] = 1.0
-                self.opts['weights']['th1reg'] = 1.0
-                self.opts['weights']['th2reg'] = 1.0
-                self.opts['weights']['kadcreg'] = 1.0
+
                 self.opts['earlystop_opts']['monitor'] = ['pdattest']
                 self.opts['learning_rate_opts']['initial_learning_rate'] = 1e-4
                 self.opts['num_init_train'] = 50000
@@ -278,48 +242,21 @@ class Options(object):
                 w = self.opts['patientweight']
                 self.opts['trainD'] = True
                 self.opts['trainRHO'] = True
-                self.opts['trainm'] = True
-                self.opts['trainA'] = True
-                self.opts['trainx0'] = True
-                self.opts['trainth1'] = False
-                self.opts['trainth2'] = False
-                self.opts['trainkadc'] = False
                 self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
-                self.opts['weights']['petmse'] = w
                 self.opts['weights']['seg1'] = None
                 self.opts['weights']['seg2'] = None
-                self.opts['weights']['Areg'] = 1.0
-                self.opts['weights']['mreg'] = 1.0
-                self.opts['weights']['th1reg'] = None
-                self.opts['weights']['th2reg'] = None
                 self.opts['earlystop_opts']['monitor'] = ['pdattest']
             
             elif simtype == 'segonly':
                 w = self.opts['patientweight']
                 self.opts['trainD'] = True
                 self.opts['trainRHO'] = True
-                self.opts['trainm'] = False
-                self.opts['trainA'] = False
-                self.opts['trainx0'] = True
-                self.opts['trainth1'] = True
-                self.opts['trainth2'] = True
-                self.opts['trainkadc'] = False
                 self.opts['weights']['udat'] = None
                 self.opts['weights']['res'] = 1.0
                 self.opts['weights']['petmse'] = None
-                if self.opts['whichseg'] == 'mse':
-                    self.opts['weights']['seg1'] = w
-                    self.opts['weights']['seg2'] = w
-                elif self.opts['whichseg'] == 'area':
-                    self.opts['weights']['area1'] = w
-                    self.opts['weights']['area2'] = w
-                else:
-                    raise ValueError('whichseg must be mse or area')
                 self.opts['weights']['Areg'] = None
                 self.opts['weights']['mreg'] = None
-                self.opts['weights']['th1reg'] = 1.0
-                self.opts['weights']['th2reg'] = 1.0
                 self.opts['earlystop_opts']['monitor'] = ['pdattest']
 
             # quick test
@@ -346,6 +283,28 @@ class Options(object):
             
             else:
                 raise ValueError(f'simtype == {simtype} not recognized')
+            
+    def set_trainable(self):
+        # given weight, set parameters to be trainable
+        if self.opts['weights']['petmse'] is not None:
+            self.opts['trainm'] = True
+            self.opts['trainA'] = True
+            self.opts['weights']['Areg'] = 1.0
+            self.opts['weights']['mreg'] = 1.0
+            
+        
+        if self.opts['weights']['seg1'] is not None:
+            self.opts['trainth1'] = True
+            self.opts['weights']['th1reg'] = 1.0
+        
+        if self.opts['weights']['seg2'] is not None:
+            self.opts['trainth2'] = True
+            self.opts['weights']['th2reg'] = 1.0
+        
+        if self.opts['weights']['adcmse'] is not None:
+            self.opts['trainkadc'] = True
+            self.opts['weights']['kadcreg'] = 1.0
+    
 
 if __name__ == "__main__":
     
