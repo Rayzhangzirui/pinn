@@ -14,6 +14,7 @@ from Geonn import Geonn
 from losses import Losses
 
 import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 
 
 
@@ -220,6 +221,13 @@ class Gmodel:
 
         elif schedule_type == "Exponential":
             learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(**(opts['learning_rate_opts']))
+        
+        elif schedule_type == "cycle":
+            lr = opts['learning_rate_opts']['initial_learning_rate']
+            learning_rate_schedule = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=lr,
+                                                                         maximal_learning_rate=lr*10,
+                                                                         step_size=opts['learning_rate_opts']['step_size'],
+                                                                         scale_fn= lambda x: 1/(2.**(x-1)))
         else:
             raise ValueError("Unsupported schedule_type")
 
@@ -282,10 +290,12 @@ class Gmodel:
                 print('use noisy udat\n')
                 self.dataset.udat = getattr(self.dataset, 'udatnz')
                 self.dataset.uxr = []
-            else:
-                print('use udat uxr\n')
+            elif self.opts['udatsource'] == 'gt':
+                print('use gt udat\n')
                 self.dataset.udat = getattr(self.dataset, 'udat')
                 self.dataset.uxr = getattr(self.dataset, 'uxr')
+            else:
+                raise ValueError('unsupported udatsource')
             
             
 
@@ -347,11 +357,12 @@ class Gmodel:
         
         for x in {'m','A','th1','th2','kadc'}:
             # set init value for m, A, th1, th2
+            val = self.opts['initparam'][x]
             if self.opts['seed']>0:
                 # add 20% uniform noise to init value
-                val = self.opts['initparam'][x]
                 val = val + val * 0.2*(2*np.random.rand()-1)
-                self.param[x].assign(val)
+            self.param[x].assign(val)
+            
                 
 
         losses = Losses(self.model, self.geomodel, self.pde, self.dataset, self.param, self.opts)
@@ -366,12 +377,13 @@ class Gmodel:
 
     def solve(self):
         
-        # print options
+        # print options and parameters before training
         print (json.dumps(self.opts, indent=2,cls=MyEncoder,sort_keys=True))
         for vname in self.param:
             print(vname, self.param[vname].numpy(), self.param[vname].trainable)
         # save option
         savedict(self.opts, os.path.join(self.opts['model_dir'],'options.json') )
+        
 
         if self.opts["num_init_train"] > 0:
             self.solver.solve_with_TFoptimizer(self.optim, N=self.opts["num_init_train"])
