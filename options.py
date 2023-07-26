@@ -53,6 +53,7 @@ opts = {
     "smoothwidth": 20,
     "heaviside":'sigmoid',
     "udatsource":'char',
+    "x0source":'char',
     "mrange":[0.8,1.2],
     "rDrange":[0.5,1.2],
     "trainD":True,

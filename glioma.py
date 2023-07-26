@@ -296,6 +296,17 @@ class Gmodel:
                 self.dataset.uxr = getattr(self.dataset, 'uxr')
             else:
                 raise ValueError('unsupported udatsource')
+        
+        # set x0 source
+        if self.opts['x0source'] == 'gt':
+            print('use gt x0\n')
+            opts['initparam']['x0'] = (self.dataset.gtx0[0,0] - self.dataset.x0[0,0])/self.dataset.L
+            opts['initparam']['y0'] = (self.dataset.gtx0[0,1] - self.dataset.x0[0,1])/self.dataset.L
+            if self.xdim == 3:
+                opts['initparam']['z0'] = (self.dataset.gtx0[0,2] - self.dataset.x0[0,2])/self.dataset.L
+        else:
+            print('use x0 (char)\n')
+
             
             
 
