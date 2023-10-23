@@ -105,28 +105,6 @@ def t2n(x):
         raise ValueError("Input must be a TensorFlow tensor or a dictionary of tensors.")
 
 
-def read_mri_dat(n,inv_dat_file,dim):
-    ''' 
-    inv_dat_file: data for t, x, y, (z), phi, pwm, pgm, u
-    dim is t,x,y,z
-    '''
-    _ , ext = os.path.splitext(inv_dat_file)
-    if ext=='.txt':
-        dat = np.loadtxt(inv_dat_file,delimiter=',')
-        xdat = dat[0:n,0:dim]
-        udat = dat[0:n,-1::]
-        phi  = dat[0:n,dim:dim+1]
-        pwm  = dat[0:n,dim+1:dim+2]
-        pgm  = dat[0:n,dim+2:dim+3]
-    if ext == '.mat':
-        matdat = loadmat(inv_dat_file)
-        xdat = matdat['xdat'][0:n,:]
-        udat = matdat['uq'][0:n,:]
-        phi =  matdat['phiq'][0:n,:]
-        pwm =  matdat['Pwmq'][0:n,:]
-        pgm =  matdat['Pgmq'][0:n,:]
-    return xdat, udat, phi, pwm, pgm
-
 def parsedict(d, *argv):
     # parse argv according to dictionary
     i = 0
@@ -182,3 +160,26 @@ def savedict(dict, fpath):
         json.dump( dict, open( fpath, 'w' ), indent=4, cls=MyEncoder, sort_keys=True)
 
 
+
+
+
+def balanced_sample_indices(labels, m):
+    # sample m indices from labels, with almost equal number of samples from each class
+    unique_classes, class_counts = np.unique(labels, return_counts=True)
+    k = len(unique_classes)
+
+    samples_per_class = m // k
+    balanced_sample_indices = np.array([], dtype=int)
+
+    for label in unique_classes:
+        class_indices = np.where(labels == label)[0]
+        class_sample_indices = np.random.choice(class_indices, samples_per_class, replace=False)
+        balanced_sample_indices = np.concatenate((balanced_sample_indices, class_sample_indices))
+
+    # add any remaining samples
+    remaining = m - len(balanced_sample_indices)
+    if remaining > 0:
+        remaining_indices = np.random.choice(np.arange(len(labels)), remaining, replace=False)
+        balanced_sample_indices = np.concatenate((balanced_sample_indices, remaining_indices))
+
+    return balanced_sample_indices

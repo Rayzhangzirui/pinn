@@ -14,6 +14,7 @@ class DataSet:
         
         matdat = loadmat(matfile,mat_dtype=True)
 
+        self.arraynames = []
         for key, value in matdat.items():
             
             if key.startswith("__"):
@@ -23,6 +24,10 @@ class DataSet:
                 if value.dtype.kind in {'f','i','u'}:
                     # convert to float or double
                     value = value.astype(DTYPE)
+                
+                if value.shape[0]> 1:
+                    self.arraynames.append(key)
+
                 if value.size == 1:
                     # if singleton, get number
                     value = value.item()
@@ -31,61 +36,64 @@ class DataSet:
 
         self.dim = self.xr.shape[1]
         self.xdim = self.xr.shape[1]-1
-
+        
+        # collection of attributes not callable
         self.attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
+        
 
-    def print(self):
+    def print(self, attr=None):
         '''print data set
         '''
-        for a in self.attr:
+        # if attr is not None, print attr
+        
+        attr_to_print = self.attr if attr is None else attr
+        # if attr is None:
+        for a in attr_to_print:
             x = getattr(self, a)
             print(f"{a} {x}")
             if isinstance(x, np.ndarray):
                 print(f"{x.shape} {x.dtype}")
     
-    def downsample(self,n):
+    def downsample(self,n, names=None):
         ''' downsample data size
         '''
+        names = self.arraynames if names is None else names
         # get variable name in .mat, remove meta info
-        for a in self.attr:
+        for a in names:
             x = getattr(self, a)
             # only work on variables with more than one rows
-            if isinstance(x,np.ndarray) and x.shape[0]>n:
-                print(f'downsample {a} from {x.shape[0]} to {n} ')
-                x = x[:n,:]
-                setattr(self, a, x)
+            print(f'downsample {a} from {x.shape[0]} to {n} ')
+            x = x[:n,:]
+            setattr(self, a, x)
 
-    def subsample(self, idx):
+    def subsample(self, idx, names):
         ''' subsample data set
         '''
-        for a in self.attr:
+        names = self.arraynames if names is None else names
+        for a in names:
             x = getattr(self, a)
             # only work on variables with more than one rows
-            if isinstance(x,np.ndarray) and x.shape[0]>len(idx):
-                print(f'subsample {a} from {x.shape[0]} to {len(idx)} ')
-                x = x[idx,:]
-                setattr(self, a, x)
+            print(f'subsample {a} from {x.shape[0]} to {len(idx)} ')
+            x = x[idx,:]
+            setattr(self, a, x)
+    
     
     def shuffle(self):
         ''' permute data set
         '''
         idx = np.random.permutation(self.xr.shape[0])
-        for a in self.attr:
+        for a in self.arraynames:
             x = getattr(self, a)
-            # only work on variables with more than one rows
-            if isinstance(x,np.ndarray) and x.shape[0]>len(idx):
-                x = x[idx,:]
-                setattr(self, a, x)
+            x = x[idx,:]
+            setattr(self, a, x)
 
     
-    
-
-
-            
-
 
 
 if __name__ == "__main__":
+    # read mat file and print dataset
     filename  = sys.argv[1]
+    vars2print = sys.argv[2:] if len(sys.argv) > 2 else None
+
     dataset = DataSet(filename)
-    dataset.print()
+    dataset.print(vars2print)

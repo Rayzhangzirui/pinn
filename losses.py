@@ -175,7 +175,7 @@ class Losses():
         rRHOregloss = lambda: relusqr(self.param['rRHO'], self.opts['initparam']['rRHO'] * 0.75, self.opts['initparam']['rRHO'] * 1.25)
         Aregloss = lambda: relusqr(self.param['A'], 0.0, 1.0)
         th1regloss = lambda: relusqr(self.param['th1'], 0.3, 0.5)
-        th2regloss = lambda: relusqr(self.param['th2'], 0.5, 0.7)
+        th2regloss = lambda: relusqr(self.param['th2'], self.opts['th2range'][0], self.opts['th2range'][1])
         kadcregloss = lambda: relusqr(self.param['kadc'], 0.5, 1.5)
 
 

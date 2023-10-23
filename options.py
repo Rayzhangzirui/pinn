@@ -36,10 +36,11 @@ opts = {
     "Ntest":50000,
     "Ndat":50000,
     "Ndattest":50000,
+    "balanceSample":False,
     "endtime": 1.0,
     "nn_opts": nn_opts,
     "geonn_opts": geonn_opts,
-    "print_res_every" : 100, # print residual
+    "print_res_every" : 20, # print residual
     "save_res_every" : None, # save residual
     "weights" : weights, # weight of data, weight of res is 1
     "ckpt_every": 20000,
@@ -54,8 +55,9 @@ opts = {
     "heaviside":'sigmoid',
     "udatsource":'char',
     "x0source":'char',
-    "mrange":[0.8,1.2],
-    "rDrange":[0.5,1.2],
+    "mrange":[0.75,1.25],
+    "rDrange":[0.75,1.25],
+    "th2range":[0.5,0.8],
     "trainD":True,
     "trainRHO":True,
     "trainM":False,

@@ -178,32 +178,51 @@ class Gmodel:
 
         self.dataset = DataSet(opts['inv_dat_file'])
 
-        if self.opts.get('endtime') is not None:
-            # down sample dataset
-            t = self.opts.get('endtime')
-            if t < 0:
-                t = self.dataset.xdat[0,0]
-                print('use xdat time point')
-            print('subsample to t less than', t)
-            idx = np.argwhere(self.dataset.xr[:,0] <= t).flatten()
-            self.dataset.subsample(idx)
+        # deprecated, 
+        # if self.opts.get('endtime') is not None:
+        #     # down sample dataset
+        #     t = self.opts.get('endtime')
+        #     if t < 0:
+        #         t = self.dataset.xdat[0,0]
+        #         print('use xdat time point')
+        #     print('subsample to t less than', t)
+        #     idx = np.argwhere(self.dataset.xr[:,0] <= t).flatten()
+        #     self.dataset.subsample(idx)
 
         if self.opts['seed'] > 0:
             self.dataset.shuffle()
         
-        if self.opts.get('N') is not None:
-            # down sample dataset
-            totalxr = self.opts.get('N') + self.opts.get('Ntest')
-            totalxdat = self.opts.get('Ndat') + self.opts.get('Ndattest')
-            if totalxdat > self.dataset.xdat.shape[0]:
-                print('not enough data xdat')
-                self.opts['Ndattest'] = totalxdat - self.opts['Ndat']
-            self.dataset.downsample(max(totalxr, totalxdat))
+        ## down sample dataset
+        totalxr = self.opts.get('N') + self.opts.get('Ntest')
+        totalxdat = self.opts.get('Ndat') + self.opts.get('Ndattest')
+        if totalxdat > self.dataset.xdat.shape[0]:
+            print('not enough data xdat, reduce Ndattest')
+            self.opts['Ndattest'] = totalxdat - self.opts['Ndat']
+        N = min(totalxr, totalxdat)
+        var_dat = ['u1','u2','u3','udatchar','xdat','petseg','phidat','petdat']
+        var_res = ['phiq', 'xr', 'uxrchar','DxPphi', 'Pgmq', 'DyPphi', 'Pwmq', 'DzPphi', 'Pq']
+        var_bc = ['ubc','xbc','phibc']
+        # downsample res and bc loss
+        self.dataset.downsample(N, var_res + var_bc)
         
-        
-            
+        # downsample data loss
+        if self.opts.get('balanceSample') is True:
+            # balance sample
+            label = self.dataset.u1 + self.dataset.u2
+            idx = balanced_sample_indices(label, N)
+            # subsample data loss
+            self.dataset.subsample(idx,var_dat)
+            # print mean of u1 and u2 to check, if balanced, should be 2/3 and 1/3
+            print('mean u1', np.mean(self.dataset.u1))
+            print('mean u2', np.mean(self.dataset.u2))
+        else:
+            # simple down sample
+            print('down sample to %d\n', N)
+            self.dataset.downsample(N, var_dat)
 
-        if opts.get('useupred') is not None:
+        ## end of down sample dataset
+
+        if self.opts.get('useupred') is not None:
             # use upred at xdat from other training
             print('use upred from ', opts['useupred'])
             tmpdataset = DataSet(opts['useupred'])
@@ -412,12 +431,17 @@ class Gmodel:
         manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['model_dir'],ckptdir), max_to_keep=4)
         # manager.latest_checkpoint is None if no ckpt found
 
+        restore_str = self.opts['restore']
+        # if self.opts['restore'] is specified as ckpt, restore from there
+        if restore_str[-1].isdigit():
+            checkpoint.restore(restore_str)
+            print("Restored from {}".format(restore_str))
         # if self.opts['restore'] is specified as directory, restore from there
-        if os.path.isdir(self.opts['restore']):
+        elif os.path.isdir(restore_str):
             # if the path contain ckpt, restore from there
             # otherwise only model directory is specified, restore from latest
-            if ckptdir in self.opts['restore']:
-                checkpoint.restore(self.opts['restore'])
+            if ckptdir in restore_str:
+                checkpoint.restore(restore_str)
             else:
                 prev_manager = tf.train.CheckpointManager(checkpoint, directory=os.path.join(self.opts['restore'],ckptdir), max_to_keep=4) 
                 ckptpath = prev_manager.latest_checkpoint
