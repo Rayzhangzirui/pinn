@@ -239,7 +239,10 @@ class Gmodel:
             learning_rate_schedule = self.opts['learning_rate_opts']['initial_learning_rate']
 
         elif schedule_type == "Exponential":
-            learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(**(opts['learning_rate_opts']))
+            lr = opts['learning_rate_opts']['initial_learning_rate']
+            decay_steps = opts['learning_rate_opts']['decay_steps']
+            decay_rate = opts['learning_rate_opts']['decay_rate']
+            learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(lr, decay_steps, decay_rate)
         
         elif schedule_type == "cycle":
             lr = opts['learning_rate_opts']['initial_learning_rate']
@@ -433,7 +436,7 @@ class Gmodel:
 
         restore_str = self.opts['restore']
         # if self.opts['restore'] is specified as ckpt, restore from there
-        if restore_str[-1].isdigit():
+        if len(restore_str)>0 and restore_str[-1].isdigit():
             checkpoint.restore(restore_str)
             print("Restored from {}".format(restore_str))
         # if self.opts['restore'] is specified as directory, restore from there
@@ -452,11 +455,11 @@ class Gmodel:
         # if None, restore from latest, if integer, restore by number
         elif manager.latest_checkpoint is not None:
             # as integer, restore from the same directory
-            if self.opts['restore'] == '':
+            if restore_str == '':
                 ckptpath = manager.latest_checkpoint
-            elif isinstance(self.opts['restore'],int):
+            elif isinstance(restore_str,int):
                 # restore check point in the same directory by integer, 0 = ckpt-1
-                ckptpath = manager.checkpoints[self.opts['restore']]
+                ckptpath = manager.checkpoints[restore_str]
             else:
                 raise ValueError('restore should be empty or integer')
 

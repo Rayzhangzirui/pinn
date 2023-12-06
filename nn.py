@@ -49,7 +49,7 @@ class PINN(tf.keras.Model):
             rbf =  tf.keras.layers.experimental.RandomFourierFeatures(
                 output_dim=num_neurons_per_layer,
                 scale=1.,
-                trainable = True,
+                trainable = False,
                 kernel_initializer='gaussian')
             self.hidden =   [rbf] + self.hidden
         

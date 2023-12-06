@@ -60,6 +60,9 @@ class DataSet:
         names = self.arraynames if names is None else names
         # get variable name in .mat, remove meta info
         for a in names:
+            # check if attribute exist
+            if not hasattr(self, a):
+                continue
             x = getattr(self, a)
             # only work on variables with more than one rows
             print(f'downsample {a} from {x.shape[0]} to {n} ')
