@@ -49,7 +49,6 @@ opts = {
     "file_log":True,
     "saveckpt":True,
     "initparam":initparam,
-    "datmask":'petseg',
     "adcmask":'u3',
     "smoothwidth": 20,
     "heaviside":'sigmoid',

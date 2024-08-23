@@ -121,7 +121,7 @@ class PINNSolver():
 
          # weight of residual
         if wr is None:
-            self.wr = tf.ones([tf.shape(self.dataset.xr)[0],1], dtype = DTYPE)
+            self.wr = tf.ones([tf.shape(self.dataset.X_res)[0],1], dtype = DTYPE)
         else:
             self.wr = wr
 
@@ -412,7 +412,7 @@ class PINNSolver():
         ''' ouput individual terms of the pde as .mat file. named by iteration number
         '''
         pdedict = {k: t2n(v) for k, v in pdedict.items()}
-        pdedict['xr'] = self.dataset.xr
+        pdedict['xr'] = self.dataset.X_res
         
         dirpath = os.path.join(self.options['model_dir'], 'pde')
         if self.iter == 1:
@@ -488,7 +488,7 @@ class PINNSolver():
             
             if self.options['outputderiv'] == True:
                 sys.exit('not updated when introducing losses class')
-                pde = self.pde(self.dataset.xr,self.model)
+                pde = self.pde(self.dataset.X_res,self.model)
                 self.process_pde(pde)
 
             # convert losses to list
@@ -572,8 +572,8 @@ class PINNSolver():
         
         predfile = os.path.join(self.options['model_dir'],f'upred_txr_{suffix}.mat')
         ts = np.linspace(0, tend, n)
-        xr = np.copy(self.dataset.xr)
-        xdat = np.copy(self.dataset.xdat)
+        xr = np.copy(self.dataset.X_res)
+        xdat = np.copy(self.dataset.X_dat)
         for t in ts:
             xr[:,0] = t
             xdat[:,0] = t
@@ -587,7 +587,7 @@ class PINNSolver():
             rests.append(t2n(restxr['residual']))
     
         savedat['udatpredts'] = np.concatenate([*udatpredts],axis=1)
-        savedat['phidat'] = self.dataset.phidat
+        savedat['phi_dat'] = self.dataset.phi_dat
 
         savedat['upredts'] = np.concatenate([*upredts],axis=1)
         savedat['rests'] = np.concatenate([*rests],axis=1)
@@ -608,12 +608,12 @@ class PINNSolver():
         self.losses.getupredxr()
         self.losses.getupredxdat()
         
-        savedat['xr'] = t2n(self.dataset.xr)
+        savedat['xr'] = t2n(self.dataset.X_res)
         savedat['upredxr'] = t2n(self.losses.upredxr)
 
-        if self.dataset.xdat is not None:
-            upredxdat = self.model(self.dataset.xdat)
-            savedat['xdat'] = t2n(self.dataset.xdat)
+        if self.dataset.X_dat is not None:
+            upredxdat = self.model(self.dataset.X_dat)
+            savedat['xdat'] = t2n(self.dataset.X_dat)
             savedat['upredxdat'] = t2n(self.losses.upredxdat)
 
         # may not have current_loss if reload
@@ -623,7 +623,7 @@ class PINNSolver():
         savedat.update(t2n(pdeterm))
 
         if self.geomodel is not None:
-            P = self.geomodel(self.dataset.xdat[:,1:])
+            P = self.geomodel(self.dataset.X_dat[:,1:])
             savedat.update(t2n(P))
 
         for key in self.model.param:
@@ -636,7 +636,7 @@ class PINNSolver():
 
     def reweight(self, topk):
         sys.exit('outdated')
-        res = np.abs(self.pde(self.dataset.xr, self.model).numpy().flatten()) # compute residual
+        res = np.abs(self.pde(self.dataset.X_res, self.model).numpy().flatten()) # compute residual
         wres = self.wr
         # get topk idx
         # https://stackoverflow.com/questions/6910641/how-do-i-get-indices-of-n-maximum-values-in-a-numpy-array
@@ -652,8 +652,8 @@ class PINNSolver():
         ind = np.argpartition(res, -topk)[-topk:]
         xxr = xxr.numpy()[ind,:]
         newx = tf.convert_to_tensor(xxr)
-        self.dataset.xr = tf.concat([self.dataset.xr, newx],axis=0)
-        self.wr = np.ones([tf.shape(self.dataset.xr)[0],1])
+        self.dataset.X_res = tf.concat([self.dataset.X_res, newx],axis=0)
+        self.wr = np.ones([tf.shape(self.dataset.X_res)[0],1])
         return xxr
 
         

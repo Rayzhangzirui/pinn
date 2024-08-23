@@ -24,9 +24,9 @@ if __name__ == "__main__":
     # restore from ckpt-1
     opts['restore'] = 1
     g = Gmodel(opts)
-    xrpred, A, b = g.model.lastlayer(g.dataset.xr)
+    xrpred, A, b = g.model.lastlayer(g.dataset.X_res)
 
-    xdatpred, _, _ = g.model.lastlayer(g.dataset.xdat)
+    xdatpred, _, _ = g.model.lastlayer(g.dataset.X_dat)
 
     savedat = {}
     savedat['xrpred'] = [t2n(v) for v in xrpred]

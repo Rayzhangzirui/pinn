@@ -93,7 +93,7 @@ if __name__ == '__main__':
     dataset.downsample(optobj.opts['Ndat'])
     geonn = Geonn(input_dim=dataset.xdim, **(optobj.opts['geonn_opts']), model_dir = optobj.opts['model_dir'])
     geonn.setup_ckpt('geockpt')
-    history = geonn.train(dataset.xdat[:,1:], dataset.Pwmdat, dataset.Pgmdat, dataset.phidat, epochs=optobj.opts['num_init_train'])
+    history = geonn.train(dataset.X_dat[:,1:], dataset.Pwmdat, dataset.Pgmdat, dataset.phi_dat, epochs=optobj.opts['num_init_train'])
     geonn.save_checkpoint()
 
 

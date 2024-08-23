@@ -34,8 +34,8 @@ class DataSet:
                 
                 setattr(self, key, value)
 
-        self.dim = self.xr.shape[1]
-        self.xdim = self.xr.shape[1]-1
+        self.dim = self.X_res.shape[1]
+        self.xdim = self.X_res.shape[1]-1
         
         # collection of attributes not callable
         self.attr = [a for a in dir(self) if not a.startswith("__") and not callable(getattr(self,a))]
@@ -84,7 +84,7 @@ class DataSet:
     def shuffle(self):
         ''' permute data set
         '''
-        idx = np.random.permutation(self.xr.shape[0])
+        idx = np.random.permutation(self.X_res.shape[0])
         for a in self.arraynames:
             x = getattr(self, a)
             x = x[idx,:]

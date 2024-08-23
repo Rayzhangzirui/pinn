@@ -14,7 +14,6 @@ from Geonn import Geonn
 from losses import Losses
 
 import tensorflow_probability as tfp
-import tensorflow_addons as tfa
 
 
 
@@ -147,20 +146,20 @@ class PDE:
     def getres(self, dataset, idx=None):
         # get terms of pde as dictionary
         if idx is None:
-            idx = tf.range(dataset.xr.shape[0])
+            idx = tf.range(dataset.X_res.shape[0])
             
         if self.xdim == 2:
             if self.geonn is None:
-                res = self.pde2d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:])
+                res = self.pde2d(dataset.X_res[idx,:], dataset.phi_res[idx,:], dataset.P_res[idx,:], dataset.DxPphi_res[idx,:], dataset.DyPphi_res[idx,:])
             else:
-                res = self.pde2dgeo(dataset.xr[idx,:])
+                res = self.pde2dgeo(dataset.X_res[idx,:])
         
         if self.xdim == 3:
             if self.geonn is None:
-                res = self.pde3d(dataset.xr[idx,:], dataset.phiq[idx,:], dataset.Pq[idx,:], dataset.DxPphi[idx,:], dataset.DyPphi[idx,:], dataset.DzPphi[idx,:])
+                res = self.pde3d(dataset.X_res[idx,:], dataset.phi_res[idx,:], dataset.P_res[idx,:], dataset.DxPphi_res[idx,:], dataset.DyPphi_res[idx,:], dataset.DzPphi_res[idx,:])
             else:
                 # not implemented yet
-                res = self.pde3dgeo(dataset.xr[idx,:])
+                res = self.pde3dgeo(dataset.X_res[idx,:])
 
         return res
 
@@ -178,43 +177,32 @@ class Gmodel:
 
         self.dataset = DataSet(opts['inv_dat_file'])
 
-        # deprecated, 
-        # if self.opts.get('endtime') is not None:
-        #     # down sample dataset
-        #     t = self.opts.get('endtime')
-        #     if t < 0:
-        #         t = self.dataset.xdat[0,0]
-        #         print('use xdat time point')
-        #     print('subsample to t less than', t)
-        #     idx = np.argwhere(self.dataset.xr[:,0] <= t).flatten()
-        #     self.dataset.subsample(idx)
-
         if self.opts['seed'] > 0:
             self.dataset.shuffle()
         
         ## down sample dataset
         totalxr = self.opts.get('N') + self.opts.get('Ntest')
         totalxdat = self.opts.get('Ndat') + self.opts.get('Ndattest')
-        if totalxdat > self.dataset.xdat.shape[0]:
+        if totalxdat > self.dataset.X_dat.shape[0]:
             print('not enough data xdat, reduce Ndattest')
             self.opts['Ndattest'] = totalxdat - self.opts['Ndat']
         N = min(totalxr, totalxdat)
-        var_dat = ['u1','u2','u3','udatchar','xdat','petseg','phidat','petdat']
-        var_res = ['phiq', 'xr', 'uxrchar','DxPphi', 'Pgmq', 'DyPphi', 'Pwmq', 'DzPphi', 'Pq']
-        var_bc = ['ubc','xbc','phibc']
+        var_dat = ['u1_dat','u2_dat','u3_dat','uchar_dat','X_dat','petseg','phi_dat','petdat']
+        var_res = ['phi_res', 'X_res', 'uchar_res','DxPphi_res', 'Pgm_res', 'DyPphi_res', 'Pwm_res', 'DzPphi_res', 'P_res']
+        var_bc = ['u_bc','X_bc','phi_bc']
         # downsample res and bc loss
         self.dataset.downsample(N, var_res + var_bc)
         
         # downsample data loss
         if self.opts.get('balanceSample') is True:
             # balance sample
-            label = self.dataset.u1 + self.dataset.u2
+            label = self.dataset.u1_dat + self.dataset.u2_dat
             idx = balanced_sample_indices(label, N)
             # subsample data loss
             self.dataset.subsample(idx,var_dat)
             # print mean of u1 and u2 to check, if balanced, should be 2/3 and 1/3
-            print('mean u1', np.mean(self.dataset.u1))
-            print('mean u2', np.mean(self.dataset.u2))
+            print('mean u1', np.mean(self.dataset.u1_dat))
+            print('mean u2', np.mean(self.dataset.u2_dat))
         else:
             # simple down sample
             print('down sample to %d\n', N)
@@ -226,8 +214,8 @@ class Gmodel:
             # use upred at xdat from other training
             print('use upred from ', opts['useupred'])
             tmpdataset = DataSet(opts['useupred'])
-            self.dataset.xdat = np.copy(tmpdataset.xdat)
-            self.dataset.udat = np.copy(tmpdataset.upredxdat)
+            self.dataset.X_dat = np.copy(tmpdataset.X_dat)
+            self.dataset.u_dat = np.copy(tmpdataset.u_dat)
         
         self.dim = self.dataset.dim
         self.xdim = self.dataset.xdim
@@ -244,12 +232,6 @@ class Gmodel:
             decay_rate = opts['learning_rate_opts']['decay_rate']
             learning_rate_schedule = tf.keras.optimizers.schedules.ExponentialDecay(lr, decay_steps, decay_rate)
         
-        elif schedule_type == "cycle":
-            lr = opts['learning_rate_opts']['initial_learning_rate']
-            learning_rate_schedule = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=lr,
-                                                                         maximal_learning_rate=lr*10,
-                                                                         step_size=opts['learning_rate_opts']['step_size'],
-                                                                         scale_fn= lambda x: 1/(2.**(x-1)))
         else:
             raise ValueError("Unsupported schedule_type")
 
@@ -303,19 +285,19 @@ class Gmodel:
         # set data source 
         if self.opts['weights']['udat'] is not None or self.opts['weights']['uxr'] is not None:
             if self.opts['udatsource'] == 'char':
-                print('use char udatchar, uxrchar\n')
-                self.dataset.udat = getattr(self.dataset, 'udatchar')
-                self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+                print('use char uchar_dat, uxrchar\n')
+                self.dataset.u_dat = getattr(self.dataset, 'uchar_dat')
+                self.dataset.u_res = getattr(self.dataset, 'uchar_res')
                 opts['initparam']['rD'] = 1.0
                 opts['initparam']['rRHO'] = 1.0
             elif self.opts['udatsource'] == 'noise':
                 print('use noisy udat\n')
-                self.dataset.udat = getattr(self.dataset, 'udatnz')
-                self.dataset.uxr = []
+                self.dataset.u_dat = getattr(self.dataset, 'udatnz')
+                self.dataset.u_res = []
             elif self.opts['udatsource'] == 'gt':
                 print('use gt udat\n')
-                self.dataset.udat = getattr(self.dataset, 'udat')
-                self.dataset.uxr = getattr(self.dataset, 'uxr')
+                self.dataset.u_dat = getattr(self.dataset, 'u_dat')
+                self.dataset.u_res = getattr(self.dataset, 'u_res')
             else:
                 raise ValueError('unsupported udatsource')
         

@@ -137,27 +137,20 @@ class Losses():
         # set data source 
         if self.opts['weights']['udat'] is not None:
             if self.opts['udatsource'] == 'char':
-                print('use char udatchar, uxrchar\n')
-                self.dataset.udat = getattr(self.dataset, 'udatchar')
-                self.dataset.uxr = getattr(self.dataset, 'uxrchar')
+                print('use char uchar_dat, uxrchar\n')
+                self.dataset.u_dat = getattr(self.dataset, 'uchar_dat')
+                self.dataset.u_res = getattr(self.dataset, 'uchar_res')
                 self.dataset.rDe = 1.0
                 self.dataset.rRHOe = 1.0
             else:
                 print('use gt udat uxr\n')
-                self.dataset.udat = getattr(self.dataset, 'udat')
-                self.dataset.uxr = getattr(self.dataset, 'uxr')
+                self.dataset.u_dat = getattr(self.dataset, 'u_dat')
+                self.dataset.u_res = getattr(self.dataset, 'u_res')
         
         # compute testing loss
         self.hastest = False
         if self.opts['Ntest'] > 0:
             self.hastest = True
-
-        if self.opts['datmask'] is not None and hasattr(self.dataset, self.opts['datmask']):
-            # mask for data loss
-            self.mask = getattr(self.dataset, self.opts['datmask'])
-            print(f"use {self.opts['datmask']} as mask for pet data loss")
-        else:
-            self.mask = 1.0
 
         
         if self.opts['adcmask'] is not None and hasattr(self.dataset, self.opts['adcmask']):
@@ -220,10 +213,10 @@ class Losses():
     # evaluate upred at xdat
     # this is saved because upredxdat is used in multiple losses
     def getupredxdat(self):
-        self.upredxdat = self.model(self.dataset.xdat[self.idat,:])
+        self.upredxdat = self.model(self.dataset.X_dat[self.idat,:])
 
     def getupredxr(self):
-        self.upredxr = self.model(self.dataset.xr[self.ires,:])
+        self.upredxr = self.model(self.dataset.X_res[self.ires,:])
     
 
     # use tf.print properly
@@ -248,70 +241,70 @@ class Losses():
     # def getpdeterm(self):
     #     if self.dataset.xdim == 2:
     #         if self.geomodel is None:
-    #             self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
+    #             self.pdeterm = self.pde(self.dataset.X_res[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:])
     #         else:
-    #             self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.geomodel)
+    #             self.pdeterm = self.pde(self.dataset.X_res[self.ires,:], self.model, self.geomodel)
     #     else:
-    #         self.pdeterm = self.pde(self.dataset.xr[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:], self.dataset.DzPphi[self.ires,:])
+    #         self.pdeterm = self.pde(self.dataset.X_res[self.ires,:], self.model, self.dataset.phiq[self.ires,:], self.dataset.Pq[self.ires,:], self.dataset.DxPphi[self.ires,:], self.dataset.DyPphi[self.ires,:], self.dataset.DzPphi[self.ires,:])
 
     # segmentation mse loss, mse of threholded u and data (patient geometry)
     def fseg1loss(self): 
-        return segmseloss(self.upredxdat, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
+        return segmseloss(self.upredxdat, self.dataset.u1_dat[self.idat,:], self.dataset.phi_dat[self.idat,:], self.param['th1'])
 
     def fseg2loss(self): 
-        return segmseloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
+        return segmseloss(self.upredxdat, self.dataset.u2_dat[self.idat,:], self.dataset.phi_dat[self.idat,:], self.param['th2'])
     
     # segmentation area loss, mse of ratio above threshold
     def farea1loss(self): 
-        return areamseloss(self.upredxdat, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
+        return areamseloss(self.upredxdat, self.dataset.u1_dat[self.idat,:], self.dataset.phi_dat[self.idat,:], self.param['th1'])
 
     def farea2loss(self): 
-        return areamseloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
+        return areamseloss(self.upredxdat, self.dataset.u2_dat[self.idat,:], self.dataset.phi_dat[self.idat,:], self.param['th2'])
 
     def fdice1loss(self): 
-        return diceloss(self.upredxdat, self.dataset.u1[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th1'])
+        return diceloss(self.upredxdat, self.dataset.u1_dat[self.idat,:], self.dataset.phi_dat[self.idat,:], self.param['th1'])
 
     def fdice2loss(self): 
-        return diceloss(self.upredxdat, self.dataset.u2[self.idat,:], self.dataset.phidat[self.idat,:], self.param['th2'])
+        return diceloss(self.upredxdat, self.dataset.u2_dat[self.idat,:], self.dataset.phi_dat[self.idat,:], self.param['th2'])
 
     def fpetmseloss(self):
         # assuming mu ~ pet
-        phiupred = self.upredxdat * self.dataset.phidat[self.idat,:]
+        phiupred = self.upredxdat * self.dataset.phi_dat[self.idat,:]
         predpet = self.param['m']* phiupred - self.param['A']
-        return mse(predpet, self.dataset.petdat[self.idat,:], w = self.mask[self.idat,:])
+        return mse(predpet, self.dataset.pet_dat[self.idat,:], w = self.dataset.petseg_dat[self.idat,:])
 
     def fadcmseloss(self):
         # assuming normalized adc = 1 - k * u
-        phiupred = self.upredxdat * self.dataset.phidat[self.idat,:]
+        phiupred = self.upredxdat * self.dataset.phi_dat[self.idat,:]
         predadc = 1.0 - self.param['kadc'] * phiupred
-        return mse(predadc, self.dataset.adcdat[self.idat,:], w = self.adcmask[self.idat,:])
+        return mse(predadc, self.dataset.adc_dat[self.idat,:], w = self.adcmask[self.idat,:])
         
     
     def fdatloss(self):
         '''mse of u at Xdat'''
-        return phimse(self.dataset.udat[self.idat,:], self.upredxdat, self.dataset.phidat[self.idat,:])
+        return phimse(self.dataset.u_dat[self.idat,:], self.upredxdat, self.dataset.phi_dat[self.idat,:])
     
     def udatpos(self):
         '''keep u positive at Xdat'''
-        penalty = tf.reduce_mean(tf.nn.relu(-self.upredxdat * self.dataset.phidat[self.idat,:])**2)
+        penalty = tf.reduce_mean(tf.nn.relu(-self.upredxdat * self.dataset.phi_dat[self.idat,:])**2)
         return penalty
 
     def icloss(self):
         '''mse of u at xinit'''
-        uinitpred = self.model(self.dataset.xinit[self.ires,:])
-        return phimse(self.dataset.uinit[self.ires,:], uinitpred, self.dataset.phiinit[self.ires,:])
+        uinitpred = self.model(self.dataset.X_init[self.ires,:])
+        return phimse(self.dataset.u_init[self.ires,:], uinitpred, self.dataset.phiinit[self.ires,:])
 
     def uxrloss(self):
         '''mse of u at Xr'''
-        upredxr = self.model(self.dataset.xr[self.ires,:])
-        return phimse(self.dataset.uxr[self.ires,:], upredxr, self.dataset.phiq[self.ires,:])
+        upredxr = self.model(self.dataset.X_res[self.ires,:])
+        return phimse(self.dataset.u_res[self.ires,:], upredxr, self.dataset.phi_res[self.ires,:])
     
     
 
     #  boundary condition loss
     def bcloss(self):
         # separate xbc
-        upredbc = self.model(self.dataset.xbc[self.ires,:])
+        upredbc = self.model(self.dataset.X_bc[self.ires,:])
         loss = mse(self.dataset.ubc[self.ires,:], upredbc)
         return loss
 
@@ -326,8 +319,8 @@ class Losses():
     
     def geomseloss(self):
         # loss for geometry
-        geo = self.geomodel(self.dataset.xdat[self.idat,1:])
-        return mse(geo['Pwm'],self.dataset.Pwmdat[self.idat,:]) + mse(geo['Pgm'],self.dataset.Pgmdat[self.idat,:]) + mse(geo['phi'],self.dataset.phidat[self.idat,:])
+        geo = self.geomodel(self.dataset.X_dat[self.idat,1:])
+        return mse(geo['Pwm'],self.dataset.Pwmdat[self.idat,:]) + mse(geo['Pgm'],self.dataset.Pgmdat[self.idat,:]) + mse(geo['phi'],self.dataset.phi_dat[self.idat,:])
 
 
 
@@ -349,69 +342,69 @@ flosses = {'res': fresloss, 'reshuber': freshuberloss, 'resl1': fresl1loss, 'res
 ftest = {'dattest':fdattestloss,'restest':frestestloss} 
 
 def freshuberloss():
-    r = pde(self.dataset.xr, self.model)
+    r = pde(self.dataset.X_res, self.model)
     return huberloss(r)
 
 def fresdtloss():
     # compute residual by evalutaing at discrete time
-    nrow = self.dataset.xr.shape[0]
+    nrow = self.dataset.X_res.shape[0]
     N = 11
     r2 = np.zeros((nrow,1))
     for t in np.linspace(0.0,1.0,N):
-        self.dataset.xr[:,0:1] = t
-        r = pde(self.dataset.xr, self.model)
+        self.dataset.X_res[:,0:1] = t
+        r = pde(self.dataset.X_res, self.model)
         r2 += r**2
     return tf.reduce_mean(r2)/N
 
 def frest0loss():
     # compute residual at time 0
-    r = pde(self.dataset.xr0, self.model)
+    r = pde(self.dataset.X_res0, self.model)
     return tf.reduce_mean(r['residual']**2)
 
 def fresl1t1loss():
     # compute residual at time 1
-    r = pde(self.dataset.xrt1[self.restrainidx,:], self.model)
+    r = pde(self.dataset.X_rest1[self.restrainidx,:], self.model)
     return tf.reduce_mean(tf.math.abs(r['residual']))
 
 maximize dice, minimize 1-dice
 def fdice2loss(): 
-    upred = self.model(self.dataset.xdat)
+    upred = self.model(self.dataset.X_dat)
     pu2 = sigmoid_binarize(upred, self.param['th2'])
-    d2 = dice(self.dataset.u2, pu2)
+    d2 = dice(self.dataset.u2_dat, pu2)
     return 1.0-d2
 
 
 def fseglower1loss(): 
     # if upred>u1, no loss, otherwise, mse loss
-    upred = self.model(self.dataset.xdat)
-    diff = self.dataset.phidat*(self.dataset.u1 * self.param['th1'] - upred)
+    upred = self.model(self.dataset.X_dat)
+    diff = self.dataset.phi_dat*(self.dataset.u1_dat * self.param['th1'] - upred)
     return  relumse(diff)
 
 def fseglower2loss(): 
     # if upred>u1, no loss, otherwise, mse loss
-    upred = self.model(self.dataset.xdat)
-    diff = self.dataset.phidat*(self.dataset.u2 * self.param['th2'] - upred)
+    upred = self.model(self.dataset.X_dat)
+    diff = self.dataset.phi_dat*(self.dataset.u2_dat * self.param['th2'] - upred)
     return  relumse(diff)
 
 def negloss():
     # penalize negative of u
-    upred = self.model(self.dataset.xdat)
+    upred = self.model(self.dataset.X_dat)
     neg_loss = tf.reduce_mean(tf.nn.relu(-upred)**2)
     return neg_loss
 
 def fplfcorloss():
     # correlation of proliferation 4u(1-u)
-    upred = self.model(self.dataset.xdat)
+    upred = self.model(self.dataset.X_dat)
     # prolif = 4 * upred * (1-upred)
-    # loss =  - tfp.stats.correlation(prolif*self.dataset.phidat, self.dataset.plfdat*self.dataset.phidat)
+    # loss =  - tfp.stats.correlation(prolif*self.dataset.phi_dat, self.dataset.plfdat*self.dataset.phi_dat)
 
-    loss =  - tfp.stats.correlation(self.dataset.petdat*self.dataset.phidat, upred*self.dataset.phidat)
+    loss =  - tfp.stats.correlation(self.dataset.petdat*self.dataset.phi_dat, upred*self.dataset.phi_dat)
     loss = tf.squeeze(loss)
     return loss
 
 def fgradcorloss():
     # correlation of gradient, assume 2D
-    u, ux, uy = grad(self.dataset.xdat, self.model)
+    u, ux, uy = grad(self.dataset.X_dat, self.model)
     dxprolif = 4 * (ux-2*u*ux)
     dyprolif = 4 * (uy-2*u*uy)
     loss =  - tfp.stats.correlation(dxprolif, self.dataset.dxplfdat) - tfp.stats.correlation(dyprolif, self.dataset.dyplfdat) 
@@ -420,60 +413,60 @@ def fgradcorloss():
 
 def flike1loss():
     # minimize 1-likelihood, equation 4 Lipkova personalized ...
-    upred = self.model(self.dataset.xdat) *self.dataset.phidat
+    upred = self.model(self.dataset.X_dat) *self.dataset.phi_dat
     # alpha = double_logistic_sigmoid(upred, self.param['th1'])
     alpha = sigmoid_binarize(upred, self.param['th1'])
-    return loglikely(alpha, self.dataset.u1)
+    return loglikely(alpha, self.dataset.u1_dat)
 
 def flike2loss():
     # minimize 1-likelihood, equation 4 Lipkova personalized ...
-    upred = self.model(self.dataset.xdat) *self.dataset.phidat
+    upred = self.model(self.dataset.X_dat) *self.dataset.phi_dat
     # alpha = double_logistic_sigmoid(upred, self.param['th2'])
     alpha = sigmoid_binarize(upred, self.param['th2'])
-    return loglikely(alpha, self.dataset.u2)
+    return loglikely(alpha, self.dataset.u2_dat)
 
 
 
 def fadcmseloss():
     # error of adc prediction,
     # this adc is ratio w.r.t characteristic adc
-    upred = self.model(self.dataset.xdat)
+    upred = self.model(self.dataset.X_dat)
     predadc = (1.0 - self.param['m']* upred)
     diff = (predadc - self.dataset.adcdat)
-    return tf.reduce_mean((diff*self.dataset.phidat)**2)
+    return tf.reduce_mean((diff*self.dataset.phi_dat)**2)
 
 
 def fadcnlmseloss():
     # adc nonlinear relation: a = 1 / (1 + 4 m u)
-    upred = self.model(self.dataset.xdat)
+    upred = self.model(self.dataset.X_dat)
     predadc = 1.0/(1.0 + self.param['m'] * 4* upred)
     diff = (predadc - self.dataset.adcdat) * self.dataset.mask
-    return tf.reduce_mean((diff*self.dataset.phidat)**2)
+    return tf.reduce_mean((diff*self.dataset.phi_dat)**2)
 
 def fadccorloss():
     # correlation of u and adc_data, minimize correlation, negtively correlated
-    upred = self.model(self.dataset.xdat)
-    loss =  tfp.stats.correlation(upred*self.dataset.phidat, self.dataset.adcdat*self.dataset.phidat)
+    upred = self.model(self.dataset.X_dat)
+    loss =  tfp.stats.correlation(upred*self.dataset.phi_dat, self.dataset.adcdat*self.dataset.phi_dat)
     loss = tf.squeeze(loss)
     return loss
 
 
 def farea1loss():
-    phiupred = self.model(self.dataset.xdat) *self.dataset.phidat
+    phiupred = self.model(self.dataset.X_dat) *self.dataset.phi_dat
     a = area(phiupred, self.param['th1'])
     return (a - self.dataset.area[0,0])**2
 
 def farea2loss():
-    phiupred = self.model(self.dataset.xdat) *self.dataset.phidat
+    phiupred = self.model(self.dataset.X_dat) *self.dataset.phi_dat
     a = area(phiupred, self.param['th2'])
     return (a - self.dataset.area[0,1])**2
     
 # proliferation loss
 def fplfmseloss():
-    upred = self.model(self.dataset.xdat)
+    upred = self.model(self.dataset.X_dat)
     prolif = 4 * upred * (1-upred)
 
-    loss = tf.math.reduce_mean(tf.math.square((self.dataset.plfdat - prolif)*self.dataset.phidat))
+    loss = tf.math.reduce_mean(tf.math.square((self.dataset.plfdat - prolif)*self.dataset.phi_dat))
     return loss
 
 @tf.function
