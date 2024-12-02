@@ -1,7 +1,7 @@
 # Personalized Predictions of Glioblastoma Infiltration: Mathematical Models, Physics-Informed Neural Networks and Multimodal Scans
 
 
-This repository contains the code the paper [Personalized Predictions of Glioblastoma Infiltration: Mathematical Models, Physics-Informed Neural Networks and Multimodal Scans](https://arxiv.org/abs/2312.05063)
+This repository contains the code the paper [Personalized Predictions of Glioblastoma Infiltration: Mathematical Models, Physics-Informed Neural Networks and Multimodal Scans](https://arxiv.org/abs/2311.16536) 
 
 
 ![Overview](overview.png)
